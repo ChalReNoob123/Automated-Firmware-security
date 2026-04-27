@@ -15,6 +15,18 @@ type ScanResult = {
   scanTime: number;
   verdict: "malicious" | "suspicious" | "clean" | "unknown";
   engines: Array<{ name: string; result: string | null; detected: boolean }>;
+  entityMetadata?: {
+    asn?: string;
+    country?: string;
+    isp?: string;
+    registrar?: string;
+    creationDate?: string;
+    fileType?: string;
+    fileSize?: string;
+    entropy?: number;
+    magicBytes?: string;
+    dnsRecords?: string[];
+  };
 };
 
 const KNOWN_CLEAN = [
@@ -57,11 +69,40 @@ function buildEngineResults(detected: number, total: number, malwareName?: strin
   }));
 }
 
+function generateMetadata(q: string, type: string) {
+  if (type === "ip") {
+    return {
+      asn: `AS${Math.floor(Math.random() * 60000)}`,
+      country: ["RU", "CN", "US", "NL", "IR", "KP"][Math.floor(Math.random() * 6)],
+      isp: ["HostKey", "Tencent Cloud", "Amazon AWS", "DigitalOcean", "Bulletproof Hosting Inc"][Math.floor(Math.random() * 5)],
+      creationDate: `20${10 + Math.floor(Math.random() * 14)}-0${1 + Math.floor(Math.random() * 9)}-15`,
+    };
+  }
+  if (type === "domain" || type === "url") {
+    return {
+      registrar: ["NameCheap", "GoDaddy", "Porkbun", "Hostinger", "Unknown"][Math.floor(Math.random() * 5)],
+      creationDate: new Date(Date.now() - Math.random() * 10000000000).toISOString().split("T")[0],
+      dnsRecords: [`A 192.168.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`, `MX mail.${q}`],
+    };
+  }
+  if (type === "hash") {
+    const isElf = q.toLowerCase().includes("1f33"); // Hardcoded hint for Mirai
+    return {
+      fileType: isElf ? "ELF 32-bit LSB Executable" : "PE32 Executable (GUI)",
+      fileSize: `${Math.floor(Math.random() * 5000)} KB`,
+      entropy: 6.5 + Math.random() * 1.4,
+      magicBytes: isElf ? "7F 45 4C 46" : "4D 5A 90 00",
+    };
+  }
+  return {};
+}
+
 function scanQuery(query: string): ScanResult {
   const type = detectQueryType(query);
   const lower = query.toLowerCase().trim();
   const isClean = KNOWN_CLEAN.some(c => lower.includes(c.toLowerCase()));
   const scanTime = 800 + Math.floor(Math.random() * 2400);
+  const entityMetadata = generateMetadata(query, type);
 
   if (isClean) {
     return {
@@ -69,6 +110,7 @@ function scanQuery(query: string): ScanResult {
       vtDetections: 0, vtTotal: 72, reputation: 85,
       categories: ["Safe", "Known good"],
       engines: buildEngineResults(0, 72),
+      entityMetadata,
     };
   }
 
@@ -90,6 +132,12 @@ function scanQuery(query: string): ScanResult {
       reputation: -90,
       categories: [malwareMatch.type, malwareMatch.family],
       engines: buildEngineResults(malwareMatch.vtDetections, malwareMatch.vtTotal, malwareMatch.name),
+      entityMetadata: {
+        fileType: malwareMatch.description.includes("Linux") ? "ELF 32-bit LSB" : "PE32 Executable",
+        fileSize: `${Math.floor(Math.random() * 2000) + 100} KB`,
+        entropy: 7.82,
+        magicBytes: malwareMatch.description.includes("Linux") ? "7F 45 4C 46" : "4D 5A 90 00",
+      }
     } as ScanResult;
   }
 
@@ -108,6 +156,7 @@ function scanQuery(query: string): ScanResult {
       reputation: -iocMatch.confidence,
       categories: iocMatch.tags,
       engines: buildEngineResults(detections, 72, iocMatch.malwareFamily),
+      entityMetadata,
     };
   }
 
@@ -123,16 +172,22 @@ function scanQuery(query: string): ScanResult {
       reputation: -30,
       categories: ["Suspicious", "Heuristic"],
       engines: buildEngineResults(detections, 72, "Heuristic.Suspicious"),
+      entityMetadata,
     };
   }
 
-  // Unknown
+  // Unknown - Dynamically calculate ML heuristics based on entropy of string
+  const strEntropy = new Set(lower).size / lower.length;
+  const isHighEntropy = strEntropy > 0.85 && lower.length > 15;
+  const detections = isHighEntropy ? Math.floor(Math.random() * 8) + 2 : 0;
+
   return {
-    query, type, found: false, verdict: "unknown", scanTime,
-    vtDetections: 0, vtTotal: 72,
-    reputation: 0,
-    categories: ["Unclassified"],
-    engines: buildEngineResults(0, 72),
+    query, type, found: false, verdict: detections > 0 ? "suspicious" : "unknown", scanTime,
+    vtDetections: detections, vtTotal: 72,
+    reputation: isHighEntropy ? -15 : 0,
+    categories: isHighEntropy ? ["AI Heuristic Match", "High Entropy"] : ["Unclassified"],
+    engines: buildEngineResults(detections, 72, isHighEntropy ? "ML.Heuristic.Gen" : undefined),
+    entityMetadata,
   };
 }
 
@@ -327,6 +382,45 @@ export default function VirusTotalScanner() {
               />
             </div>
           </div>
+
+          {/* Entity Context & Forensics */}
+          {result.entityMetadata && Object.keys(result.entityMetadata).length > 0 && (
+            <div className="rounded-3xl border border-white/10 bg-white/5 p-5 backdrop-blur-xl">
+              <h3 className="text-base font-bold text-white mb-4">Entity Context & Forensics</h3>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                {result.entityMetadata.asn && (
+                  <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                    <p className="text-xs text-slate-500 uppercase tracking-widest mb-1">Network Route</p>
+                    <p className="text-sm font-bold text-sky-300">{result.entityMetadata.asn}</p>
+                    <p className="text-xs text-slate-400 mt-1">{result.entityMetadata.isp} ({result.entityMetadata.country})</p>
+                  </div>
+                )}
+                {result.entityMetadata.registrar && (
+                  <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                    <p className="text-xs text-slate-500 uppercase tracking-widest mb-1">Domain Registry</p>
+                    <p className="text-sm font-bold text-sky-300">{result.entityMetadata.registrar}</p>
+                    <p className="text-xs text-slate-400 mt-1">Created: {result.entityMetadata.creationDate}</p>
+                  </div>
+                )}
+                {result.entityMetadata.fileType && (
+                  <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                    <p className="text-xs text-slate-500 uppercase tracking-widest mb-1">Static File Header</p>
+                    <p className="text-sm font-bold text-sky-300">{result.entityMetadata.fileType}</p>
+                    <p className="text-[10px] font-mono text-slate-400 mt-1">Magic: {result.entityMetadata.magicBytes}</p>
+                  </div>
+                )}
+                {result.entityMetadata.entropy && (
+                  <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                    <p className="text-xs text-slate-500 uppercase tracking-widest mb-1">Data Entropy</p>
+                    <p className={`text-sm font-bold ${result.entityMetadata.entropy > 7.0 ? "text-rose-400" : "text-emerald-400"}`}>
+                      {result.entityMetadata.entropy.toFixed(2)}
+                    </p>
+                    <p className="text-xs text-slate-400 mt-1">{result.entityMetadata.entropy > 7.0 ? "Highly packed/encrypted" : "Normal distribution"}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Malware detail */}
           {result.malware && (

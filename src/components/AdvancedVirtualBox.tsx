@@ -51,6 +51,8 @@ type AnalysisResult = {
   forensicArtifacts: string[];
   yaraMatches: string[];
   iocsExtracted: string[];
+  processTree?: { pid: number; ppid: number; name: string; cmdline: string; user: string }[];
+  networkFlows?: { protocol: string; src: string; dst: string; port: number; bytes: number; status: string }[];
 };
 
 export default function AdvancedVirtualBox() {
@@ -143,18 +145,39 @@ export default function AdvancedVirtualBox() {
         setDetonating(false);
         addLog(vmId, "hypervisor", "info", "ANALYSIS_COMPLETE", "Dynamic analysis concluded - VM quarantined", "", "FIPS-140-2");
         
+        const isLinux = sampleName.toLowerCase().includes("boatnet") || sampleName.toLowerCase().includes("mirai");
+        
         const res: AnalysisResult = {
           vmId,
           sampleName,
           detonationTime: Date.now(),
-          behavioralScore: 98,
+          behavioralScore: isLinux ? 100 : 98,
           fileReputation: "malicious",
-          signaturesDetected: ["Ransomware.LockBit", "CredentialDumper.Mimikatz", "C2.CobaltStrike"],
-          certificateStatus: "revoked",
-          complianceViolations: ["FIPS-140-2-C1", "NIST-800-53-SI-4", "FedRAMP-SC-7"],
-          forensicArtifacts: ["C2_config.bin", "encrypted_files.lst", "memory_dump.raw", "registry_hive.system"],
-          yaraMatches: ["Ransomware_LockBit_Indicators", "Credential_Dumper_Generic"],
-          iocsExtracted: ["185.220.101.47", "lockbit-ransomware.onion", "SHA256:deadbeef..."],
+          signaturesDetected: isLinux ? ["Linux.Mirai.Botnet", "ZeroDay.Dropper", "IoT.BruteForcer"] : ["Ransomware.LockBit", "CredentialDumper.Mimikatz", "C2.CobaltStrike"],
+          certificateStatus: isLinux ? "none" : "revoked",
+          complianceViolations: ["FIPS-140-2-C1", "NIST-800-53-SI-4", "FedRAMP-SC-7", "DoD-IL5-AC-3"],
+          forensicArtifacts: isLinux ? ["/tmp/watchdog.elf", "bash_history_dump", "memory_dump.raw"] : ["C2_config.bin", "encrypted_files.lst", "memory_dump.raw", "registry_hive.system"],
+          yaraMatches: isLinux ? ["Mirai_Botnet", "Linux_ELF_Packer"] : ["Ransomware_LockBit_Indicators", "Credential_Dumper_Generic"],
+          iocsExtracted: isLinux ? ["185.220.101.47", "SHA256:1f33800...", "POST /cdn-cgi/"] : ["185.220.101.47", "lockbit-ransomware.onion", "SHA256:deadbeef..."],
+          processTree: isLinux ? [
+            { pid: 1, ppid: 0, name: "systemd", cmdline: "/sbin/init", user: "root" },
+            { pid: 842, ppid: 1, name: "bash", cmdline: "-bash", user: "root" },
+            { pid: 1024, ppid: 842, name: "boatnet.x86", cmdline: "./boatnet.x86", user: "root" },
+            { pid: 1025, ppid: 1024, name: "boatnet.x86", cmdline: "[watchdog]", user: "root" }
+          ] : [
+            { pid: 480, ppid: 4, name: "services.exe", cmdline: "C:\\Windows\\system32\\services.exe", user: "SYSTEM" },
+            { pid: 1024, ppid: 480, name: "svchost.exe", cmdline: "svchost.exe -k netsvcs", user: "SYSTEM" },
+            { pid: 4821, ppid: 1024, name: sampleName, cmdline: `"${sampleName}" --silent`, user: "Administrator" },
+            { pid: 4825, ppid: 4821, name: "vssadmin.exe", cmdline: "vssadmin delete shadows /all /quiet", user: "Administrator" }
+          ],
+          networkFlows: isLinux ? [
+            { protocol: "TCP", src: "192.168.1.50", dst: "185.220.101.47", port: 443, bytes: 4096, status: "ESTABLISHED (C2)" },
+            { protocol: "TCP", src: "192.168.1.50", dst: "192.168.1.200", port: 23, bytes: 128, status: "SYN_SENT (Telnet Brute-Force)" },
+            { protocol: "UDP", src: "192.168.1.50", dst: "8.8.8.8", port: 53, bytes: 64, status: "DNS Query (cdn-cgi)" }
+          ] : [
+            { protocol: "TCP", src: "10.0.0.15", dst: "185.220.101.47", port: 4444, bytes: 81920, status: "ESTABLISHED (Beacon)" },
+            { protocol: "HTTPS", src: "10.0.0.15", dst: "104.21.4.15", port: 443, bytes: 14500, status: "EXFILTRATION" }
+          ]
         };
         setResults(res);
         setVms(prev => prev.map(v => v.id === vmId ? { ...v, state: "compromised", analysisProgress: 100 } : v));
@@ -369,6 +392,45 @@ export default function AdvancedVirtualBox() {
                         </li>
                       ))}
                     </ul>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                      <h4 className="text-xs font-bold text-sky-400 uppercase tracking-widest mb-3">Memory Process Tree</h4>
+                      <div className="space-y-1 font-mono text-xs">
+                        {results.processTree?.map(proc => (
+                          <div key={proc.pid} className="flex flex-col border-b border-white/5 pb-2 mb-2 last:border-0 last:mb-0 last:pb-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-emerald-400 font-bold">{proc.name}</span>
+                              <span className="text-slate-500">PID: {proc.pid}</span>
+                              <span className="text-slate-600">(PPID: {proc.ppid})</span>
+                              <span className="ml-auto text-[9px] text-amber-300 border border-amber-500/30 px-1 rounded">{proc.user}</span>
+                            </div>
+                            <span className="text-slate-400 text-[10px] mt-1 break-all">{proc.cmdline}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                      <h4 className="text-xs font-bold text-purple-400 uppercase tracking-widest mb-3">Network PCAP Flows</h4>
+                      <div className="space-y-2 font-mono text-xs">
+                        {results.networkFlows?.map((flow, i) => (
+                          <div key={i} className="flex flex-col border-b border-white/5 pb-2 mb-2 last:border-0 last:mb-0 last:pb-0">
+                            <div className="flex justify-between">
+                              <span className="text-sky-300 font-bold">{flow.protocol}</span>
+                              <span className="text-slate-500">{flow.bytes} bytes</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-slate-400 text-[10px] mt-1">
+                              <span>{flow.src}</span>
+                              <span className="text-slate-600">→</span>
+                              <span className="text-rose-400">{flow.dst}:{flow.port}</span>
+                            </div>
+                            <span className="text-amber-400 text-[9px] mt-1">{flow.status}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </div>
 
                   <div className="rounded-2xl border border-white/10 bg-black/20 p-4">

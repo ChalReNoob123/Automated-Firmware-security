@@ -181,6 +181,25 @@ export const MALWARE_SIGNATURES: MalwareSignature[] = [
     severity: "medium",
     yara: `rule XMRig {\n  meta:\n    description = "XMRig Cryptominer"\n  strings:\n    $a = "stratum+tcp://" wide\n    $b = "xmrig" nocase wide\n    $c = "donate-level" wide\n    $d = "pool.minexmr.com" wide\n  condition:\n    2 of them\n}`
   },
+  {
+    id: "mal-006",
+    name: "Mirai Botnet (boatnet.x86)",
+    family: "Mirai",
+    type: "Botnet",
+    md5: "4d17e298626cee0babb43129a0e71980",
+    sha256: "1f338006738d9ec77c21b45b646bb5fef8c13f708b85d604bbb076033d482eee",
+    sha1: "727a474b93e443f505488cacdb39ce351c5833ee",
+    vtDetections: 50,
+    vtTotal: 70,
+    vtRatio: "50/70",
+    firstSeen: "2026-04-27",
+    lastSeen: "2026-04-27",
+    description: "Linux ELF executable targeting IoT devices. The botnet propagates through brute-forcing weak Telnet/SSH credentials and participates in coordinated DDoS attacks.",
+    iocs: ["boatnet.x86", "ELF Executable (Linux)", "upx-dec", "application/x-executable"],
+    mitreIds: ["T1498", "T1110", "T1569"],
+    severity: "critical",
+    yara: `rule Mirai_Botnet {\n  meta:\n    description = "Mirai Botnet variant (boatnet.x86)"\n    author = "SOC Intel"\n  strings:\n    $a = "boatnet.x86"\n    $b = "/dev/watchdog"\n    $c = "POST /cdn-cgi/"\n    $elf = { 7f 45 4c 46 }\n  condition:\n    $elf at 0 and 2 of ($a, $b, $c)\n}`
+  },
 ];
 
 export const LIVE_IOCS: IOC[] = [
