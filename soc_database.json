@@ -1,0 +1,1104 @@
+{
+  "logs": [
+    {
+      "hash": "f75b96ece505e400a21810140a31207d",
+      "eventId": "4703",
+      "date": "2026-04-26T04:33:43.3030000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:33:43.2560000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "0e8a483a24764b3fe6c98cc7172e07f5",
+      "eventId": "4703",
+      "date": "2026-04-26T04:33:33.2870000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:33:33.0220000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "2f365551ff6eca0a8f2e9f075e773504",
+      "eventId": "4703",
+      "date": "2026-04-26T04:33:24.0600000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:33:24.0590000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "95dc19f23d66dc94ff08e724bea74212",
+      "eventId": "4703",
+      "date": "2026-04-26T04:33:13.3260000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:33:13.2810000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "958650a0decae0903ff9ad1622b11471",
+      "eventId": "4703",
+      "date": "2026-04-26T04:33:03.3790000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:33:03.1060000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "cf603ec0bd3bb7e12769773f5ce637bf",
+      "eventId": "4703",
+      "date": "2026-04-26T04:32:53.7330000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:32:53.7200000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "31f303773ad2e9fa71093743d50b0f2f",
+      "eventId": "4703",
+      "date": "2026-04-26T04:32:43.3420000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:32:43.2830000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "14549c2271b363791d52c07088f9f36d",
+      "eventId": "4703",
+      "date": "2026-04-26T04:32:33.0780000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:32:33.0040000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "77e27d1b9029590974bc467d8d33c00a",
+      "eventId": "4703",
+      "date": "2026-04-26T04:32:22.7030000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:32:22.6570000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "b95dc8e05bd2b9f15bc542bfa503ee7f",
+      "eventId": "4703",
+      "date": "2026-04-26T04:32:13.4960000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:32:13.4600000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "261ba58d37b9ed4ea65e32635a5e99db",
+      "eventId": "4703",
+      "date": "2026-04-26T04:32:03.4700000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:32:03.2040000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "7880eef6aee9f2379b7dcc66a86b38c2",
+      "eventId": "4689",
+      "date": "2026-04-26T04:31:52.7920000Z",
+      "level": "Information\u0000",
+      "task": "Process Termination\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A process has exited.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t0xcbf4\r\n\tProcess Name:\tC:\\Windows\\System32\\svchost.exe\r\n\tExit Status:\t0x0\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:31:52.7530000Z\r\n  Event ID: 4703\r\n  Task: Process Termination\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "b61a4c27cbe6119333db9fb9d50869b7",
+      "eventId": "4703",
+      "date": "2026-04-26T04:31:43.0480000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:31:42.9730000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "c2e531b0f2624101f1cb2404768c3380",
+      "eventId": "4703",
+      "date": "2026-04-26T04:31:33.7750000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:31:33.6640000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "7d95c62456c4e9d296194dc8d554b1ba",
+      "eventId": "4703",
+      "date": "2026-04-26T04:31:23.4310000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:31:23.3120000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "42f9534ee7d25503dbabaedce7e2855e",
+      "eventId": "4703",
+      "date": "2026-04-26T04:31:13.0260000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:31:12.8670000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "40c3e93d47b3c18ff3d79414203e9b2d",
+      "eventId": "4703",
+      "date": "2026-04-26T04:31:03.7700000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:31:03.6570000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "744156966c9caf191e18196a9446d261",
+      "eventId": "4703",
+      "date": "2026-04-26T04:30:53.3440000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:30:53.2000000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "5cffe416f1f7743d15db270ff23f1d7f",
+      "eventId": "4703",
+      "date": "2026-04-26T04:30:42.9530000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:30:42.8130000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "895428ddca54cb762a3964aedff5e3bf",
+      "eventId": "4703",
+      "date": "2026-04-26T04:30:33.5100000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:30:33.4310000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "26c4f55fb392605869ad928251e4f5a8",
+      "eventId": "4703",
+      "date": "2026-04-26T04:30:22.7110000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:30:22.5760000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "208c43d50e797ef16c7aa698871f02d7",
+      "eventId": "4703",
+      "date": "2026-04-26T04:30:13.5140000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:30:13.3830000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "d578f1701ca17362e273a96270aad901",
+      "eventId": "4703",
+      "date": "2026-04-26T04:30:03.3570000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:30:03.3550000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "b606129e941aff4242700ca525643548",
+      "eventId": "4703",
+      "date": "2026-04-26T04:29:52.7710000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:29:52.6310000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "21fd2439972d6337bf761d2932c31245",
+      "eventId": "4703",
+      "date": "2026-04-26T04:29:43.5580000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:29:43.4300000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "fd9157eb61238426b317bc3d5521952e",
+      "eventId": "4703",
+      "date": "2026-04-26T04:29:33.2300000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:29:33.1860000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "530da1f4cdb3e4f99a866b2ba16f309b",
+      "eventId": "4703",
+      "date": "2026-04-26T04:29:22.8310000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:29:22.6920000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "b638a011eeba8c820d798d6a5a13b63f",
+      "eventId": "4703",
+      "date": "2026-04-26T04:29:13.5120000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:29:13.3300000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "13b01c3f0a78a8fed145316a516c2942",
+      "eventId": "4703",
+      "date": "2026-04-26T04:29:03.3250000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:29:03.0470000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "d6a64730369159330145e7b1282e3e0d",
+      "eventId": "4703",
+      "date": "2026-04-26T04:28:52.5560000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:28:52.4180000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "25e7c0c1d701c749e0e40c2d58498656",
+      "eventId": "4703",
+      "date": "2026-04-26T04:28:43.3030000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:28:43.1630000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "65773d267c3adf573d3373ea33604cf3",
+      "eventId": "4703",
+      "date": "2026-04-26T04:28:32.9090000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:28:32.7700000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "c30788e5979410a049f2f11e4af2ea2d",
+      "eventId": "4688",
+      "date": "2026-04-26T04:28:22.8550000Z",
+      "level": "Information\u0000",
+      "task": "Process Creation\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A new process has been created.\r\n\r\nCreator Subject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Subject:\r\n\tSecurity ID:\t\tS-1-0-0\r\n\tAccount Name:\t\t-\r\n\tAccount Domain:\t\t-\r\n\tLogon ID:\t\t0x0\r\n\r\nProcess Information:\r\n\tNew Process ID:\t\t0x1bf8\r\n\tNew Process Name:\tC:\\Program Files (x86)\\Google\\GoogleUpdater\\148.0.7730.0\\updater.exe\r\n\tToken Elevation Type:\tTokenElevationTypeDefault (1)\r\n\tMandatory Label:\t\tS-1-16-16384\r\n\tCreator Process ID:\t0xa44\r\n\tCreator Process Name:\tC:\\Windows\\System32\\svchost.exe\r\n\tProcess Command Line:\t\"C:\\Program Files (x86)\\Google\\GoogleUpdater\\148.0.7730.0\\updater.exe\" --wake --system\r\n\r\nToken Elevation Type indicates the type of token that was assigned to the new process in accordance with User Account Control policy.\r\n\r\nType 1 is a full token with no privileges removed or groups disabled.  A full token is only used if User Account Control is disabled or if the user is the built-in Administrator account or a service account.\r\n\r\nType 2 is an elevated token with no privileges removed or groups disabled.  An elevated token is used when User Account Control is enabled and the user chooses to start the program using Run as administrator.  An elevated token is also used when an application is configured to always require administrative privilege or to always require maximum privilege, and the user is a member of the Administrators group.\r\n\r\nType 3 is a limited token with administrative privileges removed and administrative groups disabled.  The limited token is used when User Account Control is enabled, the application does not require administrative privilege, and the user does not choose to start the program using Run as administrator.\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:28:22.8550000Z\r\n  Event ID: 4688\r\n  Task: Process Creation\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": true
+    },
+    {
+      "hash": "8f90facdd4ad8c452bcb6e0242770c90",
+      "eventId": "4703",
+      "date": "2026-04-26T04:28:12.8870000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:28:12.7280000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "ccdaae082a51971a7c29c8d00d198403",
+      "eventId": "4703",
+      "date": "2026-04-26T04:28:03.4960000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:28:03.4950000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "375a6ab8008e142d22010803cf12eecf",
+      "eventId": "4703",
+      "date": "2026-04-26T04:27:52.4790000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:27:52.3600000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "99f234b6372d686c6719be0fe418957a",
+      "eventId": "4703",
+      "date": "2026-04-26T04:27:43.8290000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:27:43.7290000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "537cc974e750ad93d37fa60e44025610",
+      "eventId": "4703",
+      "date": "2026-04-26T04:27:33.2960000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:27:33.2950000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "a8b04314c310197601d351a6032b57fa",
+      "eventId": "4703",
+      "date": "2026-04-26T04:27:23.2620000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:27:23.2080000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "0e1f794acaf0c226519c8f34c0d9e3f1",
+      "eventId": "4703",
+      "date": "2026-04-26T04:27:12.9200000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:27:12.9180000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "b750b41cbfd61505b452013cd12942aa",
+      "eventId": "4703",
+      "date": "2026-04-26T04:27:03.0040000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:27:02.8820000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "1a0371249f366e06941e60d22e02efde",
+      "eventId": "4703",
+      "date": "2026-04-26T04:26:53.5060000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:26:53.3520000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "3e4c27c9f1d2df9406c09057f6ec0831",
+      "eventId": "4703",
+      "date": "2026-04-26T04:26:43.5230000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:26:43.3740000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "254391de5fde7619966111c3bb0c427f",
+      "eventId": "4703",
+      "date": "2026-04-26T04:26:33.4300000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:26:33.4290000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "ffb9c277fa26a0e6c080ed51aea6943e",
+      "eventId": "4703",
+      "date": "2026-04-26T04:26:23.0040000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:26:22.8620000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "bdd296711a082934609e7686c13f81a9",
+      "eventId": "4703",
+      "date": "2026-04-26T04:26:17.9090000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:26:17.8100000Z\r\n  Event ID: 4689\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "f28b4de57a93de0257bfd9da4041c270",
+      "eventId": "4703",
+      "date": "2026-04-26T04:26:12.8610000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:26:12.8510000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "5ea47363875439270f809cc6c6d83f65",
+      "eventId": "4703",
+      "date": "2026-04-26T04:26:02.8150000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:26:02.8140000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "3968bd585d7bc9d64c2a9fcaa33c3330",
+      "eventId": "4703",
+      "date": "2026-04-26T04:25:52.4370000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:25:52.3690000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "00135cce833d15e09db043c8d375f343",
+      "eventId": "4703",
+      "date": "2026-04-26T04:25:42.5850000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:25:42.2990000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "4db4fb1860c739ae22b910d4602bab7b",
+      "eventId": "4703",
+      "date": "2026-04-26T04:25:33.4550000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:25:33.2210000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "e3d17b27a47b17cdf00593a38651a481",
+      "eventId": "4703",
+      "date": "2026-04-26T04:25:22.9140000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:25:22.8540000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "9834bfa9a24c8631af402fbb501bf3a1",
+      "eventId": "4703",
+      "date": "2026-04-26T04:25:12.1180000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:25:12.0380000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "3fb035cfb8386f9a052f8b87d4d162ed",
+      "eventId": "4703",
+      "date": "2026-04-26T04:25:02.7310000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:25:02.7300000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "8f7e4c266df2b0cff4cb1f65d2be8a28",
+      "eventId": "4703",
+      "date": "2026-04-26T04:24:52.7850000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:24:52.6070000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "8ef0440f095ac2d109f80cbbc4f99e11",
+      "eventId": "4703",
+      "date": "2026-04-26T04:24:43.2880000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:24:43.0950000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "6d33ce922299b297f07b3cdef38c05fd",
+      "eventId": "4703",
+      "date": "2026-04-26T04:24:32.8130000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:24:32.8120000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "684e1f3bf01ddde0c8b540d9d71023fd",
+      "eventId": "4703",
+      "date": "2026-04-26T04:24:22.8610000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:24:22.7020000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "d9679fb2ed2cf4029889c038f35d7f37",
+      "eventId": "4703",
+      "date": "2026-04-26T04:24:13.2660000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:24:13.1140000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "60a9ce24181a3a26f407513e0c130752",
+      "eventId": "4703",
+      "date": "2026-04-26T04:24:02.9240000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:24:02.9230000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "16cfb2be0145c7870748630fdab7e6a8",
+      "eventId": "4703",
+      "date": "2026-04-26T04:23:53.0200000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:23:52.8560000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "2c42d8dd308c024db110f1ff4b829d14",
+      "eventId": "4703",
+      "date": "2026-04-26T04:23:42.2980000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:23:42.1550000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "4446bc478aa21796c535085d2f3ea1b5",
+      "eventId": "4703",
+      "date": "2026-04-26T04:23:33.1920000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:23:32.9160000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "9cf98bdbcddb560976bb76bdb7cf5d77",
+      "eventId": "4689",
+      "date": "2026-04-26T04:23:23.5070000Z",
+      "level": "Information\u0000",
+      "task": "Process Termination\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A process has exited.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-21-1364006599-2556241456-2783180085-1001\r\n\tAccount Name:\t\tPranav\r\n\tAccount Domain:\t\tLAPTOP-TP44EAP5\r\n\tLogon ID:\t\t0x7CAB0\r\n\r\nProcess Information:\r\n\tProcess ID:\t0x9624\r\n\tProcess Name:\tC:\\Windows\\System32\\SearchProtocolHost.exe\r\n\tExit Status:\t0x0\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:23:23.2510000Z\r\n  Event ID: 4703\r\n  Task: Process Termination\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "0103c09f2fe5c7efc6a4443c998986c6",
+      "eventId": "4703",
+      "date": "2026-04-26T04:23:12.5960000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:23:12.4290000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "e90693f35247462df75275848dec42cd",
+      "eventId": "4703",
+      "date": "2026-04-26T04:23:03.0860000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:23:03.0850000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "8656c3c7cdf6376b0760b89a2d539feb",
+      "eventId": "4703",
+      "date": "2026-04-26T04:22:53.1220000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:22:53.0320000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "06223e4be811686edd4e98fd40637712",
+      "eventId": "4703",
+      "date": "2026-04-26T04:22:42.6890000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:22:42.4010000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "08ad841d83c7dc1b5fb7ee0436235fef",
+      "eventId": "4703",
+      "date": "2026-04-26T04:22:32.7390000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:22:32.6610000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "380e93468689646ac7ddd421786af418",
+      "eventId": "4703",
+      "date": "2026-04-26T04:22:21.9580000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:22:21.9000000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "0d1eb8c3f1c35287378ff09431b0b6de",
+      "eventId": "4703",
+      "date": "2026-04-26T04:22:12.4460000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:22:12.4280000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "c9ff5bef2afbe36a27fc052b72107215",
+      "eventId": "4703",
+      "date": "2026-04-26T04:22:03.1710000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:22:03.1690000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "c517c6cb1948a1b0be3954f5d84a872a",
+      "eventId": "4703",
+      "date": "2026-04-26T04:21:52.4290000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:21:52.3870000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "40e7abdd52cfaba971d8b388ce00510f",
+      "eventId": "4703",
+      "date": "2026-04-26T04:21:42.5640000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:21:42.2940000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "35df905f93d7d1ec9425664f76bc9c42",
+      "eventId": "4703",
+      "date": "2026-04-26T04:21:33.4700000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:21:33.2100000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "eefa9ebd53f2ef115441b52deed80b31",
+      "eventId": "4703",
+      "date": "2026-04-26T04:21:22.2310000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:21:22.1760000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "dc94f51ee8bb131d984d2cce16de10c3",
+      "eventId": "4703",
+      "date": "2026-04-26T04:21:12.6240000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:21:12.5460000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "9940b22277099670c10f6886374f6811",
+      "eventId": "4703",
+      "date": "2026-04-26T04:21:01.9100000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:21:01.8440000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "49e67c3e5b575dab5c91bc3ef75c0048",
+      "eventId": "4703",
+      "date": "2026-04-26T04:20:52.4330000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:20:52.3110000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "e90f2fb1b9890f024273c3b545ca86ee",
+      "eventId": "4703",
+      "date": "2026-04-26T04:20:42.9480000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:20:42.8690000Z\r\n  Event ID: 4688\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "1dc18bb9f94ad601a91d720ea64310c7",
+      "eventId": "4703",
+      "date": "2026-04-26T04:20:32.6410000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:20:32.3750000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "f1fe8fc50f24c2fd5dabbf9f53974773",
+      "eventId": "4703",
+      "date": "2026-04-26T04:20:22.3870000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:20:22.3780000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "f5decb2cc44d1a9c333606a775d3dc0e",
+      "eventId": "4703",
+      "date": "2026-04-26T04:20:12.1560000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:20:12.1100000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "22e8d09ab699f2101e57b501e39ffb22",
+      "eventId": "4688",
+      "date": "2026-04-26T04:20:03.5640000Z",
+      "level": "Information\u0000",
+      "task": "Process Creation\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A new process has been created.\r\n\r\nCreator Subject:\r\n\tSecurity ID:\t\tS-1-5-21-1364006599-2556241456-2783180085-1001\r\n\tAccount Name:\t\tPranav\r\n\tAccount Domain:\t\tLAPTOP-TP44EAP5\r\n\tLogon ID:\t\t0x7C7E5\r\n\r\nTarget Subject:\r\n\tSecurity ID:\t\tS-1-0-0\r\n\tAccount Name:\t\t-\r\n\tAccount Domain:\t\t-\r\n\tLogon ID:\t\t0x0\r\n\r\nProcess Information:\r\n\tNew Process ID:\t\t0xbc6c\r\n\tNew Process Name:\tC:\\Windows\\System32\\wevtutil.exe\r\n\tToken Elevation Type:\tTokenElevationTypeFull (2)\r\n\tMandatory Label:\t\tS-1-16-12288\r\n\tCreator Process ID:\t0xc658\r\n\tCreator Process Name:\tC:\\Windows\\System32\\cmd.exe\r\n\tProcess Command Line:\twevtutil  qe Security /c:100 /f:text /rd:true\r\n\r\nToken Elevation Type indicates the type of token that was assigned to the new process in accordance with User Account Control policy.\r\n\r\nType 1 is a full token with no privileges removed or groups disabled.  A full token is only used if User Account Control is disabled or if the user is the built-in Administrator account or a service account.\r\n\r\nType 2 is an elevated token with no privileges removed or groups disabled.  An elevated token is used when User Account Control is enabled and the user chooses to start the program using Run as administrator.  An elevated token is also used when an application is configured to always require administrative privilege or to always require maximum privilege, and the user is a member of the Administrators group.\r\n\r\nType 3 is a limited token with administrative privileges removed and administrative groups disabled.  The limited token is used when User Account Control is enabled, the application does not require administrative privilege, and the user does not choose to start the program using Run as administrator.\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:20:03.5520000Z\r\n  Event ID: 4688\r\n  Task: Process Creation\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": true
+    },
+    {
+      "hash": "a015b6078c948ca650fbf012e6aaccbe",
+      "eventId": "4703",
+      "date": "2026-04-26T04:19:53.4850000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:19:53.4840000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "a658c06caf9d7cb00cc374fe374f6ad1",
+      "eventId": "4703",
+      "date": "2026-04-26T04:19:50.7700000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:19:50.5000000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "c365a0dca96c1fecb184296ed8f57fe7",
+      "eventId": "4703",
+      "date": "2026-04-26T04:19:45.4650000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:19:45.3960000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "c45c0604c4f3d2ee9d99dfccbc206fe8",
+      "eventId": "4703",
+      "date": "2026-04-26T04:19:42.9170000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:19:42.8170000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "770646eb284a3299de1de2235e508b47",
+      "eventId": "4703",
+      "date": "2026-04-26T04:19:40.3820000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:19:40.2860000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "187b620d5a2dd5f654d9bff5a7b267f7",
+      "eventId": "4703",
+      "date": "2026-04-26T04:19:32.8250000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:19:32.7180000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "be694ecbe061a74b044ce405103d1c4f",
+      "eventId": "4703",
+      "date": "2026-04-26T04:19:30.2940000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:19:30.2100000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "b2943f5dfee96f71eedc4ec6d3c936b7",
+      "eventId": "4689",
+      "date": "2026-04-26T04:19:25.7400000Z",
+      "level": "Information\u0000",
+      "task": "Process Termination\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A process has exited.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-21-1364006599-2556241456-2783180085-1001\r\n\tAccount Name:\t\tPranav\r\n\tAccount Domain:\t\tLAPTOP-TP44EAP5\r\n\tLogon ID:\t\t0x7C7E5\r\n\r\nProcess Information:\r\n\tProcess ID:\t0xa274\r\n\tProcess Name:\tC:\\Windows\\System32\\cmd.exe\r\n\tExit Status:\t0x0\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:19:25.7380000Z\r\n  Event ID: 4689\r\n  Task: Process Termination\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "4f1375d5898ebd42f0d1bf195a17942d",
+      "eventId": "4703",
+      "date": "2026-04-26T04:19:24.0520000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:19:23.9710000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "b48789082fee6d98a5301b13ee5c690f",
+      "eventId": "4703",
+      "date": "2026-04-26T04:19:22.7780000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:19:22.6990000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "bbe08f46f748c8eb8600e62397b037bf",
+      "eventId": "4703",
+      "date": "2026-04-26T04:19:19.7260000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:19:19.6960000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "a6ac755bfa59b2b8caafd16fa32cd97d",
+      "eventId": "4703",
+      "date": "2026-04-26T04:19:15.1790000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:19:15.1010000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "3b4b668c1d07231d072104d754480a4b",
+      "eventId": "4689",
+      "date": "2026-04-26T04:19:12.7490000Z",
+      "level": "Information\u0000",
+      "task": "Process Termination\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A process has exited.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-21-1364006599-2556241456-2783180085-1001\r\n\tAccount Name:\t\tPranav\r\n\tAccount Domain:\t\tLAPTOP-TP44EAP5\r\n\tLogon ID:\t\t0x7CAB0\r\n\r\nProcess Information:\r\n\tProcess ID:\t0x6f14\r\n\tProcess Name:\tC:\\Windows\\System32\\backgroundTaskHost.exe\r\n\tExit Status:\t0x1\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:19:12.6680000Z\r\n  Event ID: 4703\r\n  Task: Process Termination\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "35daaad5477bce5ba5cf34668449acc6",
+      "eventId": "4703",
+      "date": "2026-04-26T04:19:10.6330000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-21-1364006599-2556241456-2783180085-1001\r\n\tAccount Name:\t\tPranav\r\n\tAccount Domain:\t\tLAPTOP-TP44EAP5\r\n\tLogon ID:\t\t0x7C7E5\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-21-1364006599-2556241456-2783180085-1001\r\n\tAccount Name:\t\tPranav\r\n\tAccount Domain:\t\tLAPTOP-TP44EAP5\r\n\tLogon ID:\t\t0x7C7E5\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x4b3c\r\n\tProcess Name:\t\tC:\\Windows\\System32\\wevtutil.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeBackupPrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:19:10.6330000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "1abf097afe5a6e6c124328355b94dbbf",
+      "eventId": "4703",
+      "date": "2026-04-26T04:19:05.1480000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:19:05.1460000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "632d0d63596a2ba22377e268da38d676",
+      "eventId": "4703",
+      "date": "2026-04-26T04:19:02.5000000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:19:02.4100000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "8bf846e2d7f01b8bb592d1a55a2244eb",
+      "eventId": "4703",
+      "date": "2026-04-26T04:18:52.6800000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:18:52.6780000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "b92ae3edebb0b46a741752ba7e8aed17",
+      "eventId": "4688",
+      "date": "2026-04-26T04:18:42.3210000Z",
+      "level": "Information\u0000",
+      "task": "Process Creation\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A new process has been created.\r\n\r\nCreator Subject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Subject:\r\n\tSecurity ID:\t\tS-1-0-0\r\n\tAccount Name:\t\t-\r\n\tAccount Domain:\t\t-\r\n\tLogon ID:\t\t0x0\r\n\r\nProcess Information:\r\n\tNew Process ID:\t\t0xc8a4\r\n\tNew Process Name:\tC:\\Program Files\\Common Files\\microsoft shared\\ClickToRun\\OfficeC2RClient.exe\r\n\tToken Elevation Type:\tTokenElevationTypeDefault (1)\r\n\tMandatory Label:\t\tS-1-16-16384\r\n\tCreator Process ID:\t0xa44\r\n\tCreator Process Name:\tC:\\Windows\\System32\\svchost.exe\r\n\tProcess Command Line:\t\"C:\\Program Files\\Common Files\\Microsoft Shared\\ClickToRun\\OfficeC2RClient.exe\" /WatchService\r\n\r\nToken Elevation Type indicates the type of token that was assigned to the new process in accordance with User Account Control policy.\r\n\r\nType 1 is a full token with no privileges removed or groups disabled.  A full token is only used if User Account Control is disabled or if the user is the built-in Administrator account or a service account.\r\n\r\nType 2 is an elevated token with no privileges removed or groups disabled.  An elevated token is used when User Account Control is enabled and the user chooses to start the program using Run as administrator.  An elevated token is also used when an application is configured to always require administrative privilege or to always require maximum privilege, and the user is a member of the Administrators group.\r\n\r\nType 3 is a limited token with administrative privileges removed and administrative groups disabled.  The limited token is used when User Account Control is enabled, the application does not require administrative privilege, and the user does not choose to start the program using Run as administrator.\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:18:42.1260000Z\r\n  Event ID: 4703\r\n  Task: Process Creation\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": true
+    },
+    {
+      "hash": "04b8186995a8011eebf177dcfe5627db",
+      "eventId": "4689",
+      "date": "2026-04-26T04:13:46.6950000Z",
+      "level": "Information\u0000",
+      "task": "Process Termination\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A process has exited.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t0xa58\r\n\tProcess Name:\tC:\\Program Files\\WindowsApps\\Microsoft.GamingServices_35.112.24001.0_x64__8wekyb3d8bbwe\\gamingservices.exe\r\n\tExit Status:\t0xC0000409\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:13:46.6870000Z\r\n  Event ID: 4689\r\n  Task: Process Termination\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "f1b9cd17a5c22925d8dab9dd80c88763",
+      "eventId": "4703",
+      "date": "2026-04-26T04:13:45.1850000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:13:44.9940000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "954118901fdaedaf8a2ed9fe8029a1ea",
+      "eventId": "4703",
+      "date": "2026-04-26T04:13:43.1100000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:13:43.1100000Z\r\n  Event ID: 4688\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "50ba992e6cdecb0d9691fa7f9d0b1db8",
+      "eventId": "4703",
+      "date": "2026-04-26T04:13:41.3790000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:13:41.2480000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "ef2072b43c3cbd8cdab14fc817061094",
+      "eventId": "4703",
+      "date": "2026-04-26T04:13:37.6070000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:13:37.5620000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "239e40e9502c7a50bb93863c4baaba36",
+      "eventId": "4703",
+      "date": "2026-04-26T04:13:35.0500000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:13:34.9720000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "fa3b3b4787c21e63f3dd77bffa269346",
+      "eventId": "4703",
+      "date": "2026-04-26T04:13:27.9530000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:13:27.9510000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    },
+    {
+      "hash": "674e11c22dd18b80213acb26310c0e02",
+      "eventId": "4703",
+      "date": "2026-04-26T04:12:13.4610000Z",
+      "level": "Information\u0000",
+      "task": "Token Right Adjusted Events\u0000",
+      "source": "Microsoft-Windows-Security-Auditing",
+      "description": "A token right was adjusted.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nTarget Account:\r\n\tSecurity ID:\t\tS-1-5-18\r\n\tAccount Name:\t\tLAPTOP-TP44EAP5$\r\n\tAccount Domain:\t\tWORKGROUP\r\n\tLogon ID:\t\t0x3E7\r\n\r\nProcess Information:\r\n\tProcess ID:\t\t0x1070\r\n\tProcess Name:\t\tC:\\Windows\\System32\\svchost.exe\r\n\r\nEnabled Privileges:\r\n\t\t\tSeAssignPrimaryTokenPrivilege\r\n\t\t\tSeIncreaseQuotaPrivilege\r\n\t\t\tSeSecurityPrivilege\r\n\t\t\tSeTakeOwnershipPrivilege\r\n\t\t\tSeLoadDriverPrivilege\r\n\t\t\tSeSystemtimePrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeShutdownPrivilege\r\n\t\t\tSeSystemEnvironmentPrivilege\r\n\t\t\tSeUndockPrivilege\r\n\t\t\tSeManageVolumePrivilege\r\n\r\nDisabled Privileges:\r\n\t\t\t-\u0000\r\n\r\nEvent[1]\r\n  Log Name: Security\r\n  Source: Microsoft-Windows-Security-Auditing\r\n  Date: 2026-04-26T04:12:13.3250000Z\r\n  Event ID: 4703\r\n  Task: Token Right Adjusted Events\u0000\r\n  Level: Information\u0000\r\n  Opcode: Info\u0000\u0000\r\n  Keyword: Audit Success,\u0000\r\n  User: N/A\r\n  User Name: N/A\r\n  Computer: LAPTOP-TP44EAP5",
+      "suspicious": false
+    }
+  ]
+}
