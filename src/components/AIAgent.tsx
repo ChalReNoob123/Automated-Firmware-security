@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Cpu, Server, Activity, AlertTriangle, RefreshCw, CheckCircle, Key, Send, MessageSquare, Zap, Network, Wifi } from "lucide-react";
-import CryptoJS from "crypto-js";
+
+import { API_BASE, Token, apiGet } from "../utils/api";
 
 type AnalysisResult = {
   summary: string;
@@ -41,7 +42,7 @@ export default function AIAgent() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem("gemini_api_key") || "");
+  const [apiKey, setApiKey] = useState("");
   const [showKeyInput, setShowKeyInput] = useState(false);
 
   // Copilot State
@@ -58,31 +59,15 @@ export default function AIAgent() {
     setLoading(true);
     setError(null);
     try {
-      // Authenticated Request
-      const res = await fetch("http://localhost:3001/api/analyze", {
-        headers: { "Authorization": `Bearer ${import.meta.env.VITE_ADMIN_TOKEN || 'SG-ADMIN-TOKEN-9081'}` }
-      });
-      if (res.status === 401) throw new Error("Authentication failed. Unauthorized connection.");
-      if (!res.ok) throw new Error("Local agent server not responding.");
-      
-      const encResponse = await res.json();
-      
-      // End-to-End AES Decryption
-      const E2E_SECRET = CryptoJS.SHA256(import.meta.env.VITE_ENCRYPTION_KEY || "sentinel-grid-enterprise-key-2026");
-      const iv = CryptoJS.enc.Hex.parse(encResponse.iv);
-      const cipherParams = CryptoJS.lib.CipherParams.create({
-        ciphertext: CryptoJS.enc.Hex.parse(encResponse.encryptedData)
-      });
-      
-      const decrypted = CryptoJS.AES.decrypt(cipherParams, E2E_SECRET, { iv: iv, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 });
-      const rawJson = decrypted.toString(CryptoJS.enc.Utf8);
-      const json: TelemetryData = JSON.parse(rawJson);
+      const json: TelemetryData = await apiGet('/api/analyze');
+
       
       if (apiKey) {
         try {
+          const monitoredHost = json.system?.localIp || "the monitored host";
           const prompt = `You are a Tier 3 SOC Analyst AI trained on MITRE ATT&CK, NIST CSF, and advanced threat hunting. 
 Your primary assigned system has the following Network Profile:
-- Host IP: 192.168.1.34 (HIGH VALUE TARGET)
+- Host IP: ${monitoredHost}
 - MAC Address: ${json.system?.macAddress}
 - Subnet Mask: ${json.system?.subnet}
 - Default Gateway: ${json.system?.gateway}
@@ -92,14 +77,14 @@ Your primary assigned system has the following Network Profile:
 Analyze the following real Windows Event Logs and Network connections.
 
 CRITICAL TRAINING INSTRUCTIONS:
-1. Cross-reference the Host IP (192.168.1.34) with the netstat connections to distinguish internal loopback traffic from external connections.
-2. The user specifically requested to observe MALICIOUS ACTIVITY on 192.168.1.34. Be hyper-vigilant for any strange ports, lateral movement, or unauthorized external connections to/from 192.168.1.34.
+1. Cross-reference the Host IP (${monitoredHost}) with the netstat connections to distinguish internal loopback traffic from external connections.
+2. Be vigilant for strange ports, lateral movement, or unauthorized external connections to/from ${monitoredHost}, but do not claim malicious activity unless the supplied telemetry supports it.
 3. Verify that outbound traffic is routing properly and flag any potential rogue DNS queries or connections attempting to bypass the gateway (${json.system?.gateway}).
 4. Look for failed logons, cleared audit logs, or privilege escalation in the event logs.
 
 Return ONLY a valid JSON object with this exact structure: {"summary": "A detailed 2-3 sentence analysis string", "score": <integer from 0 to 100 representing security health>, "threats": ["array of specific threat descriptions"], "mitreMappings": ["array of strings like 'TXXXX - Name'"]}. Do not include markdown formatting.\n\nLogs:\n${typeof json.logs === 'string' ? json.logs : JSON.stringify(json.logs, null, 2)}\n\nNetwork:\n${json.network}`;
           
-          const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+          const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
@@ -148,9 +133,9 @@ Return ONLY a valid JSON object with this exact structure: {"summary": "A detail
       }));
       contents.push({ role: "user", parts: [{ text: text }] });
 
-      const systemInstruction = `You are Sentinel Copilot, a Tier 3 SOC Analyst AI. You are assisting a security operator. You have access to this real-time telemetry from the host:\nHost IP Address: 192.168.1.34\nGateway: ${data?.system?.gateway}\nAuthorized DNS: ${data?.system?.dns}\nLogs: ${typeof data?.logs === 'string' ? data?.logs : JSON.stringify(data?.logs)}\nNetwork: ${data?.network}\nAnalyze their questions using this context. Always cross-reference their questions against the Host IP Address and network profile when analyzing network connections. Look out for DNS hijacking. Be concise, highly technical, and professional.`;
+      const systemInstruction = `You are Sentinel Copilot, a Tier 3 SOC Analyst AI. You are assisting a security operator. You have access to telemetry from the host:\nHost IP Address: ${data?.system?.localIp || "unknown"}\nGateway: ${data?.system?.gateway}\nAuthorized DNS: ${data?.system?.dns}\nLogs: ${typeof data?.logs === 'string' ? data?.logs : JSON.stringify(data?.logs)}\nNetwork: ${data?.network}\nAnalyze questions using only this context. Cross-reference the host IP and network profile when analyzing connections. Flag DNS hijacking or lateral movement only when telemetry supports it. Be concise, technical, and explicit about uncertainty.`;
       
-      const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+      const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
@@ -175,11 +160,11 @@ Return ONLY a valid JSON object with this exact structure: {"summary": "A detail
   const killProcess = async (pid: string) => {
     if (!confirm(`WARNING: Are you sure you want to forcefully terminate Process ID ${pid}?`)) return;
     try {
-      const res = await fetch("http://localhost:3001/api/kill-process", {
+      const res = await fetch(`${API_BASE}/api/kill-process`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${import.meta.env.VITE_ADMIN_TOKEN || 'SG-ADMIN-TOKEN-9081'}`
+          "Authorization": `Bearer ${Token.getAccess()}`
         },
         body: JSON.stringify({ pid })
       });
@@ -197,7 +182,6 @@ Return ONLY a valid JSON object with this exact structure: {"summary": "A detail
 
   const saveKey = (val: string) => {
     setApiKey(val);
-    localStorage.setItem("gemini_api_key", val);
   };
 
   useEffect(() => {
@@ -240,7 +224,7 @@ Return ONLY a valid JSON object with this exact structure: {"summary": "A detail
           <Key className="h-5 w-5 text-indigo-400 shrink-0" />
           <div className="flex-1">
             <p className="text-sm font-semibold text-indigo-200 mb-1">Unlock Copilot Features</p>
-            <p className="text-xs text-slate-400 mb-3">Provide a Google Gemini API Key to enable the conversational Copilot. If left blank, the system uses a local heuristic fallback engine.</p>
+            <p className="text-xs text-slate-400 mb-3">Provide a Google Gemini API key for this browser session to enable Copilot. If left blank, the system uses a local heuristic fallback engine.</p>
             <input 
               type="password" 
               placeholder="AIzaSy..." 
@@ -294,45 +278,45 @@ Return ONLY a valid JSON object with this exact structure: {"summary": "A detail
               </div>
             </div>
 
-            <div className={`glass-panel rounded-3xl border p-6 transition-all duration-300 hover:scale-[1.01] ${data.analysis.score < 100 ? "border-amber-500/50 bg-gradient-to-br from-amber-500/20 to-transparent shadow-[0_0_30px_-5px_rgba(245,158,11,0.3)]" : "border-emerald-500/50 bg-gradient-to-br from-emerald-500/20 to-transparent shadow-[0_0_30px_-5px_rgba(16,185,129,0.3)]"}`}>
+            <div className={`glass-panel rounded-3xl border p-6 transition-all duration-300 hover:scale-[1.01] ${(data.analysis?.score ?? 100) < 100 ? "border-amber-500/50 bg-gradient-to-br from-amber-500/20 to-transparent shadow-[0_0_30px_-5px_rgba(245,158,11,0.3)]" : "border-emerald-500/50 bg-gradient-to-br from-emerald-500/20 to-transparent shadow-[0_0_30px_-5px_rgba(16,185,129,0.3)]"}`}>
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
-                  <div className={`flex h-12 w-12 items-center justify-center rounded-xl bg-black/40 border shadow-inner ${data.analysis.score < 100 ? "border-amber-500/50" : "border-emerald-500/50"}`}>
-                    {data.analysis.score < 100 ? <AlertTriangle className="h-6 w-6 text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.8)]" /> : <CheckCircle className="h-6 w-6 text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.8)]" />}
+                  <div className={`flex h-12 w-12 items-center justify-center rounded-xl bg-black/40 border shadow-inner ${(data.analysis?.score ?? 100) < 100 ? "border-amber-500/50" : "border-emerald-500/50"}`}>
+                    {(data.analysis?.score ?? 100) < 100 ? <AlertTriangle className="h-6 w-6 text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.8)]" /> : <CheckCircle className="h-6 w-6 text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.8)]" />}
                   </div>
                   <div>
                     <p className="text-sm font-semibold text-slate-400 uppercase tracking-widest">System Posture</p>
-                    <p className="text-2xl font-bold text-white text-glow">Score: {data.analysis.score} / 100</p>
+                    <p className="text-2xl font-bold text-white text-glow">Score: {data.analysis?.score ?? 'N/A'} / 100</p>
                   </div>
                 </div>
               </div>
 
               <div className="mb-6 rounded-2xl bg-black/40 p-4 border border-white/5 text-slate-200 leading-relaxed">
                 <span className="text-indigo-400 font-bold mr-2">Auto-Analysis:</span>
-                {data.analysis.summary}
+                {data.analysis?.summary ?? "Analysis missing."}
               </div>
 
-              {data.analysis.threats.length > 0 && (
+              {Array.isArray(data.analysis?.threats) && data.analysis.threats.length > 0 && (
                 <div className="space-y-3">
                   <p className="text-xs font-semibold text-rose-400 uppercase tracking-widest">Detected Anomalies</p>
                   {data.analysis.threats.map((threat, i) => (
                     <div key={i} className="flex items-start gap-3 rounded-xl border border-rose-500/20 bg-rose-500/5 p-3">
                       <AlertTriangle className="h-4 w-4 text-rose-400 shrink-0 mt-0.5" />
                       <div>
-                        <p className="text-sm font-medium text-rose-200">{threat}</p>
+                        <p className="text-sm font-medium text-rose-200">{typeof threat === 'string' ? threat : JSON.stringify(threat)}</p>
                       </div>
                     </div>
                   ))}
                 </div>
               )}
 
-              {data.analysis.mitreMappings.length > 0 && (
+              {Array.isArray(data.analysis?.mitreMappings) && data.analysis.mitreMappings.length > 0 && (
                 <div className="mt-4 space-y-2">
                   <p className="text-xs font-semibold text-indigo-400 uppercase tracking-widest">MITRE ATT&CK Context</p>
                   <div className="flex flex-wrap gap-2">
                     {data.analysis.mitreMappings.map((mitre, i) => (
                       <span key={i} className="rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-3 py-1 text-xs font-mono text-indigo-300">
-                        {mitre}
+                        {typeof mitre === 'string' ? mitre : JSON.stringify(mitre)}
                       </span>
                     ))}
                   </div>
@@ -364,7 +348,7 @@ Return ONLY a valid JSON object with this exact structure: {"summary": "A detail
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5 font-mono">
-                      {data.network.split('\n').slice(2).filter(Boolean).map((line, i) => {
+                      {(data.network ? data.network.split('\n').slice(2).filter(Boolean) : []).map((line, i) => {
                         const parts = line.trim().split(/\s+/);
                         if (parts.length < 4) return null;
                         const proto = parts[0];

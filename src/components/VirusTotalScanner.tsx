@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { MALWARE_SIGNATURES, LIVE_IOCS, type MalwareSignature, type IOC } from "../data/threatEngine";
 import { Search, Shield, AlertTriangle, CheckCircle, ExternalLink, Clock, Hash, Globe, Mail } from "lucide-react";
+import { API_BASE, Token } from "../utils/api";
 
 type ScanResult = {
   query: string;
@@ -13,6 +14,7 @@ type ScanResult = {
   reputation?: number;
   categories?: string[];
   scanTime: number;
+  source?: "virustotal" | "local-demo";
   verdict: "malicious" | "suspicious" | "clean" | "unknown";
   engines: Array<{ name: string; result: string | null; detected: boolean }>;
   entityMetadata?: {
@@ -107,6 +109,7 @@ function scanQuery(query: string): ScanResult {
   if (isClean) {
     return {
       query, type, found: false, verdict: "clean", scanTime,
+      source: "local-demo",
       vtDetections: 0, vtTotal: 72, reputation: 85,
       categories: ["Safe", "Known good"],
       engines: buildEngineResults(0, 72),
@@ -126,6 +129,7 @@ function scanQuery(query: string): ScanResult {
     return {
       query, type, found: true, malware: malwareMatch,
       verdict: "malicious", scanTime,
+      source: "local-demo",
       vtDetections: malwareMatch.vtDetections,
       vtTotal: malwareMatch.vtTotal,
       vtRatio: malwareMatch.vtRatio,
@@ -152,6 +156,7 @@ function scanQuery(query: string): ScanResult {
     return {
       query, type, found: true, ioc: iocMatch,
       verdict: iocMatch.severity === "critical" || iocMatch.severity === "high" ? "malicious" : "suspicious",
+      source: "local-demo",
       scanTime, vtDetections: detections, vtTotal: 72,
       reputation: -iocMatch.confidence,
       categories: iocMatch.tags,
@@ -168,6 +173,7 @@ function scanQuery(query: string): ScanResult {
     const detections = 12 + Math.floor(Math.random() * 25);
     return {
       query, type, found: true, verdict: "suspicious", scanTime,
+      source: "local-demo",
       vtDetections: detections, vtTotal: 72,
       reputation: -30,
       categories: ["Suspicious", "Heuristic"],
@@ -183,11 +189,56 @@ function scanQuery(query: string): ScanResult {
 
   return {
     query, type, found: false, verdict: detections > 0 ? "suspicious" : "unknown", scanTime,
+    source: "local-demo",
     vtDetections: detections, vtTotal: 72,
     reputation: isHighEntropy ? -15 : 0,
     categories: isHighEntropy ? ["AI Heuristic Match", "High Entropy"] : ["Unclassified"],
     engines: buildEngineResults(detections, 72, isHighEntropy ? "ML.Heuristic.Gen" : undefined),
     entityMetadata,
+  };
+}
+
+function fromVirusTotal(query: string, data: any, elapsed: number): ScanResult {
+  const type = detectQueryType(query);
+  const attrs = data?.data?.attributes ?? {};
+  const stats = attrs.last_analysis_stats ?? {};
+  const analysis = attrs.last_analysis_results ?? {};
+  const detections = Number(stats.malicious ?? 0) + Number(stats.suspicious ?? 0);
+  const total = Object.keys(analysis).length || Object.values(stats).reduce((sum: number, v: any) => sum + Number(v || 0), 0) || 0;
+  const engines = Object.entries(analysis).map(([name, value]: [string, any]) => ({
+    name,
+    detected: value.category === "malicious" || value.category === "suspicious",
+    result: value.result ?? null,
+  }));
+  const verdict: ScanResult["verdict"] =
+    Number(stats.malicious ?? 0) > 0 ? "malicious" :
+    Number(stats.suspicious ?? 0) > 0 ? "suspicious" :
+    total > 0 ? "clean" : "unknown";
+
+  return {
+    query,
+    type,
+    found: detections > 0,
+    verdict,
+    source: "virustotal",
+    scanTime: elapsed,
+    vtDetections: detections,
+    vtTotal: total,
+    reputation: attrs.reputation,
+    categories: [
+      ...(attrs.popular_threat_classification?.suggested_threat_label ? [attrs.popular_threat_classification.suggested_threat_label] : []),
+      ...(attrs.categories ? Object.values(attrs.categories).slice(0, 4).map(String) : []),
+    ],
+    engines: engines.length ? engines : buildEngineResults(0, Math.max(total, 1)),
+    entityMetadata: {
+      asn: attrs.asn ? `AS${attrs.asn}` : undefined,
+      country: attrs.country,
+      registrar: attrs.registrar,
+      creationDate: attrs.creation_date ? new Date(attrs.creation_date * 1000).toISOString().split("T")[0] : undefined,
+      fileType: attrs.type_description,
+      fileSize: attrs.size ? `${Math.round(attrs.size / 1024)} KB` : undefined,
+      magicBytes: attrs.magic,
+    },
   };
 }
 
@@ -245,10 +296,30 @@ export default function VirusTotalScanner() {
       if (p >= 95) clearInterval(timer);
     }, 80);
 
-    setTimeout(() => {
+    setTimeout(async () => {
       clearInterval(timer);
       setProgress(100);
-      const r = scanQuery(q.trim());
+      let r: ScanResult;
+      const started = performance.now();
+      const trimmed = q.trim();
+      if (Token.getAccess()) {
+        try {
+          const res = await fetch(`${API_BASE}/api/threat-intel/virustotal?indicator=${encodeURIComponent(trimmed)}&type=${detectQueryType(trimmed)}`, {
+            headers: { Authorization: `Bearer ${Token.getAccess()}` },
+          });
+          if (res.ok) {
+            r = fromVirusTotal(trimmed, await res.json(), Math.round(performance.now() - started));
+          } else {
+            r = scanQuery(trimmed);
+            r.categories = [res.status === 503 ? "VirusTotal API not configured" : `VirusTotal unavailable (${res.status})`, ...(r.categories ?? [])];
+          }
+        } catch {
+          r = scanQuery(trimmed);
+          r.categories = ["VirusTotal request failed", ...(r.categories ?? [])];
+        }
+      } else {
+        r = scanQuery(trimmed);
+      }
       setResult(r);
       setHistory(prev => [r, ...prev].slice(0, 8));
       setTimeout(() => setScanning(false), 200);
@@ -348,6 +419,9 @@ export default function VirusTotalScanner() {
                     <span className="text-xs text-slate-400 uppercase tracking-widest">{result.type}</span>
                     <span className={`rounded-full border px-2.5 py-1 text-xs font-bold uppercase tracking-wide ${verdictStyle[result.verdict]}`}>
                       {result.verdict}
+                    </span>
+                    <span className="rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-xs text-slate-300">
+                      {result.source === "virustotal" ? "VirusTotal live" : "Local demo fallback"}
                     </span>
                   </div>
                   <p className="font-mono text-sm text-white break-all">{result.query}</p>

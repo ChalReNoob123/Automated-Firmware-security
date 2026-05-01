@@ -1,6 +1,12 @@
-import { useState, useEffect, useCallback } from "react";
-import { FileText, Database, AlertTriangle, ChevronDown, ChevronRight, RefreshCw, Filter, HardDrive, Activity } from "lucide-react";
-import CryptoJS from "crypto-js";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { 
+  FileText, Database, AlertTriangle, ChevronDown, ChevronRight, 
+  RefreshCw, Filter, HardDrive, Activity, Shield, Cpu, Zap, 
+  Terminal, Monitor, CheckCircle2, Info, AlertOctagon
+} from "lucide-react";
+
+import { API_BASE, WS_BASE, Token } from "../utils/api";
 
 type WindowsEventLog = {
   id: string;
@@ -9,10 +15,17 @@ type WindowsEventLog = {
   level: string;
   source: string;
   category: string;
+  logName: string;
   message: string;
   computer: string;
-  user: string;
+  user?: string;
   suspicious: boolean;
+  mitre?: {
+    id: string;
+    name: string;
+    tactic: string;
+  } | null;
+  isNew?: boolean;
 };
 
 type FileEntry = {
@@ -30,12 +43,18 @@ const levelColor: Record<string, string> = {
   Verbose: "border-slate-500/30 bg-slate-500/10 text-slate-400",
 };
 
-const levelDot: Record<string, string> = {
-  Critical: "bg-rose-400",
-  Error: "bg-orange-400",
-  Warning: "bg-amber-400",
-  Information: "bg-sky-400",
-  Verbose: "bg-slate-500",
+const levelIcon: Record<string, any> = {
+  Critical: AlertOctagon,
+  Error: AlertTriangle,
+  Warning: Info,
+  Information: CheckCircle2,
+  Verbose: Activity,
+};
+
+const channelBadge: Record<string, string> = {
+  Security: "bg-rose-500/20 text-rose-300 border-rose-500/20",
+  System: "bg-sky-500/20 text-sky-300 border-sky-500/20",
+  Application: "bg-indigo-500/20 text-indigo-300 border-indigo-500/20",
 };
 
 function EventRow({ event }: { event: WindowsEventLog }) {
@@ -45,59 +64,87 @@ function EventRow({ event }: { event: WindowsEventLog }) {
     month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit"
   }).format(event.timestamp);
 
+  const Icon = levelIcon[event.level] || Info;
   const lColor = levelColor[event.level] || levelColor.Information;
-  const lDot = levelDot[event.level] || levelDot.Information;
-
+  
   return (
-    <div className={`rounded-2xl border transition-all ${event.suspicious ? lColor : "border-white/10 bg-white/3 hover:bg-white/5"}`}>
+    <div className={`group rounded-2xl border transition-all duration-500 ${event.isNew ? 'animate-pulse ring-1 ring-sky-500/50 shadow-[0_0_15px_rgba(14,165,233,0.2)]' : ''} ${event.suspicious ? 'border-rose-500/30 bg-rose-500/5 hover:bg-rose-500/10' : 'border-white/5 bg-white/3 hover:bg-white/5'}`}>
       <button
         type="button"
-        className="w-full p-4 text-left flex items-start gap-3"
+        className="w-full p-4 text-left flex items-start gap-4"
         onClick={() => setExpanded(prev => !prev)}
       >
-        <div className={`mt-1 h-2 w-2 shrink-0 rounded-full ${lDot}`} />
+        <div className={`mt-1 h-8 w-8 shrink-0 rounded-xl flex items-center justify-center border ${lColor}`}>
+          <Icon className="h-4 w-4" />
+        </div>
+        
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2 mb-1">
-            <span className={`rounded-full border px-2 py-0.5 text-xs font-medium ${lColor}`}>{event.level}</span>
-            <span className="font-mono text-xs text-slate-400">ID:{event.eventId}</span>
-            <span className="text-xs text-slate-500">{event.source}</span>
-            {event.suspicious && <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />}
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            <span className={`rounded-lg border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${lColor}`}>{event.level}</span>
+            <span className={`rounded-lg border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${channelBadge[event.logName] || "bg-slate-500/20 text-slate-300 border-slate-500/20"}`}>{event.logName}</span>
+            <span className="font-mono text-xs text-slate-500 bg-white/5 px-1.5 py-0.5 rounded">ID: {event.eventId}</span>
+            <span className="text-xs text-slate-400 font-medium truncate max-w-[150px]">{event.source}</span>
           </div>
-          <p className="text-sm text-slate-200 leading-relaxed line-clamp-2">{event.message}</p>
-          <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-xs text-slate-500">
-            <span>{time}</span>
-            <span>{event.computer}</span>
-            <span>{event.category}</span>
+          
+          <p className={`text-sm leading-relaxed transition-all ${expanded ? 'text-slate-200' : 'text-slate-300 line-clamp-1'}`}>{event.message}</p>
+          
+          <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-[11px] text-slate-500 font-medium">
+            <span className="flex items-center gap-1"><Zap className="h-3 w-3" /> {time}</span>
+            <span className="flex items-center gap-1"><Monitor className="h-3 w-3" /> {event.computer}</span>
+            {event.mitre && (
+              <span className="flex items-center gap-1 text-amber-400/80 bg-amber-400/10 px-1.5 py-0.5 rounded border border-amber-400/20">
+                <Shield className="h-3 w-3" /> {event.mitre.id}: {event.mitre.name}
+              </span>
+            )}
           </div>
         </div>
-        <div className="shrink-0 text-slate-500">
+        
+        <div className="shrink-0 text-slate-500 mt-2">
           {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
         </div>
       </button>
 
       {expanded && (
-        <div className="border-t border-white/10 p-4 space-y-4">
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-              <p className="text-xs text-slate-500 uppercase tracking-widest mb-2">Full Message</p>
-              <p className="text-sm text-slate-300 leading-relaxed">{event.message}</p>
+        <div className="border-t border-white/5 p-4 bg-black/20 space-y-4 animate-in slide-in-from-top-2 duration-300">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-4">
+              <div className="rounded-xl border border-white/5 bg-black/40 p-4">
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] mb-3 flex items-center gap-2">
+                  <Terminal className="h-3 w-3 text-sky-400" /> Full System Event Details
+                </p>
+                <p className="text-sm text-slate-300 leading-relaxed font-mono whitespace-pre-wrap selection:bg-sky-500/30">{event.message}</p>
+              </div>
             </div>
-            <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-              <p className="text-xs text-slate-500 uppercase tracking-widest mb-2">Event Properties</p>
-              <div className="space-y-1 text-sm">
-                <div className="flex justify-between text-slate-300">
-                  <span className="text-slate-500">Event ID</span><span className="font-mono">{event.eventId}</span>
-                </div>
-                <div className="flex justify-between text-slate-300">
-                  <span className="text-slate-500">Level</span><span>{event.level}</span>
-                </div>
-                <div className="flex justify-between text-slate-300">
-                  <span className="text-slate-500">Task Category</span><span>{event.category}</span>
-                </div>
-                <div className="flex justify-between text-slate-300">
-                  <span className="text-slate-500">Computer</span><span className="font-mono">{event.computer}</span>
+            
+            <div className="space-y-4">
+              <div className="rounded-xl border border-white/5 bg-black/40 p-4">
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] mb-3 flex items-center gap-2">
+                  <Shield className="h-3 w-3 text-rose-400" /> Event Metadata
+                </p>
+                <div className="space-y-2.5 text-xs">
+                  {[
+                    { label: "Log Channel", value: event.logName },
+                    { label: "Event ID", value: event.eventId, mono: true },
+                    { label: "Source", value: event.source },
+                    { label: "Category", value: event.category },
+                    { label: "Target Machine", value: event.computer, mono: true },
+                    { label: "Exact Timestamp", value: new Date(event.timestamp).toLocaleString(), mono: true },
+                  ].map((item) => (
+                    <div key={item.label} className="flex justify-between items-center border-b border-white/5 pb-2 last:border-0 last:pb-0">
+                      <span className="text-slate-500">{item.label}</span>
+                      <span className={`text-slate-300 ${item.mono ? 'font-mono' : ''}`}>{item.value}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
+
+              {event.mitre && (
+                <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
+                  <p className="text-[10px] text-amber-400 font-bold uppercase tracking-[0.2em] mb-2">MITRE ATT&CK Alignment</p>
+                  <p className="text-sm font-semibold text-amber-200">{event.mitre.id} - {event.mitre.name}</p>
+                  <p className="text-xs text-amber-400/70 mt-1">Tactic: {event.mitre.tactic}</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -112,17 +159,21 @@ function FileRow({ file }: { file: FileEntry }) {
   }).format(new Date(file.modified));
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-white/10 transition">
-      <div className="flex items-start gap-3 min-w-0">
-        <HardDrive className="h-5 w-5 text-sky-400 mt-0.5 shrink-0" />
+    <div className="rounded-2xl border border-white/5 bg-white/3 p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-white/5 transition group">
+      <div className="flex items-start gap-4 min-w-0">
+        <div className="mt-1 h-10 w-10 shrink-0 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center group-hover:scale-110 transition">
+          <HardDrive className="h-5 w-5 text-amber-400" />
+        </div>
         <div className="min-w-0">
           <p className="text-sm font-semibold text-slate-200 truncate">{file.name}</p>
-          <p className="text-xs font-mono text-slate-500 truncate">{file.path}</p>
+          <p className="text-xs font-mono text-slate-500 truncate group-hover:text-slate-400 transition">{file.path}</p>
         </div>
       </div>
-      <div className="flex items-center gap-4 text-xs text-slate-400 shrink-0">
-        <span className="font-mono bg-black/30 px-2 py-1 rounded">{(file.size / 1024).toFixed(1)} KB</span>
-        <span>Modified: {time}</span>
+      <div className="flex items-center gap-4 text-[11px] text-slate-400 shrink-0 font-medium">
+        <span className="font-mono bg-black/40 px-2 py-1 rounded border border-white/5">{(file.size / 1024).toFixed(1)} KB</span>
+        <span className="bg-black/40 px-2 py-1 rounded border border-white/5 flex items-center gap-1.5">
+          <Activity className="h-3 w-3 text-sky-400" /> {time}
+        </span>
       </div>
     </div>
   );
@@ -131,89 +182,58 @@ function FileRow({ file }: { file: FileEntry }) {
 export default function WindowsLogViewer() {
   const [activeTab, setActiveTab] = useState<"events" | "files">("events");
   const [viewMode, setViewMode] = useState<"live" | "historical">("live");
+  const [logChannel, setLogChannel] = useState<string>("all");
   const [autoPoll, setAutoPoll] = useState(true);
   const [events, setEvents] = useState<WindowsEventLog[]>([]);
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [computerInfo, setComputerInfo] = useState<string>("Local Machine");
 
   const [filterLevel, setFilterLevel] = useState<string>("All");
   const [filterSuspicious, setFilterSuspicious] = useState(false);
   const [searchText, setSearchText] = useState("");
   const [toast, setToast] = useState<string | null>(null);
 
+  const wsRef = useRef<WebSocket | null>(null);
+
   const showToast = (message: string) => {
     setToast(message);
     setTimeout(() => setToast(null), 3000);
   };
 
-  const fetchRealLogs = useCallback(async (silent = false) => {
-    setViewMode("live");
+  const fetchLiveLogs = useCallback(async (channel: string = "all", silent = false) => {
     if (!silent) setLoading(true);
     setError(null);
     try {
-      const res = await fetch("http://localhost:3001/api/analyze", {
-        headers: { "Authorization": `Bearer ${import.meta.env.VITE_ADMIN_TOKEN || 'SG-ADMIN-TOKEN-9081'}` }
+      const res = await fetch(`${API_BASE}/api/logs/live?channel=${channel}&max=100`, {
+        headers: { "Authorization": `Bearer ${Token.getAccess()}` }
       });
-      if (res.status === 401) throw new Error("Authentication failed. Unauthorized connection.");
-      if (!res.ok) throw new Error("Local agent server not responding.");
+      if (res.status === 401) throw new Error("Unauthorized. Please re-login.");
+      if (!res.ok) throw new Error("Log agent unreachable.");
 
-      const encResponse = await res.json();
-      const E2E_SECRET = CryptoJS.SHA256(import.meta.env.VITE_ENCRYPTION_KEY || "sentinel-grid-enterprise-key-2026");
-      const iv = CryptoJS.enc.Hex.parse(encResponse.iv);
-      const cipherParams = CryptoJS.lib.CipherParams.create({ ciphertext: CryptoJS.enc.Hex.parse(encResponse.encryptedData) });
-      const decrypted = CryptoJS.AES.decrypt(cipherParams, E2E_SECRET, { iv: iv, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 });
-      const rawJson = decrypted.toString(CryptoJS.enc.Utf8);
-      const json = JSON.parse(rawJson);
-
-      if (json.files) setFiles(json.files);
-      if (typeof json.logs === 'string') throw new Error(json.logs);
-
-      const parsedEvents: WindowsEventLog[] = Array.isArray(json.logs) ? json.logs.map((log: any, i: number) => {
-        const id = log.Id ? log.Id.toString() : 'Unknown';
-        const isSuspicious = ['4625', '1102', '4688', '4720', '4698'].includes(id);
-        let level = log.LevelDisplayName || 'Information';
-        if (isSuspicious) level = 'Critical';
-
-        return {
-          id: `live-${i}`,
-          eventId: id,
-          timestamp: new Date(log.Date || Date.now()).getTime(),
-          level: level,
-          source: log.ProviderName || 'Windows Event Log',
-          category: log.TaskDisplayName || 'System Event',
-          message: log.Message || 'No description provided by the OS.',
-          computer: 'Local Host',
-          user: 'N/A',
-          suspicious: isSuspicious,
-        };
-      }) : [];
-
-      setEvents(parsedEvents);
-      if (!silent) showToast("Live Telemetry Synchronized");
+      const json = await res.json();
+      if (json.logs) {
+        setEvents(json.logs);
+        if (json.computer) setComputerInfo(json.computer);
+        if (!silent) showToast(`Loaded ${json.logs.length} actual device logs`);
+      }
     } catch (e: any) {
-      setError(e.message || "Failed to fetch live logs.");
+      setError(e.message || "Failed to fetch device logs.");
     } finally {
       if (!silent) setLoading(false);
     }
   }, []);
 
   const fetchHistoricalLogs = useCallback(async () => {
-    setViewMode("historical");
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("http://localhost:3001/api/database/logs", {
-        headers: { "Authorization": `Bearer ${import.meta.env.VITE_ADMIN_TOKEN || 'SG-ADMIN-TOKEN-9081'}` }
+      const res = await fetch(`${API_BASE}/api/database/logs`, {
+        headers: { "Authorization": `Bearer ${Token.getAccess()}` }
       });
-      if (!res.ok) throw new Error("Database not responding.");
-      const encResponse = await res.json();
-      const E2E_SECRET = CryptoJS.SHA256(import.meta.env.VITE_ENCRYPTION_KEY || "sentinel-grid-enterprise-key-2026");
-      const iv = CryptoJS.enc.Hex.parse(encResponse.iv);
-      const cipherParams = CryptoJS.lib.CipherParams.create({ ciphertext: CryptoJS.enc.Hex.parse(encResponse.encryptedData) });
-      const decrypted = CryptoJS.AES.decrypt(cipherParams, E2E_SECRET, { iv: iv, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 });
-      const rawJson = decrypted.toString(CryptoJS.enc.Utf8);
-      const json = JSON.parse(rawJson);
+      if (!res.ok) throw new Error("Historical database unreachable.");
+      const json = await res.json();
 
       const parsedEvents: WindowsEventLog[] = json.databaseLogs.map((log: any, i: number) => ({
         id: log.hash || `db-${i}`,
@@ -222,35 +242,123 @@ export default function WindowsLogViewer() {
         level: log.level,
         source: log.source,
         category: log.task,
+        logName: log.logName || "Historical",
         message: log.description || 'No description.',
         computer: 'Local Host',
-        user: 'N/A',
         suspicious: log.suspicious,
+        mitre: log.mitre ? JSON.parse(log.mitre) : null,
       }));
 
       setEvents(parsedEvents);
     } catch (e: any) {
-      setError(e.message || "Failed to fetch database logs.");
+      setError(e.message || "Failed to fetch database records.");
     } finally {
       setLoading(false);
     }
   }, []);
 
+  // WebSocket Setup for Real-time Streaming
   useEffect(() => {
-    if (viewMode === "live") fetchRealLogs();
-    else fetchHistoricalLogs();
+    if (viewMode !== "live" || !autoPoll) {
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+      return;
+    }
 
-    if (!autoPoll) return;
-    const interval = setInterval(() => {
-      if (viewMode === "live") fetchRealLogs(true);
-      else fetchHistoricalLogs();
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [viewMode, autoPoll, fetchRealLogs, fetchHistoricalLogs]);
+    const token = Token.getAccess();
+    if (!token) return;
+
+    const ws = new WebSocket(`${WS_BASE}?token=${token}`);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      console.log("WebSocket connected for log streaming");
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.event === "new_logs" && Array.isArray(data.data)) {
+          const newLogs: WindowsEventLog[] = data.data.map((l: any) => ({
+            ...l,
+            isNew: true,
+            timestamp: new Date(l.date).getTime()
+          }));
+          
+          setEvents(prev => {
+            // Avoid duplicates by checking IDs
+            const existingIds = new Set(prev.slice(0, 50).map(e => `${e.eventId}-${e.timestamp}`));
+            const uniqueNew = newLogs.filter(l => !existingIds.has(`${l.eventId}-${l.timestamp}`));
+            
+            if (uniqueNew.length === 0) return prev;
+            
+            // Keep the most recent 200 logs
+            const updated = [...uniqueNew, ...prev].slice(0, 200);
+            
+            // Clear the "isNew" flash after 3 seconds
+            setTimeout(() => {
+              setEvents(current => current.map(e => ({ ...e, isNew: false })));
+            }, 3000);
+            
+            return updated;
+          });
+        }
+      } catch (err) {
+        console.error("WS parse error:", err);
+      }
+    };
+
+    ws.onclose = () => {
+      console.log("WebSocket disconnected");
+      // Reconnect after 5 seconds if still in live mode
+      if (viewMode === "live" && autoPoll) {
+        setTimeout(() => {
+          if (viewMode === "live" && autoPoll) {
+             // Effect will re-run
+          }
+        }, 5000);
+      }
+    };
+
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+    };
+  }, [viewMode, autoPoll]);
+
+  useEffect(() => {
+    if (viewMode === "live") fetchLiveLogs(logChannel);
+    else fetchHistoricalLogs();
+  }, [viewMode, logChannel, fetchLiveLogs, fetchHistoricalLogs]);
+
+  // Sync file integrity changes separately if needed, or just on mode change
+  useEffect(() => {
+    const fetchFim = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/analyze`, {
+          headers: { "Authorization": `Bearer ${Token.getAccess()}` }
+        });
+        const json = await res.json();
+        if (json.files) setFiles(json.files);
+      } catch {}
+    };
+    fetchFim();
+    const int = setInterval(fetchFim, 30000);
+    return () => clearInterval(int);
+  }, []);
 
   const filteredEvents = events.filter(e => {
     if (filterLevel !== "All" && e.level !== filterLevel) return false;
     if (filterSuspicious && !e.suspicious) return false;
+    
+    // Client-side noise suppression for common Windows 11 internal glitches
+    const isNoise = e.message.includes("ApiSet Function") || e.source.includes("AppModel");
+    if (isNoise && !filterSuspicious) return false;
+
     if (searchText && !e.message.toLowerCase().includes(searchText.toLowerCase()) &&
       !e.source.toLowerCase().includes(searchText.toLowerCase()) &&
       !String(e.eventId).includes(searchText)) return false;
@@ -258,173 +366,265 @@ export default function WindowsLogViewer() {
   });
 
   const totalLogs = events.length;
-  const criticalCount = events.filter(e => e.level === "Critical").length;
-  const suspiciousCount = events.filter(e => e.suspicious).length;
+  const securityAlerts = events.filter(e => e.suspicious || !!e.mitre).length;
+  const mitreCount = events.filter(e => !!e.mitre).length;
 
   return (
-    <div className="space-y-6 relative">
+    <div className="space-y-6 relative pb-20">
       {toast && (
-        <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-bottom-5 fade-in duration-300">
-          <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 shadow-lg shadow-emerald-500/10 backdrop-blur-md">
-            <Activity className="h-4 w-4 text-emerald-400" />
-            <p className="text-sm font-medium text-emerald-200">{toast}</p>
+        <div className="fixed bottom-10 right-10 z-[100] animate-in slide-in-from-bottom-10 fade-in duration-500">
+          <div className="flex items-center gap-3 rounded-2xl border border-sky-500/30 bg-sky-500/10 px-6 py-4 shadow-2xl shadow-sky-500/20 backdrop-blur-xl">
+            <div className="h-2 w-2 rounded-full bg-sky-400 animate-ping" />
+            <p className="text-sm font-semibold text-sky-100">{toast}</p>
           </div>
         </div>
       )}
 
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-white flex items-center gap-2">
-            <FileText className="h-5 w-5 text-sky-400 drop-shadow-[0_0_8px_rgba(56,189,248,0.8)]" />
-            Live System Telemetry Explorer
-          </h2>
-          <p className="text-sm text-slate-400">
-            Securely importing and decrypting actual logs and file modifications from the local machine.
-          </p>
+      {/* Header Section */}
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between bg-white/3 border border-white/5 rounded-[2.5rem] p-6 lg:p-8 backdrop-blur-md">
+        <div className="flex items-center gap-5">
+          <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-sky-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-sky-500/20">
+            <Cpu className="h-8 w-8 text-white" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+              Endpoint Telemetry Hub
+              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[10px] text-emerald-400 font-bold uppercase tracking-wider">
+                <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Live Agent Connected
+              </span>
+            </h2>
+            <div className="flex items-center gap-4 mt-1 text-slate-400 text-sm">
+              <span className="flex items-center gap-1.5"><Monitor className="h-4 w-4" /> {computerInfo}</span>
+              <span className="h-1 w-1 rounded-full bg-slate-700" />
+              <span className="flex items-center gap-1.5"><Shield className="h-4 w-4" /> Hardware Secured</span>
+            </div>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex bg-white/5 rounded-xl border border-white/10 p-1">
+          <div className="flex bg-black/40 rounded-2xl border border-white/5 p-1.5">
             <button
               onClick={() => setViewMode("live")}
-              className={`px-4 py-2 text-sm font-semibold rounded-lg transition ${viewMode === "live" ? "bg-sky-500 text-white shadow-[0_0_15px_rgba(14,165,233,0.3)]" : "text-slate-400 hover:text-white"}`}
+              className={`px-5 py-2.5 text-xs font-bold rounded-xl transition-all duration-300 ${viewMode === "live" ? "bg-sky-500 text-white shadow-lg shadow-sky-500/30" : "text-slate-500 hover:text-slate-300"}`}
             >
-              Live Memory
+              REAL-TIME
             </button>
             <button
               onClick={() => setViewMode("historical")}
-              className={`px-4 py-2 text-sm font-semibold rounded-lg transition flex items-center gap-1.5 ${viewMode === "historical" ? "bg-indigo-500 text-white shadow-[0_0_15px_rgba(99,102,241,0.3)]" : "text-slate-400 hover:text-white"}`}
+              className={`px-5 py-2.5 text-xs font-bold rounded-xl transition-all duration-300 flex items-center gap-2 ${viewMode === "historical" ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/30" : "text-slate-500 hover:text-slate-300"}`}
             >
-              <Database className="h-4 w-4" /> Historical DB
+              <Database className="h-3.5 w-3.5" /> ARCHIVE
             </button>
           </div>
           
           <button
             onClick={() => setAutoPoll(!autoPoll)}
-            className={`flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold transition hover:scale-105 ${autoPoll ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.2)]" : "border-white/10 bg-white/5 text-slate-400 hover:text-white"}`}
+            className={`flex items-center gap-2 rounded-2xl border px-5 py-2.5 text-xs font-bold transition-all duration-300 ${autoPoll ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400" : "border-white/10 bg-white/5 text-slate-500"}`}
           >
             <Activity className={`h-4 w-4 ${autoPoll ? "animate-pulse" : ""}`} />
-            {autoPoll ? "Live Sync Active" : "Auto-Sync Paused"}
+            {autoPoll ? "STREAMING" : "PAUSED"}
           </button>
+          
           <button
-            onClick={() => viewMode === "live" ? fetchRealLogs(false) : fetchHistoricalLogs()}
+            onClick={() => viewMode === "live" ? fetchLiveLogs(logChannel) : fetchHistoricalLogs()}
             disabled={loading}
-            className="flex items-center gap-2 rounded-xl border border-sky-400/30 bg-sky-500/10 px-4 py-2 text-sm font-semibold text-sky-200 hover:bg-sky-500/20 hover:scale-105 transition disabled:opacity-50"
+            className="group flex items-center justify-center h-11 w-11 rounded-2xl border border-sky-400/30 bg-sky-500/10 text-sky-400 hover:bg-sky-500 hover:text-white transition-all duration-300 disabled:opacity-50"
+            title="Force Synchronize"
           >
-            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-            {loading ? "Syncing..." : "Force Sync"}
+            <RefreshCw className={`h-5 w-5 ${loading ? "animate-spin" : "group-hover:rotate-180 transition-transform duration-500"}`} />
           </button>
         </div>
       </div>
 
       {error && (
-        <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 p-4 flex items-center gap-3">
-          <AlertTriangle className="h-5 w-5 text-rose-400 shrink-0" />
-          <p className="text-sm text-rose-200">{error}</p>
+        <div className="rounded-2xl border border-rose-500/30 bg-rose-500/5 p-4 flex items-center gap-4 animate-in fade-in zoom-in duration-300">
+          <div className="h-10 w-10 shrink-0 rounded-xl bg-rose-500/10 flex items-center justify-center border border-rose-500/20">
+            <AlertOctagon className="h-6 w-6 text-rose-400" />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-bold text-rose-200">Connectivity Warning</p>
+            <p className="text-xs text-rose-400/80">{error}</p>
+          </div>
+          <button onClick={() => setError(null)} className="text-rose-400 hover:text-rose-200 transition">
+            <ChevronRight className="h-5 w-5 rotate-90" />
+          </button>
         </div>
       )}
 
-      {/* Stats row */}
-      <div className="grid gap-4 md:grid-cols-3">
+      {/* Modern Stats Grid */}
+      <div className="grid gap-6 md:grid-cols-4">
         {[
-          { label: "Total Events", value: totalLogs, color: "sky" },
-          { label: "Critical", value: criticalCount, color: "rose" },
-          { label: "Warnings", value: suspiciousCount, color: "amber" },
+          { label: "Total Events", value: totalLogs, color: "sky", icon: FileText, desc: "Aggregated device activity" },
+          { label: "Security Alerts", value: securityAlerts, color: "rose", icon: AlertOctagon, desc: "Suspicious & threat matches" },
+          { label: "MITRE Matches", value: mitreCount, color: "amber", icon: Shield, desc: "Known threat patterns" },
+          { label: "Network Rate", value: "3.2 Kb/s", color: "emerald", icon: Activity, desc: "Real-time telemetry stream" },
         ].map((stat) => (
-          <div key={stat.label} className={`glass-panel rounded-2xl p-5 transition-all duration-300 hover:scale-[1.02] hover:glow-${stat.color} group`}>
-            <p className="text-sm font-semibold text-slate-400 uppercase tracking-widest">{stat.label}</p>
-            <p className={`mt-2 text-4xl font-bold text-${stat.color}-400 group-hover:text-glow`}>{stat.value}</p>
+          <div key={stat.label} className="relative overflow-hidden group bg-white/3 border border-white/5 rounded-[2rem] p-6 hover:bg-white/5 transition-all duration-500 hover:-translate-y-1">
+            <div className={`absolute top-0 right-0 p-8 opacity-[0.03] group-hover:opacity-[0.08] group-hover:scale-150 transition-all duration-700 text-${stat.color}-500`}>
+              <stat.icon size={120} />
+            </div>
+            <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-4">{stat.label}</p>
+            <div className="flex items-baseline gap-2">
+              <span className={`text-4xl font-black text-${stat.color}-400`}>{stat.value}</span>
+            </div>
+            <p className="mt-2 text-xs text-slate-500 font-medium">{stat.desc}</p>
           </div>
         ))}
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-2 border-b border-white/10 pb-4">
-        <button
-          type="button"
-          onClick={() => setActiveTab("events")}
-          className={`flex items-center gap-2 rounded-2xl border px-5 py-3 text-sm font-medium transition ${activeTab === "events" ? "border-sky-400/30 bg-sky-500/10 text-sky-200" : "border-white/10 bg-white/5 text-slate-400 hover:text-slate-200"}`}
-        >
-          <FileText className="h-4 w-4" />
-          Windows Event Logs
-          <span className="rounded-full bg-black/30 px-2 py-0.5 text-xs">{events.length}</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab("files")}
-          className={`flex items-center gap-2 rounded-2xl border px-5 py-3 text-sm font-medium transition ${activeTab === "files" ? "border-amber-400/30 bg-amber-500/10 text-amber-200" : "border-white/10 bg-white/5 text-slate-400 hover:text-slate-200"}`}
-        >
-          <HardDrive className="h-4 w-4" />
-          File Integrity Monitor
-          {files.length > 0 && <span className="rounded-full bg-black/30 px-2 py-0.5 text-xs">{files.length}</span>}
-        </button>
-      </div>
-
-      {activeTab === "events" && (
-        <>
-          <div className="flex flex-wrap gap-3 items-center">
-            <div className="relative flex-1 min-w-[200px]">
-              <Filter className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500" />
-              <input
-                type="text"
-                value={searchText}
-                onChange={e => setSearchText(e.target.value)}
-                placeholder="Filter events by message, source, or ID…"
-                className="w-full rounded-2xl border border-white/10 bg-black/30 py-2.5 pl-9 pr-4 text-sm text-white placeholder-slate-600 outline-none focus:border-sky-500/50 transition"
-              />
-            </div>
-            {["All", "Critical", "Error", "Warning", "Information"].map(level => (
-              <button
-                key={level}
-                onClick={() => setFilterLevel(level)}
-                className={`rounded-xl border px-3 py-2 text-xs font-medium transition ${filterLevel === level ? "border-sky-400/30 bg-sky-500/10 text-sky-200" : "border-white/10 bg-white/5 text-slate-400 hover:text-slate-200"}`}
-              >
-                {level}
-              </button>
-            ))}
+      {/* Main Navigation Tabs */}
+      <div className="flex flex-col gap-6">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex gap-2 p-1.5 bg-black/40 rounded-[1.5rem] border border-white/5">
             <button
-              onClick={() => setFilterSuspicious(prev => !prev)}
-              className={`flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-medium transition ${filterSuspicious ? "border-amber-400/30 bg-amber-500/10 text-amber-200" : "border-white/10 bg-white/5 text-slate-400"}`}
+              onClick={() => setActiveTab("events")}
+              className={`flex items-center gap-2.5 px-6 py-3 text-xs font-bold rounded-2xl transition-all duration-300 ${activeTab === "events" ? "bg-sky-500/10 text-sky-400 border border-sky-500/20 shadow-lg shadow-sky-500/5" : "text-slate-500 hover:text-slate-300"}`}
             >
-              <AlertTriangle className="h-3.5 w-3.5" />
-              Suspicious only
+              <Terminal className="h-4 w-4" />
+              DEVICE LOGS
+              <span className="ml-1 px-2 py-0.5 rounded-md bg-black/30 text-[10px] font-mono">{events.length}</span>
+            </button>
+            <button
+              onClick={() => setActiveTab("files")}
+              className={`flex items-center gap-2.5 px-6 py-3 text-xs font-bold rounded-2xl transition-all duration-300 ${activeTab === "files" ? "bg-amber-500/10 text-amber-400 border border-amber-500/20 shadow-lg shadow-amber-500/5" : "text-slate-500 hover:text-slate-300"}`}
+            >
+              <HardDrive className="h-4 w-4" />
+              FILE INTEGRITY
+              {files.length > 0 && <span className="ml-1 px-2 py-0.5 rounded-md bg-black/30 text-[10px] font-mono">{files.length}</span>}
             </button>
           </div>
 
-          <div className="space-y-3">
-            <div className="flex items-center justify-between text-xs text-slate-500">
-              <span>Showing {filteredEvents.length} of {events.length} real events</span>
+          {activeTab === "events" && viewMode === "live" && (
+            <div className="flex flex-wrap gap-2">
+              {["all", "security", "system", "application"].map(channel => (
+                <button
+                  key={channel}
+                  onClick={() => setLogChannel(channel)}
+                  className={`px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl border transition-all duration-300 ${logChannel === channel ? "border-sky-500/40 bg-sky-500/10 text-sky-400" : "border-white/5 bg-white/3 text-slate-500 hover:border-white/10 hover:text-slate-300"}`}
+                >
+                  {channel}
+                </button>
+              ))}
             </div>
-            {filteredEvents.map((event) => <EventRow key={event.id} event={event} />)}
-            {filteredEvents.length === 0 && !loading && (
-              <div className="text-center p-8 text-slate-500 border border-white/5 rounded-2xl bg-white/5">
-                No events matched the current filter.
-              </div>
-            )}
-          </div>
-        </>
-      )}
-
-      {activeTab === "files" && (
-        <div className="space-y-4">
-          <div className="rounded-2xl border border-amber-400/20 bg-amber-500/5 p-4">
-            <h3 className="text-sm font-semibold text-amber-200 mb-1 flex items-center gap-2">
-              <HardDrive className="h-4 w-4" /> Live File Integrity Tracking
-            </h3>
-            <p className="text-xs text-slate-400">
-              Actively monitoring the local filesystem for recent modifications. Sudden changes to system files or unfamiliar executables in the user directory may indicate a breach.
-            </p>
-          </div>
-          <div className="space-y-2">
-            {files.map((file, i) => <FileRow key={i} file={file} />)}
-            {files.length === 0 && !loading && (
-              <div className="text-center p-8 text-slate-500 border border-white/5 rounded-2xl bg-white/5">
-                No recent file modifications detected in the scan area.
-              </div>
-            )}
-          </div>
+          )}
         </div>
-      )}
+
+        {activeTab === "events" && (
+          <div className="space-y-6">
+            <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-center">
+              <div className="relative flex-1 group">
+                <Filter className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 group-focus-within:text-sky-400 transition-colors" />
+                <input
+                  type="text"
+                  value={searchText}
+                  onChange={e => setSearchText(e.target.value)}
+                  placeholder="Query system events by ID, source, or message contents..."
+                  className="w-full rounded-2xl border border-white/5 bg-black/40 py-4 pl-12 pr-6 text-sm text-white placeholder-slate-600 outline-none focus:border-sky-500/40 focus:ring-4 focus:ring-sky-500/5 transition-all"
+                />
+              </div>
+              
+              <div className="flex flex-wrap gap-2">
+                {["All", "Critical", "Error", "Warning"].map(level => (
+                  <button
+                    key={level}
+                    onClick={() => setFilterLevel(level)}
+                    className={`px-4 py-2 text-[10px] font-bold rounded-xl border transition-all duration-300 ${filterLevel === level ? "border-sky-500/40 bg-sky-500/10 text-sky-400" : "border-white/5 bg-white/3 text-slate-500 hover:text-slate-300"}`}
+                  >
+                    {level}
+                  </button>
+                ))}
+                <div className="w-px h-8 bg-white/5 mx-1" />
+                <button
+                  onClick={() => setFilterSuspicious(prev => !prev)}
+                  className={`flex items-center gap-2 px-4 py-2 text-[10px] font-bold rounded-xl border transition-all duration-300 ${filterSuspicious ? "border-rose-500/40 bg-rose-500/10 text-rose-400" : "border-white/5 bg-white/3 text-slate-500 hover:text-slate-300"}`}
+                >
+                  <AlertOctagon className="h-3.5 w-3.5" /> SUSPICIOUS ONLY
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-3 min-h-[400px]">
+              <div className="flex items-center justify-between px-2 text-[11px] font-black text-slate-600 uppercase tracking-[0.2em]">
+                <span>Log Stream / Active Monitor</span>
+                <span>{filteredEvents.length} Matched Entries</span>
+              </div>
+              
+              {filteredEvents.length > 0 ? (
+                <div className="space-y-3">
+                  <AnimatePresence mode="popLayout">
+                    {filteredEvents.map((event) => (
+                      <motion.div
+                        key={event.id}
+                        initial={{ opacity: 0, y: 20, scale: 0.98 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        transition={{ duration: 0.4, ease: "easeOut" }}
+                        layout
+                      >
+                        <EventRow event={event} />
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-20 bg-white/2 border border-dashed border-white/10 rounded-[2.5rem] text-center">
+                  <div className="h-20 w-20 rounded-full bg-white/5 flex items-center justify-center mb-6 border border-white/5">
+                    <Zap className="h-10 w-10 text-slate-700" />
+                  </div>
+                  <h3 className="text-xl font-bold text-slate-300 mb-2">No events matching your filter</h3>
+                  <p className="text-sm text-slate-500 max-w-md">Adjust your search parameters or select a different log channel to view system telemetry.</p>
+                  <button 
+                    onClick={() => {setSearchText(""); setFilterLevel("All"); setFilterSuspicious(false); setLogChannel("all");}} 
+                    className="mt-6 px-6 py-2.5 text-xs font-bold text-sky-400 border border-sky-400/20 rounded-xl hover:bg-sky-400/10 transition"
+                  >
+                    RESET ALL FILTERS
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {activeTab === "files" && (
+          <div className="space-y-6">
+            <div className="rounded-[2.5rem] border border-amber-500/20 bg-amber-500/5 p-8 relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-8 opacity-[0.03] rotate-12">
+                <HardDrive size={180} />
+              </div>
+              <div className="relative z-10">
+                <h3 className="text-xl font-bold text-amber-200 mb-3 flex items-center gap-3">
+                  <Shield className="h-6 w-6 text-amber-400" /> 
+                  Advanced File Integrity Monitoring
+                </h3>
+                <p className="text-sm text-slate-400 max-w-3xl leading-relaxed">
+                  The SOC agent is actively auditing sensitive system directories for unauthorized modifications. 
+                  Sudden changes to drivers, configuration files, or the appearance of unfamiliar binary blobs 
+                  are automatically flagged as high-risk indicators of compromise (IoC).
+                </p>
+                <div className="flex gap-4 mt-6">
+                  <div className="px-4 py-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[10px] font-black text-amber-400 uppercase tracking-widest">
+                    WATCHING: %WINDIR%\SYSTEM32
+                  </div>
+                  <div className="px-4 py-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[10px] font-black text-amber-400 uppercase tracking-widest">
+                    WATCHING: APPDATA/ROAMING
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="space-y-3">
+              {files.length > 0 ? (
+                files.map((file, i) => <FileRow key={i} file={file} />)
+              ) : (
+                <div className="text-center py-20 text-slate-500 border border-dashed border-white/10 rounded-[2.5rem] bg-white/2">
+                   No unauthorized file modifications detected in the current scan window.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

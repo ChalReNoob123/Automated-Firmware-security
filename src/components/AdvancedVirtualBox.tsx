@@ -198,7 +198,7 @@ export default function AdvancedVirtualBox() {
             Advanced VirtualBox Enterprise Hypervisor
           </h2>
           <p className="text-sm text-slate-400">
-            Government-grade bare-metal virtualization with FIPS 140-2 validation, Common Criteria EAL4+ compliance, and forensic-grade analysis.
+            VirtualBox-style analysis workflow simulator with compliance reference mappings and forensic event examples.
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
@@ -273,7 +273,7 @@ export default function AdvancedVirtualBox() {
             <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
               <span className="flex items-center gap-2 font-mono">
                 <Activity className="h-3 w-3 text-amber-500 animate-pulse" /> 
-                FIPS 140-2 Validated Analysis in Progress...
+                Demo analysis workflow in progress...
               </span>
               <span>{progress}%</span>
             </div>
@@ -460,7 +460,7 @@ export default function AdvancedVirtualBox() {
                   <Terminal className="h-4 w-4 text-amber-400" />
                   <h3 className="text-sm font-bold text-white font-mono">Hypervisor Forensic Trace</h3>
                 </div>
-                <span className="text-[10px] text-slate-500 font-mono">FIPS 140-2 Validated Logging</span>
+                <span className="text-[10px] text-slate-500 font-mono">Demo forensic event log</span>
               </div>
               <div className="flex-1 overflow-y-auto font-mono text-xs space-y-1 pr-1 custom-scrollbar">
                 {logs.map(log => (

@@ -7,7 +7,7 @@ import {
 import {
   Shield, AlertTriangle, Activity, Network, Eye, Zap,
   Terminal, Database, Globe, RefreshCw, ChevronRight, X,
-  CheckCircle, Clock, Cpu, FileText, Server, Flame, Key,
+  CheckCircle, Clock, Cpu, FileText, Server, Flame, Monitor, LogOut,
 } from "lucide-react";
 import MitreMatrix from "./components/MitreMatrix";
 import NistCompliance from "./components/NistCompliance";
@@ -20,12 +20,15 @@ import CrossPlatformFim from "./components/CrossPlatformFim";
 import AdvancedVirtualBox from "./components/AdvancedVirtualBox";
 import AIAgent from "./components/AIAgent";
 import LoginScreen from "./components/LoginScreen";
+import OSSecurityPanel from "./components/OSSecurityPanel";
+import { Token, WS_BASE, logout, refreshAccessToken } from "./utils/api";
+
 
 /* ── types ── */
 type Severity = "low" | "medium" | "high" | "critical";
 type Protocol = "HTTPS" | "SSH" | "RDP" | "DNS" | "TLS" | "MQTT" | "SMB" | "FTP" | "LDAP";
 type ConnStatus = "active" | "observing" | "dropped" | "quarantined" | "blocked";
-type TabId = "dashboard" | "mitre" | "nist" | "virustotal" | "winlogs" | "intel" | "sandbox" | "vulnpentest" | "crossplat" | "advancedvb" | "ai_agent";
+type TabId = "dashboard" | "mitre" | "nist" | "virustotal" | "winlogs" | "intel" | "sandbox" | "vulnpentest" | "crossplat" | "advancedvb" | "ai_agent" | "ossec";
 
 type Connection = {
   id: string;
@@ -238,9 +241,9 @@ const timelineLabel = (ts: number) => new Intl.DateTimeFormat("en-US", {
 }).format(ts);
 
 const timelineAnalysis = (traffic: number, threats: number, blocked: number) => {
-  if (blocked > 0) return "100% accurate containment executed";
-  if (threats >= 2 || traffic >= 88) return "Deterministic threat isolation active";
-  if (threats === 1 || traffic >= 72) return "High-fidelity anomaly detected";
+  if (blocked > 0) return "Simulated containment action recorded";
+  if (threats >= 2 || traffic >= 88) return "Elevated simulated threat pressure";
+  if (threats === 1 || traffic >= 72) return "Simulated anomaly detected";
   return "Baseline traffic validated";
 };
 
@@ -319,32 +322,34 @@ function StatCard({ label, value, sub, tone, icon }: {
 }
 
 const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
-  { id: "dashboard", label: "SOC Dashboard", icon: <Activity className="h-4 w-4" /> },
-  { id: "ai_agent", label: "AI Analyst", icon: <Cpu className="h-4 w-4 text-purple-400" /> },
-  { id: "sandbox", label: "Malware Sandbox", icon: <Server className="h-4 w-4" /> },
-  { id: "crossplat", label: "Cross-Platform FIM", icon: <Activity className="h-4 w-4" /> },
-  { id: "vulnpentest", label: "Vuln & Pentest", icon: <Flame className="h-4 w-4" /> },
-  { id: "advancedvb", label: "VirtualBox Gov", icon: <Shield className="h-4 w-4" /> },
-  { id: "mitre", label: "MITRE ATT&CK", icon: <Shield className="h-4 w-4" /> },
-  { id: "nist", label: "NIST CSF 2.0", icon: <CheckCircle className="h-4 w-4" /> },
-  { id: "virustotal", label: "VirusTotal", icon: <Globe className="h-4 w-4" /> },
-  { id: "winlogs", label: "Windows Logs", icon: <FileText className="h-4 w-4" /> },
-  { id: "intel", label: "Threat Intel", icon: <Cpu className="h-4 w-4" /> },
+  { id: "dashboard",   label: "SOC Dashboard",      icon: <Activity className="h-4 w-4" /> },
+  { id: "ossec",       label: "OS Security",         icon: <Monitor className="h-4 w-4 text-sky-400" /> },
+  { id: "ai_agent",   label: "AI Analyst",           icon: <Cpu className="h-4 w-4 text-purple-400" /> },
+  { id: "sandbox",    label: "Malware Sandbox",      icon: <Server className="h-4 w-4" /> },
+  { id: "crossplat",  label: "Cross-Platform FIM",  icon: <Activity className="h-4 w-4" /> },
+  { id: "vulnpentest", label: "Vuln & Pentest",      icon: <Flame className="h-4 w-4" /> },
+  { id: "advancedvb", label: "VirtualBox Gov",       icon: <Shield className="h-4 w-4" /> },
+  { id: "mitre",      label: "MITRE ATT&CK",         icon: <Shield className="h-4 w-4" /> },
+  { id: "nist",       label: "NIST CSF 2.0",         icon: <CheckCircle className="h-4 w-4" /> },
+  { id: "virustotal", label: "VirusTotal",           icon: <Globe className="h-4 w-4" /> },
+  { id: "winlogs",    label: "Windows Logs",         icon: <FileText className="h-4 w-4" /> },
+  { id: "intel",      label: "Threat Intel",         icon: <Cpu className="h-4 w-4" /> },
 ];
 
 /* ── MAIN ── */
 export default function App() {
   const [now, setNow] = useState(Date.now);
   const [tab, setTab] = useState<TabId>("dashboard");
-  const [isAuthenticated, setIsAuthenticated] = useState(() => !!localStorage.getItem("sg_auth_token"));
+  const [authReady, setAuthReady] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(() => Token.isLoggedIn());
   const [connections, setConnections] = useState<Connection[]>(INIT_CONNS);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [traffic, setTraffic] = useState<TrafficPoint[]>(INIT_TRAFFIC);
   const [responseLog, setResponseLog] = useState<string[]>([
-    `${clock(Date.now() - 90_000)} Enterprise Operations Active — 100% accurate deterministic detection engine engaged.`,
-    `${clock(Date.now() - 60_000)} Hardware-backed malware sandbox online. Strict isolation confirmed.`,
-    `${clock(Date.now() - 30_000)} Universal zero-trust agent deployment synchronized across all endpoints.`,
-    `${clock(Date.now() - 10_000)} Automated immutable GRC auditing activated. NIST & MITRE mapping at 100% precision.`,
+    `${clock(Date.now() - 90_000)} Demo operations active - dashboard stream is simulation-backed.`,
+    `${clock(Date.now() - 60_000)} Local telemetry agent available for host logs, network state, and OS posture.`,
+    `${clock(Date.now() - 30_000)} Sandbox and hypervisor views are workflow simulations until external engines are configured.`,
+    `${clock(Date.now() - 10_000)} Compliance views are reference mappings, not formal certification evidence.`,
   ]);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -373,6 +378,46 @@ export default function App() {
   const alertsRef = useRef(alerts);
   useEffect(() => { connsRef.current = connections; }, [connections]);
   useEffect(() => { alertsRef.current = alerts; }, [alerts]);
+
+  /* Session bootstrap: recover from the HttpOnly refresh cookie after a reload. */
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (Token.isLoggedIn()) {
+        if (!cancelled) {
+          setIsAuthenticated(true);
+          setAuthReady(true);
+        }
+        return;
+      }
+      const refreshed = await refreshAccessToken();
+      if (!cancelled) {
+        setIsAuthenticated(refreshed);
+        setAuthReady(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  /* Backend event stream for real host-log and admin-action notifications. */
+  useEffect(() => {
+    if (!isAuthenticated || !Token.getAccess()) return;
+    const ws = new WebSocket(`${WS_BASE}?token=${encodeURIComponent(Token.getAccess())}`);
+    ws.onmessage = event => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.event === "new_log") {
+          setResponseLog(prev => [`${clock(msg.ts)} Host log stored (${msg.data?.id ?? "event"})`, ...prev].slice(0, 10));
+        }
+        if (msg.event === "process_killed") {
+          setResponseLog(prev => [`${clock(msg.ts)} Admin action: process ${msg.data?.pid} terminated`, ...prev].slice(0, 10));
+        }
+      } catch {
+        // Ignore malformed messages from stale sockets.
+      }
+    };
+    return () => ws.close();
+  }, [isAuthenticated]);
 
   /* Clock */
   useEffect(() => {
@@ -544,12 +589,17 @@ export default function App() {
     };
   }, [traffic]);
 
+  if (!authReady) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#020617] text-sm text-slate-300">
+        Restoring secure session...
+      </div>
+    );
+  }
+
   if (!isAuthenticated) {
     return (
-      <LoginScreen onLoginSuccess={(token) => {
-        localStorage.setItem("sg_auth_token", token);
-        setIsAuthenticated(true);
-      }} />
+      <LoginScreen onLoginSuccess={() => setIsAuthenticated(true)} />
     );
   }
 
@@ -600,7 +650,7 @@ export default function App() {
               <div className="flex items-center gap-4 border-l border-white/10 pl-4">
                 <div className="flex items-center gap-2 rounded-full border border-sky-400/30 bg-sky-500/10 px-3 py-1.5 backdrop-blur-md">
                   <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                  <span className="text-xs font-semibold text-sky-200">LIVE E2E UPLINK</span>
+                  <span className="text-xs font-semibold text-sky-200">LOCAL TELEMETRY</span>
                 </div>
                 <div className="flex items-center gap-2 rounded-full border border-rose-500/20 bg-rose-500/10 px-3 py-1.5">
                   <AlertTriangle className="h-3.5 w-3.5 text-rose-400" />
@@ -608,17 +658,16 @@ export default function App() {
                 </div>
                 <div className="text-right">
                   <p className="font-mono text-xs font-bold text-slate-300">{clock(now)}</p>
-                  <p className="font-mono text-[10px] text-slate-500">UTC</p>
+                  <p className="font-mono text-[10px] text-slate-500">LOCAL</p>
                 </div>
                 <button
-                  onClick={() => {
-                    localStorage.removeItem("sg_auth_token");
-                    setIsAuthenticated(false);
+                  onClick={async () => {
+                    await logout();
                   }}
-                  className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-white/10 transition text-slate-400 hover:text-rose-400 border border-white/10"
+                  className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-rose-500/10 transition text-slate-400 hover:text-rose-400 border border-white/10"
                   title="Log Out"
                 >
-                  <Key className="h-3.5 w-3.5" />
+                  <LogOut className="h-3.5 w-3.5" />
                 </button>
               </div>
             </div>
@@ -665,22 +714,22 @@ export default function App() {
         {/* Framework banner */}
         <div className="rounded-3xl border border-white/10 bg-white/5 px-5 py-4 backdrop-blur-xl">
           <div className="flex flex-wrap items-center gap-3">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Active Frameworks:</span>
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Reference Data:</span>
             {[
-              { label: "MITRE ATT&CK v15", color: "rose" },
-              { label: "NIST CSF 2.0", color: "emerald" },
-              { label: "VirusTotal 72-Engine", color: "sky" },
-              { label: "Windows Event Log", color: "amber" },
-              { label: "Registry Monitor", color: "purple" },
-              { label: "YARA Rules", color: "orange" },
+              { label: "MITRE ATT&CK v15", cls: "border-rose-400/30 bg-rose-400/10 text-rose-200" },
+              { label: "NIST CSF 2.0", cls: "border-emerald-400/30 bg-emerald-400/10 text-emerald-200" },
+              { label: "VirusTotal API-ready", cls: "border-sky-400/30 bg-sky-400/10 text-sky-200" },
+              { label: "Host Event Logs", cls: "border-amber-400/30 bg-amber-400/10 text-amber-200" },
+              { label: "Registry/FIM Demo", cls: "border-purple-400/30 bg-purple-400/10 text-purple-200" },
+              { label: "YARA References", cls: "border-orange-400/30 bg-orange-400/10 text-orange-200" },
             ].map(f => (
-              <span key={f.label} className={`rounded-full border border-${f.color}-400/30 bg-${f.color}-400/10 px-3 py-1 text-xs font-medium text-${f.color}-200`}>
-                ✓ {f.label}
+              <span key={f.label} className={`rounded-full border px-3 py-1 text-xs font-medium ${f.cls}`}>
+                {f.label}
               </span>
             ))}
             <div className="ml-auto flex items-center gap-2">
               <div className="h-2 w-2 rounded-full bg-rose-400 animate-pulse" />
-              <span className="text-xs text-rose-300 font-medium">Auto-drop ACTIVE</span>
+              <span className="text-xs text-rose-300 font-medium">Simulation mode visible</span>
             </div>
           </div>
         </div>
@@ -737,9 +786,9 @@ export default function App() {
                 icon={<Activity className="h-4 w-4" />}
               />
               <StatCard
-                label="Auto-Contained"
+                label="Simulated Containment"
                 value={containedCnt}
-                sub="Sessions dropped or quarantined"
+                sub="Demo sessions dropped or quarantined"
                 tone="purple"
                 icon={<RefreshCw className="h-4 w-4" />}
               />
@@ -1049,7 +1098,7 @@ export default function App() {
                 </Panel>
 
                 {/* Response ledger */}
-                <Panel title="Automated Response Ledger" sub="Actions taken by the inline containment engine">
+                <Panel title="Response Ledger" sub="Backend events plus dashboard simulation actions">
                   <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
                     {responseLog.map((entry, i) => (
                       <div key={`${i}-${entry.slice(0, 10)}`} className="rounded-xl border border-white/8 bg-black/20 p-3">
@@ -1063,11 +1112,11 @@ export default function App() {
                 </Panel>
 
                 {/* Blocked connections list */}
-                <Panel title="Killed Connections" sub="Auto-dropped and quarantined sessions">
+                <Panel title="Contained Demo Connections" sub="Simulated dropped and quarantined sessions">
                   {connections.filter(c => ["dropped", "quarantined", "blocked"].includes(c.status)).length === 0 ? (
                     <div className="py-6 text-center">
                       <CheckCircle className="h-8 w-8 text-emerald-400 mx-auto mb-2" />
-                      <p className="text-sm text-slate-400">No blocked sessions — all connections within policy.</p>
+                      <p className="text-sm text-slate-400">No contained demo sessions - all simulated connections are within policy.</p>
                     </div>
                   ) : (
                     <div className="space-y-2">
@@ -1115,6 +1164,21 @@ export default function App() {
                 </div>
               </div>
             </div>
+          </div>
+        )}
+
+        {tab === "ossec" && (
+          <div className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur-xl">
+            <div className="mb-6 flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-sky-500 to-indigo-600 shadow-lg shadow-sky-500/30">
+                <Monitor className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-white">OS Security Monitor</h2>
+                <p className="text-xs text-slate-400">Real-time operating system type, version, EOL status and security posture analysis</p>
+              </div>
+            </div>
+            <OSSecurityPanel />
           </div>
         )}
 
@@ -1183,7 +1247,7 @@ export default function App() {
       {/* Footer */}
       <footer className="border-t border-white/8 py-4 px-6 text-center">
         <p className="text-xs text-slate-600">
-          SentinelGrid Real-Time SOC Monitor · MITRE ATT&CK v15 · NIST CSF 2.0 · VirusTotal 72-Engine · Windows Event Log · Registry Analysis · YARA Detection
+          SentinelGrid SOC Monitor - local host telemetry, reference frameworks, and clearly labeled simulation modules
         </p>
       </footer>
     </div>

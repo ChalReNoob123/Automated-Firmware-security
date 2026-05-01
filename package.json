@@ -1,35 +1,51 @@
 {
-  "name": "react-vite-tailwind",
+  "name": "sentinelgrid-soc",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:backend": "node backend.js",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "start": "pm2 start ecosystem.config.cjs --env production",
+    "start:backend": "cross-env NODE_ENV=production node backend.js",
+    "typecheck": "node node_modules/typescript/bin/tsc --noEmit",
+    "audit:check": "npm audit --audit-level=high"
   },
   "dependencies": {
     "@types/crypto-js": "^4.2.2",
     "clsx": "2.1.1",
+    "cross-env": "^10.1.0",
     "crypto-js": "^4.2.0",
     "dotenv": "^17.4.2",
     "framer-motion": "^12.38.0",
+    "jsonwebtoken": "^9.0.3",
     "lucide-react": "^1.11.0",
+    "pino": "^10.3.1",
+    "pino-pretty": "^13.1.3",
+    "qrcode": "^1.5.4",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "recharts": "^3.8.1",
+    "speakeasy": "^2.0.0",
     "sqlite3": "^6.0.1",
-    "tailwind-merge": "3.4.0"
+    "tailwind-merge": "3.4.0",
+    "ws": "^8.20.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.1.17",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "22.19.17",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "19.2.7",
     "@types/react-dom": "19.2.3",
+    "@types/speakeasy": "^2.0.10",
+    "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "5.1.1",
     "tailwindcss": "4.1.17",
     "typescript": "5.9.3",
-    "vite": "7.2.4",
+    "vite": "^7.3.2",
     "vite-plugin-singlefile": "2.3.0"
   }
 }
