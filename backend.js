@@ -15,7 +15,7 @@ import pino from 'pino';
 
 dotenv.config();
 
-// ── Structured logger (gap #19) ───────────────────────────────────
+// ── Structured logger ───────────────────────────────────
 const logger = pino({
   level: process.env.LOG_LEVEL || 'info',
   transport: process.env.NODE_ENV !== 'production'
@@ -23,7 +23,7 @@ const logger = pino({
     : undefined,
 });
 
-// ── Fail-fast for missing critical secrets in production (gap #4) ─
+// ── Fail-fast for missing critical secrets in production ─
 const NODE_ENV = process.env.NODE_ENV || 'development';
 function requireEnv(key, devFallback) {
   if (NODE_ENV === 'production' && !process.env[key]) {
@@ -34,10 +34,10 @@ function requireEnv(key, devFallback) {
 }
 
 // ── Secrets — backend-only, no VITE_ prefix (gap #6) ────────────
-const JWT_SECRET          = requireEnv('JWT_SECRET', 'dev-jwt-secret-CHANGE-IN-PRODUCTION-min-32-chars!!');
-const JWT_REFRESH_SECRET  = requireEnv('JWT_REFRESH_SECRET', 'dev-refresh-secret-CHANGE-IN-PRODUCTION!!');
-const ADMIN_PASS          = requireEnv('ADMIN_PASS', 'Sentinel2026!');
-const ADMIN_USER          = requireEnv('ADMIN_USER', 'admin');
+const JWT_SECRET          = requireEnv('JWT_SECRET');
+const JWT_REFRESH_SECRET  = requireEnv('JWT_REFRESH_SECRET');
+const ADMIN_PASS          = requireEnv('ADMIN_PASS');
+const ADMIN_USER          = requireEnv('ADMIN_USER');
 
 // ── CORS: locked to specific origins (gap #2) ────────────────────
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'http://localhost:5173,http://localhost:4173,http://127.0.0.1:5173,http://127.0.0.1:4173')
@@ -59,7 +59,7 @@ const CSP_CONNECT_SRC = process.env.CSP_CONNECT_SRC ||
 
 const execAsync = promisify(exec);
 
-// ── Legacy compat (removed in next cleanup) ───────────────────────
+// ── Legacy compat ───────────────────────────────────────
 const AUTH_BEARER = 'LEGACY-DISABLED';
 
 // ── Database (WAL mode = no write locks, gap #8) ─────────────────
@@ -67,7 +67,8 @@ const db = new DatabaseSync('./soc_database.sqlite');
 db.exec('PRAGMA journal_mode=WAL');
 db.exec('PRAGMA synchronous=NORMAL');
 db.exec('PRAGMA cache_size=10000');
-db.exec('PRAGMA foreign_keys=ON');
+
+// 1. Create tables first
 db.exec(`
   CREATE TABLE IF NOT EXISTS logs (
     hash TEXT PRIMARY KEY, eventId TEXT, date TEXT, level TEXT,
@@ -107,6 +108,15 @@ db.exec(`
   );
 `);
 
+// 2. Run migrations (add columns that might be missing from older versions)
+try {
+  db.exec(`ALTER TABLE users ADD COLUMN email TEXT`);
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email)`);
+} catch (e) {
+  // Column likely already exists
+}
+
+
 // ── Cookie Parser ─────────────────────────────────────────────────
 function parseCookies(cookieStr) {
   if (!cookieStr) return {};
@@ -141,8 +151,8 @@ function verifyPassword(pw, stored) {
 try {
   const exists = db.prepare('SELECT id FROM users WHERE username=?').get(ADMIN_USER);
   if (!exists) {
-    db.prepare('INSERT INTO users (username,password_hash,role) VALUES (?,?,?)' )
-      .run(ADMIN_USER, hashPassword(ADMIN_PASS), 'admin');
+    db.prepare('INSERT INTO users (username,email,password_hash,role) VALUES (?,?,?,?)' )
+      .run(ADMIN_USER, `${ADMIN_USER}@sentinelgrid.local`, hashPassword(ADMIN_PASS), 'admin');
     logger.info({ username: ADMIN_USER }, 'Default admin user created');
   }
 } catch (e) { logger.error(e, 'Failed to seed admin user'); }
@@ -255,17 +265,99 @@ function setCORS(req, res) {
 // ── DB backup (gap #25) ───────────────────────────────────────────
 function backupDatabase() {
   try {
+    // Checkpoint WAL before backup to include all committed data
+    db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+    
     const dir = path.join(process.cwd(), 'backups');
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     const ts  = new Date().toISOString().replace(/[:.]/g, '-');
     const dst = path.join(dir, `soc_db_${ts}.sqlite`);
+    // Copy main database file
     fs.copyFileSync('./soc_database.sqlite', dst);
+    // Copy WAL and SHM files if they exist (for completeness)
+    const walFile = './soc_database.sqlite-wal';
+    const shmFile = './soc_database.sqlite-shm';
+    if (fs.existsSync(walFile)) {
+      fs.copyFileSync(walFile, `${dst}-wal`);
+    }
+    if (fs.existsSync(shmFile)) {
+      fs.copyFileSync(shmFile, `${dst}-shm`);
+    }
+    
     const files = fs.readdirSync(dir).filter(f => f.endsWith('.sqlite')).sort();
     if (files.length > 7) files.slice(0, files.length - 7).forEach(f => fs.unlinkSync(path.join(dir, f)));
     logger.info({ dst }, 'DB backup completed');
   } catch (e) { logger.error(e, 'DB backup failed'); }
 }
-setInterval(backupDatabase, 6 * 60 * 60 * 1000); // every 6 hours
+// Run backup every 6 hours, but first backup after 1 minute to avoid startup spike
+setTimeout(() => {
+  setInterval(backupDatabase, 6 * 60 * 60 * 1000);
+}, 60000);
+
+// ── Cleanup expired tokens and rate limits ────────────────────────
+function cleanupExpiredData() {
+  const now = Date.now();
+  try {
+    // Remove expired refresh tokens
+    db.prepare('DELETE FROM refresh_tokens WHERE expires_at < ?').run(now);
+    // Remove revoked access tokens that expired
+    db.prepare('DELETE FROM revoked_access_tokens WHERE expires_at < ?').run(now);
+    // Remove rate limit entries that are not locked and old (optional)
+    // We keep rate limit entries for active tracking, but clear very old ones
+    db.prepare('DELETE FROM rate_limits WHERE locked_until < ? AND count = 0').run(now - 24 * 60 * 60 * 1000); // older than 1 day and not locked
+  } catch (e) {
+    logger.error(e, 'Error cleaning up expired data');
+  }
+}
+// Run cleanup every hour
+setInterval(cleanupExpiredData, 60 * 60 * 1000);
+
+// ── Signup control ───────────────────────────────────────────────
+const SIGNUP_ENABLED = process.env.SIGNUP_ENABLED === 'true';
+
+// ── Persistent Rate limiter (gap #15) ─────────────────────
+function checkRateLimit(ip, username = null) {
+  const now = Date.now();
+   
+  // 1. Check IP lockout
+  const ipRec = db.prepare('SELECT count, locked_until FROM rate_limits WHERE ip=?').get(ip);
+  if (ipRec && now < ipRec.locked_until) return { locked: true, retryAfter: Math.ceil((ipRec.locked_until - now) / 1000) };
+   
+  // 2. Check User lockout
+  if (username) {
+    const userRec = db.prepare('SELECT failed_attempts, locked_until FROM users WHERE username=?').get(username);
+    if (userRec && now < userRec.locked_until) return { locked: true, retryAfter: Math.ceil((userRec.locked_until - now) / 1000) };
+  }
+   
+  return { locked: false };
+}
+
+function recordFailure(ip, username = null) {
+  const now = Date.now();
+   
+  // 1. IP Failure
+  db.prepare('INSERT INTO rate_limits (ip, count) VALUES (?, 1) ON CONFLICT(ip) DO UPDATE SET count = count + 1').run(ip);
+  const ipRec = db.prepare('SELECT count FROM rate_limits WHERE ip=?').get(ip);
+  if (ipRec.count >= 5) {
+    db.prepare('UPDATE rate_limits SET locked_until=?, count=0 WHERE ip=?').run(now + 15 * 60 * 1000, ip);
+  }
+   
+  // 2. User Failure
+  if (username) {
+    const userRec = db.prepare('SELECT id, failed_attempts FROM users WHERE username=?').get(username);
+    if (userRec) {
+      db.prepare('UPDATE users SET failed_attempts = failed_attempts + 1 WHERE id=?').run(userRec.id);
+      if (userRec.failed_attempts + 1 >= 5) {
+        db.prepare('UPDATE users SET locked_until=?, failed_attempts=0 WHERE id=?').run(now + 15 * 60 * 1000, userRec.id);
+      }
+    }
+  }
+}
+
+function clearRateLimit(ip, username = null) {
+  db.prepare('DELETE FROM rate_limits WHERE ip=?').run(ip);
+  if (username) db.prepare('UPDATE users SET failed_attempts=0, locked_until=0 WHERE username=?').run(username);
+}
 
 // ── WebSocket server (gap #16) ────────────────────────────────────
 const httpServer = createServer();
@@ -578,7 +670,7 @@ function enrichAndStore(log, logName) {
   const source = log.ProviderName     || '';
   const desc   = log.Message          || '';
   const uid    = crypto.createHash('md5').update(`${id}-${date}-${task}-${source}`).digest('hex');
-  try { insertLog.run(uid, id, date, level, task, source, desc, suspicious); } catch {}
+  try { insertLog.run(uid, id, date, level, task, source, desc, suspicious); } catch (e) { logger.error(e, 'Error persisting enriched log'); }
   return log;
 }
 
@@ -762,7 +854,7 @@ setInterval(async () => {
       }));
       broadcast('new_logs', toSend);
     }
-  } catch {}
+  } catch (e) { logger.error(e, 'Error in telemetry broadcast interval'); }
 }, 15000);
 
 // Cross-platform network traffic (gap #18)
@@ -770,11 +862,38 @@ async function getNetworkTraffic() {
   try {
     const platform = os.platform();
     let cmd = 'netstat -ano';
-    if (platform === 'linux')  cmd = 'ss -tulnp 2>/dev/null || netstat -tulnp 2>/dev/null';
+    if (platform === 'linux')  cmd = 'ss -tunap 2>/dev/null || netstat -tunap 2>/dev/null';
     if (platform === 'darwin') cmd = 'netstat -an 2>/dev/null';
     const { stdout } = await execAsync(cmd);
-    return stdout.split('\n').filter(l => l.trim()).slice(0, 50).join('\n');
-  } catch (e) { return 'Error fetching network traffic.'; }
+    
+    const lines = stdout.split('\n').filter(l => l.trim());
+    const connections = [];
+
+    if (platform === 'win32') {
+      lines.forEach(line => {
+        const parts = line.trim().split(/\s+/);
+        if (parts.length >= 4 && (parts[0] === 'TCP' || parts[0] === 'UDP')) {
+          const local = parts[1];
+          const foreign = parts[2];
+          const state = parts[3];
+          const pid = parts[4];
+          connections.push({ protocol: parts[0], local, foreign, state, pid });
+        }
+      });
+    } else {
+      // Basic parsing for linux/darwin
+      lines.forEach(line => {
+        const parts = line.trim().split(/\s+/);
+        if (parts.length >= 3) {
+          connections.push({ protocol: parts[0], local: parts[1], foreign: parts[2], state: parts[3] || 'UNKNOWN', pid: parts[parts.length-1] });
+        }
+      });
+    }
+    return connections.slice(0, 100);
+  } catch (e) { 
+    logger.error(e, 'Error fetching network traffic');
+    return []; 
+  }
 }
 
 
@@ -805,9 +924,9 @@ async function getFileChanges() {
             if (stats.isFile()) {
               results.push({ name: f, path: fullPath, size: stats.size, modified: stats.mtime });
             }
-          } catch (e) {}
+          } catch (e) { logger.error(e, 'Error stating file for FIM'); }
         }
-      } catch (e) {}
+      } catch (e) { logger.error(e, 'Error reading directory for FIM'); }
     }
     // Sort by most recently modified
     return results.sort((a, b) => b.modified - a.modified).slice(0, 15);
@@ -817,53 +936,125 @@ async function getFileChanges() {
 }
 
 function analyzeTelemetry(logs, network, files) {
-  const analysis = {
-    summary: "System baseline operating within normal parameters. No critical breaches detected in recent timeframe.",
-    score: 100,
-    threats: [],
-    mitreMappings: [],
-  };
+   const analysis = {
+     summary: "System baseline operating within normal parameters. No critical breaches detected in recent timeframe.",
+     score: 100,
+     threats: [],
+     mitreMappings: [],
+   };
 
-  const logsString = typeof logs === 'string' ? logs : JSON.stringify(logs);
+   // Convert to strings for analysis if needed
+   const logsArray = Array.isArray(logs) ? logs : (typeof logs === 'string' ? JSON.parse(logs || '[]') : []);
+   const networkArray = Array.isArray(network) ? network : (typeof network === 'string' ? JSON.parse(network || '[]') : []);
+   
+   // Track actual risks from logs
+   let riskScore = 0;
+   const threatDetails = [];
+   const mitreSet = new Set();
 
-  if (network.includes("LISTENING")) {
-    const listeningPorts = (network.match(/:(\d+)\s+.*LISTENING/g) || []).map(p => p.split(':')[1].split(' ')[0]);
-    if (listeningPorts.includes("3389")) {
-      analysis.score -= 10;
-      analysis.threats.push("Open RDP Port (3389) detected in LISTENING state. Potential vector for brute force.");
-      analysis.mitreMappings.push("T1021 - Remote Services");
-    }
-  }
+   // Process logs for actual threats
+   logsArray.forEach(log => {
+     const id = log.Id?.toString() || log.eventId || '';
+     if (id) {
+       switch(id) {
+         case '4625': // Failed Logon
+           riskScore += 20;
+           threatDetails.push("Failed Logon (Event ID 4625) detected.");
+           mitreSet.add("T1110 - Brute Force");
+           break;
+         case '1102': // Security Audit Log Cleared
+           riskScore += 50;
+           threatDetails.push("Security Audit Log Cleared (Event ID 1102) detected.");
+           mitreSet.add("T1070 - Indicator Removal");
+           break;
+         case '4648': // Logon using explicit credentials
+           riskScore += 15;
+           threatDetails.push("Logon using explicit credentials (Event ID 4648) detected.");
+           mitreSet.add("T1078 - Valid Accounts");
+           break;
+         case '4672': // Special privileges assigned to new logon
+           riskScore += 10;
+           threatDetails.push("Special privileges assigned to new logon (Event ID 4672) detected.");
+           mitreSet.add("T1078 - Valid Accounts");
+           break;
+         case '4698': // Scheduled Task Created
+           riskScore += 25;
+           threatDetails.push("Scheduled Task Created (Event ID 4698) detected.");
+           mitreSet.add("T1053.005 - Scheduled Task");
+           break;
+         case '4720': // User Account Created
+           riskScore += 30;
+           threatDetails.push("User Account Created (Event ID 4720) detected.");
+           mitreSet.add("T1136.001 - Local Account");
+           break;
+         case '4724': // Password Reset Attempted
+           riskScore += 20;
+           threatDetails.push("Password Reset Attempted (Event ID 4724) detected.");
+           mitreSet.add("T1098 - Account Manipulation");
+           break;
+         case '7045': // New Service Installed
+           riskScore += 35;
+           threatDetails.push("New Service Installed (Event ID 7045) detected.");
+           mitreSet.add("T1543.003 - Windows Service");
+           break;
+       }
+     }
+   });
 
-  const rules = [
-    { id: "4625", desc: "Failed Logon", mitre: "T1110 - Brute Force", weight: 20 },
-    { id: "1102", desc: "Security Audit Log Cleared", mitre: "T1070 - Indicator Removal", weight: 50 },
-    { id: "4648", desc: "Logon using explicit credentials", mitre: "T1078 - Valid Accounts", weight: 15 },
-    { id: "4672", desc: "Special privileges assigned to new logon", mitre: "T1078 - Valid Accounts", weight: 10 },
-    { id: "4698", desc: "Scheduled Task Created", mitre: "T1053.005 - Scheduled Task", weight: 25 },
-    { id: "4720", desc: "User Account Created", mitre: "T1136.001 - Local Account", weight: 30 },
-    { id: "4724", desc: "Password Reset Attempted", mitre: "T1098 - Account Manipulation", weight: 20 },
-    { id: "7045", desc: "New Service Installed", mitre: "T1543.003 - Windows Service", weight: 35 }
-  ];
+   // Process network for listening ports (especially RDP)
+   networkArray.forEach(conn => {
+     const state = conn.state || '';
+     const local = conn.local || '';
+     const foreign = conn.foreign || '';
+     
+     // Check for listening RDP port (3389)
+     if (state === 'LISTENING' && local.includes(':3389')) {
+       riskScore += 10;
+       threatDetails.push("Open RDP Port (3389) detected in LISTENING state. Potential vector for brute force.");
+       mitreSet.add("T1021 - Remote Services");
+     }
+     
+     // Check for other suspicious listening ports
+     if (state === 'LISTENING') {
+       // Check for common attack ports
+       const suspiciousPorts = [21, 22, 23, 25, 53, 80, 135, 139, 443, 445, 1433, 1521, 3306, 3389, 5432, 5900, 5901, 6379, 8080, 8443, 9200, 9300];
+       const portMatch = local.match/:(\d+)$/;
+       if (portMatch) {
+         const port = parseInt(portMatch[1]);
+         if (suspiciousPorts.includes(port)) {
+           // Only add risk if it's an unexpected service (basic heuristic)
+           if (port !== 80 && port !== 443 && port !== 22) { // Allow common web/ssh
+             riskScore += 5;
+             threatDetails.push(`Suspicious listening port ${port} detected.`);
+             mitreSet.add("T1021 - Remote Services");
+           }
+         }
+       }
+     }
+   });
 
-  for (const rule of rules) {
-    if (logsString.includes(rule.id)) {
-      analysis.score -= rule.weight;
-      analysis.threats.push(`${rule.desc} (Event ID ${rule.id}) detected.`);
-      if (!analysis.mitreMappings.includes(rule.mitre)) analysis.mitreMappings.push(rule.mitre);
-    }
-  }
+   // Apply risk score (capped at 100)
+   analysis.score = Math.max(0, 100 - Math.min(riskScore, 100));
+   
+   // Set threats and MITRE mappings
+   analysis.threats = threatDetails;
+   analysis.mitreMappings = Array.from(mitreSet);
 
-  analysis.score = Math.max(0, analysis.score);
+   // Update summary based on score
+   if (analysis.score === 100) {
+     analysis.summary = "Heuristic scan complete. Recent network and log telemetry did not match the built-in high-risk rules. Continue reviewing with validated EDR/SIEM telemetry.";
+   } else if (analysis.score >= 80) {
+     analysis.summary = `Heuristic scan complete. Minor risk indicators detected. Score: ${analysis.score}/100.`;
+   } else if (analysis.score >= 60) {
+     analysis.summary = `Heuristic scan complete. Moderate risk indicators detected. Score: ${analysis.score}/100. Analyst review recommended.`;
+   } else if (analysis.score >= 40) {
+     analysis.summary = `Heuristic scan complete. Elevated risk indicators detected. Score: ${analysis.score}/100. Immediate analyst review recommended.`;
+   } else {
+     analysis.summary = `Heuristic scan complete. High risk indicators detected. Score: ${analysis.score}/100. Potential security incident - immediate investigation warranted.`;
+   }
 
-  if (analysis.score === 100) {
-    analysis.summary = "Heuristic scan complete. Recent network and log telemetry did not match the built-in high-risk rules. Continue reviewing with validated EDR/SIEM telemetry.";
-  } else {
-    analysis.summary = `Heuristic scan complete. Risk score reduced to ${analysis.score}/100 due to matched indicators. Analyst review recommended.`;
-  }
-
-  return analysis;
-}
+   return analysis;
+ }
 
 // ── Helper: read body ─────────────────────────────────────────────
 function readBody(req) {
@@ -943,7 +1134,7 @@ httpServer.on('request', async (req, res) => {
 
   const clientIp = getClientIp(req);
   const urlObj   = new URL(req.url, `http://localhost`);
-  const pathname = urlObj.pathname;
+  const pathname = urlObj.pathname.replace(/\/+/g, '/').replace(/\/$/, '') || '/';
 
   logger.info({ method: req.method, path: pathname, ip: clientIp }, 'Request'); // gap #19
 
@@ -953,21 +1144,48 @@ httpServer.on('request', async (req, res) => {
       return json(res, 200, { status: 'ok', uptime: process.uptime(), ts: Date.now(), db: 'connected' });
     }
 
+     // ── POST /api/auth/signup ──────────────────────────────────────
+     if (pathname.endsWith('/api/auth/signup') && req.method === 'POST') {
+       if (!SIGNUP_ENABLED) return json(res, 403, { error: 'User registration is disabled' });
+       
+       const { username, email, password } = await readBody(req);
+       if (!username || !email || !password) return json(res, 400, { error: 'Username, email, and password are required.' });
+       
+       // Basic password policy
+       if (password.length < 8) {
+         return json(res, 400, { error: 'Password must be at least 8 characters long' });
+       }
+       
+       try {
+         const existing = db.prepare('SELECT id FROM users WHERE username=? OR email=?').get(username, email);
+         if (existing) return json(res, 400, { error: 'Username or email already exists.' });
+         
+         db.prepare('INSERT INTO users (username, email, password_hash, role) VALUES (?, ?, ?, ?)')
+           .run(username, email, hashPassword(password), 'analyst');
+         
+         logger.info({ username, email }, 'New user registered');
+         return json(res, 201, { success: true, message: 'Account created successfully.' });
+       } catch (e) {
+         logger.error(e, 'Signup error');
+         return json(res, 500, { error: 'Internal server error during registration.' });
+       }
+     }
+    
     // ── POST /api/auth/login — gap #1 real TOTP, gap #3 JWT ────
-    if (pathname === '/api/auth/login' && req.method === 'POST') {
-      const { username, password } = await readBody(req);
+    if (pathname.endsWith('/api/auth/login') && req.method === 'POST') {
+      const { identifier, password } = await readBody(req);
       
-      const rl = checkRateLimit(clientIp, username);
+      const rl = checkRateLimit(clientIp, identifier);
       if (rl.locked) return json(res, 429, { error: `Too many attempts. Retry in ${rl.retryAfter}s.` });
 
-      const user = db.prepare('SELECT * FROM users WHERE username=?').get(username);
+      const user = db.prepare('SELECT * FROM users WHERE username=? OR email=?').get(identifier, identifier);
       if (!user || !verifyPassword(password, user.password_hash)) {
-        recordFailure(clientIp, username);
-        logger.warn({ username, ip: clientIp }, 'Failed login attempt');
+        recordFailure(clientIp, identifier);
+        logger.warn({ identifier, ip: clientIp }, 'Failed login attempt');
         return json(res, 401, { error: 'Invalid credentials.' });
       }
 
-      clearRateLimit(clientIp, username);
+      clearRateLimit(clientIp, identifier);
       db.prepare("UPDATE users SET last_login=datetime('now') WHERE id=?").run(user.id);
 
       if (!user.totp_enrolled) {
@@ -984,7 +1202,7 @@ httpServer.on('request', async (req, res) => {
     }
 
     // ── POST /api/auth/verify-2fa — validate TOTP (gap #1, #14) ─
-    if (pathname === '/api/auth/verify-2fa' && req.method === 'POST') {
+    if (pathname.endsWith('/api/auth/verify-2fa') && req.method === 'POST') {
       const { tempToken, code } = await readBody(req);
       const payload = verifyTempToken(tempToken);
       const user    = db.prepare('SELECT * FROM users WHERE id=?').get(payload.sub);
@@ -1005,7 +1223,7 @@ httpServer.on('request', async (req, res) => {
     }
 
     // ── POST /api/auth/refresh — rotate access token (gap #3) ──
-    if (pathname === '/api/auth/refresh' && req.method === 'POST') {
+    if (pathname.endsWith('/api/auth/refresh') && req.method === 'POST') {
       const cookies = parseCookies(req.headers.cookie);
       const refreshToken = cookies.sg_refresh_token;
       if (!refreshToken) return json(res, 401, { error: 'No refresh token provided.' });
@@ -1024,7 +1242,7 @@ httpServer.on('request', async (req, res) => {
     }
 
     // ── POST /api/auth/logout — server-side revocation (gap #13) ─
-    if (pathname === '/api/auth/logout' && req.method === 'POST') {
+    if (pathname.endsWith('/api/auth/logout') && req.method === 'POST') {
       try {
         const cookies = parseCookies(req.headers.cookie);
         const refreshToken = cookies.sg_refresh_token;
@@ -1039,7 +1257,7 @@ httpServer.on('request', async (req, res) => {
           const p = verifyJWT(auth.slice(7));
           revokeAccessToken(p.jti, p.exp);
         }
-      } catch {}
+      } catch (e) { logger.error(e, 'Logout error'); }
       
       res.setHeader('Set-Cookie', `sg_refresh_token=; HttpOnly; Path=/; Max-Age=0; SameSite=Strict`);
       return json(res, 200, { success: true });
@@ -1073,8 +1291,22 @@ httpServer.on('request', async (req, res) => {
       return json(res, 200, await getSystemTelemetry());
     }
 
-    // ── GET /api/logs/live — dedicated real-device log endpoint ──
-    if (pathname === '/api/logs/live' && req.method === 'GET') {
+    // ── GET /api/fim/events ────────────────────────────────────────
+    if (pathname === '/api/fim/events' && req.method === 'GET') {
+      const changes = await getFileChanges();
+      const events = changes.map(f => ({
+        id: crypto.randomUUID(),
+        timestamp: f.modified.toISOString(),
+        path: f.path,
+        name: f.name,
+        size: f.size,
+        suspicious: f.path.includes('etc') || f.path.includes('System32'),
+        mitreTechnique: f.path.includes('etc') ? 'T1003 - OS Credential Dumping' : 'T1543 - Create or Modify System Process',
+      }));
+      return json(res, 200, { events });
+    }
+    // ── GET /api/logs ────────────────────────────────────────────
+    if (pathname === '/api/logs' && req.method === 'GET') {
       const maxParam  = parseInt(urlObj.searchParams.get('max') || '80', 10);
       const channel   = urlObj.searchParams.get('channel') || 'all'; // all | security | system | application
       let logs = await getWindowsLogs();
@@ -1105,7 +1337,23 @@ httpServer.on('request', async (req, res) => {
     if (pathname === '/api/analyze' && req.method === 'GET') {
       const [logs, network, files, system] = await Promise.all([getWindowsLogs(), getNetworkTraffic(), getFileChanges(), getSystemTelemetry()]);
       const analysis = analyzeTelemetry(logs, network, files);
-      return json(res, 200, { system, logs, network, files, analysis });
+      return json(res, 200, { system, logs, network, files, analysis, rawNetwork: JSON.stringify(network) });
+    }
+
+    // ── GET /api/system/stats ─────────────────────────────────────
+    if (pathname === '/api/system/stats' && req.method === 'GET') {
+      const cpuUsage = os.loadavg()[0]; // 1 min load avg
+      const totalMem = os.totalmem();
+      const freeMem  = os.freemem();
+      const usedMem  = totalMem - freeMem;
+      const memUsage = (usedMem / totalMem) * 100;
+      
+      return json(res, 200, {
+        cpu: (cpuUsage * 10).toFixed(1), // Normalized for display
+        memory: memUsage.toFixed(1),
+        uptime: os.uptime(),
+        timestamp: Date.now()
+      });
     }
 
     // ── GET /api/database/logs ────────────────────────────────────

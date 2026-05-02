@@ -1,171 +1,412 @@
-import { useState } from "react";
-import { Shield, Lock, User, AlertTriangle, ArrowRight, Activity, Terminal, KeyRound, QrCode, CheckCircle2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { 
+  Shield, User, AlertTriangle, 
+  ChevronLeft, Fingerprint, 
+  Loader2
+} from "lucide-react";
 import { API_BASE, Token } from "../utils/api";
 
-type Step = "login" | "enroll" | "2fa";
+type Step = "identify" | "signup" | "password" | "enroll" | "2fa";
 
 export default function LoginScreen({ onLoginSuccess }: { onLoginSuccess: () => void }) {
-  const [step,     setStep]     = useState<Step>("login");
+  const [step, setStep] = useState<Step>("identify");
+  const [isSignup, setIsSignup] = useState(false);
+  
+  // Form State
+  const [identifier, setIdentifier] = useState("");
   const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [code,     setCode]     = useState("");
+  const [code, setCode] = useState("");
+  
+  // Auth State
   const [tempToken, setTempToken] = useState("");
-  const [qrCode,   setQrCode]   = useState("");
-  const [error,    setError]    = useState<string | null>(null);
-  const [loading,  setLoading]  = useState(false);
+  const [qrCode, setQrCode] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  // Reset errors when changing steps
+  useEffect(() => { setError(null); }, [step]);
 
   const post = async (path: string, body: object) => {
-    const res = await fetch(`${API_BASE}${path}`, {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body:    JSON.stringify(body),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Request failed");
-    return data;
+    try {
+      const res = await fetch(`${API_BASE}${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Security challenge failed. Please check your credentials.");
+      return data;
+    } catch (err: any) {
+      if (err.message === "Failed to fetch") {
+        throw new Error("Cannot reach Central Command. Check your network connection or server status.");
+      }
+      throw err;
+    }
+  };
+
+  const goToPassword = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!identifier) return;
+    setStep("password");
   };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true); setError(null);
+    setLoading(true);
+    setError(null);
     try {
-      const data = await post("/api/auth/login", { username, password });
+      const data = await post("/api/auth/login", { identifier, password });
       setTempToken(data.tempToken);
-      if (data.step === "enroll") { setQrCode(data.qrCode); setStep("enroll"); }
-      else                        { setStep("2fa"); }
-    } catch (err: any) { setError(err.message); }
-    finally { setLoading(false); }
+      if (data.step === "enroll") {
+        setQrCode(data.qrCode);
+        setStep("enroll");
+      } else {
+        setStep("2fa");
+      }
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSignup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    try {
+      await post("/api/auth/signup", { username, email, password });
+      setIsSignup(false);
+      setIdentifier(username);
+      setStep("identify");
+      // Show success state briefly or just go back to login
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true); setError(null);
+    if (code.length !== 6) return;
+    setLoading(true);
+    setError(null);
     try {
       const data = await post("/api/auth/verify-2fa", { tempToken, code });
       Token.setAccess(data.accessToken);
       onLoginSuccess();
-    } catch (err: any) { setError(err.message); }
-    finally { setLoading(false); }
+    } catch (err: any) {
+      setError(err.message);
+      setCode(""); // Clear failed code
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const slideVariants = {
+    enter: (direction: number) => ({ x: direction > 0 ? 300 : -300, opacity: 0 }),
+    center: { x: 0, opacity: 1 },
+    exit: (direction: number) => ({ x: direction < 0 ? 300 : -300, opacity: 0 }),
   };
 
   return (
-    <div className="min-h-screen bg-[#020617] flex items-center justify-center p-4 relative overflow-hidden font-sans">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,_rgba(56,189,248,0.1),_transparent_50%),radial-gradient(circle_at_50%_100%,_rgba(244,63,94,0.05),_transparent_50%)]" />
-      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-[400px] w-[400px] bg-sky-500/20 blur-[120px] rounded-full pointer-events-none animate-pulse" />
+    <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center p-4 font-sans selection:bg-sky-500/30">
+      {/* Background Ambience */}
+      <div className="pointer-events-none fixed inset-0">
+        <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-sky-600/10 blur-[120px] rounded-full" />
+        <div className="absolute bottom-0 right-1/4 w-[400px] h-[400px] bg-indigo-600/10 blur-[120px] rounded-full" />
+        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-[0.03] mix-blend-overlay" />
+      </div>
 
-      <div className="w-full max-w-md relative z-10">
-        <div className="rounded-3xl border border-white/10 bg-black/40 backdrop-blur-3xl p-8 shadow-2xl shadow-sky-900/20 ring-1 ring-white/5">
-
-          {/* Logo */}
-          <div className="flex flex-col items-center text-center mb-8">
-            <div className="relative group mb-4">
-              <div className="absolute -inset-1 rounded-2xl bg-gradient-to-r from-sky-500 to-indigo-500 opacity-25 blur transition group-hover:opacity-50" />
-              <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-slate-800 to-black ring-1 ring-white/20">
-                <Shield className="h-8 w-8 text-sky-400" />
-              </div>
-            </div>
-            <h1 className="text-2xl font-bold text-white tracking-tight">SentinelGrid</h1>
-            <p className="text-xs text-sky-400 font-mono mt-1 tracking-widest uppercase flex items-center gap-2">
-              <Activity className="h-3 w-3 animate-pulse" /> Central Command
-            </p>
+      <div className="w-full max-w-[440px] relative z-10">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-[#161616] border border-white/5 rounded-[28px] overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.5)] ring-1 ring-white/10"
+        >
+          {/* Progress Bar */}
+          <div className="h-1 w-full bg-white/5">
+            {loading && (
+              <motion.div 
+                layoutId="progress"
+                className="h-full bg-sky-500"
+                animate={{ x: ["-100%", "100%"] }}
+                transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
+              />
+            )}
           </div>
 
-          {/* Error */}
-          {error && (
-            <div className="mb-6 flex items-start gap-3 rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 animate-in slide-in-from-top-2">
-              <AlertTriangle className="h-5 w-5 text-rose-400 shrink-0 mt-0.5" />
-              <p className="text-sm font-medium text-rose-200">{error}</p>
+          <div className="p-10 pb-12">
+            {/* Header */}
+            <div className="flex flex-col items-center mb-8">
+              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-sky-500 shadow-[0_0_20px_rgba(14,165,233,0.4)]">
+                <Shield className="h-7 w-7 text-white" />
+              </div>
+              <h1 className="text-[24px] font-medium text-white tracking-tight">SentinelGrid</h1>
+              <div className="mt-1 flex items-center gap-2 text-[#9aa0a6] text-[16px]">
+                {step === 'signup' ? 'Create your SOC account' : 'Sign in'}
+              </div>
             </div>
-          )}
 
-          {/* ── Step: Login ── */}
-          {step === "login" && (
-            <form onSubmit={handleLogin} className="space-y-5">
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                  <User className="h-3.5 w-3.5" /> Operator ID
-                </label>
-                <input type="text" required value={username} onChange={e => setUsername(e.target.value)}
-                  className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white placeholder-slate-600 outline-none transition focus:border-sky-500/50 focus:ring-1 focus:ring-sky-500/50"
-                  placeholder="Enter operator ID..." />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                  <Lock className="h-3.5 w-3.5" /> Passphrase
-                </label>
-                <input type="password" required value={password} onChange={e => setPassword(e.target.value)}
-                  className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white placeholder-slate-600 outline-none transition focus:border-sky-500/50 focus:ring-1 focus:ring-sky-500/50"
-                  placeholder="••••••••••••" />
-              </div>
-              <button type="submit" disabled={loading}
-                className="group relative flex w-full items-center justify-center gap-2 overflow-hidden rounded-xl bg-gradient-to-r from-sky-500 to-indigo-600 px-4 py-3.5 text-sm font-bold text-white shadow-lg shadow-sky-500/25 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 mt-2">
-                <div className="absolute inset-0 bg-white/20 opacity-0 transition-opacity group-hover:opacity-100" />
-                {loading ? <><Activity className="h-5 w-5 animate-spin" /> Verifying...</> : <><Terminal className="h-5 w-5" /> Initiate Secure Uplink <ArrowRight className="absolute right-4 h-4 w-4 opacity-0 transition-all group-hover:opacity-100 group-hover:translate-x-1" /></>}
-              </button>
-            </form>
-          )}
+            {error && (
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="mb-6 flex items-start gap-3 rounded-xl border border-rose-500/20 bg-rose-500/5 p-4"
+              >
+                <AlertTriangle className="h-5 w-5 text-rose-500 shrink-0 mt-0.5" />
+                <p className="text-sm text-rose-200 leading-snug">{error}</p>
+              </motion.div>
+            )}
 
-          {/* ── Step: Enroll TOTP ── */}
-          {step === "enroll" && (
-            <form onSubmit={handleVerify} className="space-y-5">
-              <div className="rounded-xl bg-sky-500/10 border border-sky-500/20 p-4 text-center">
-                <QrCode className="h-6 w-6 text-sky-400 mx-auto mb-2" />
-                <p className="text-sm font-semibold text-sky-200 mb-1">Set up Authenticator</p>
-                <p className="text-xs text-slate-400">Scan this QR code with Google Authenticator or Authy, then enter the 6-digit code below.</p>
-              </div>
-              {qrCode && (
-                <div className="flex justify-center">
-                  <img src={qrCode} alt="TOTP QR Code" className="w-48 h-48 rounded-xl border border-white/10 bg-white p-2" />
-                </div>
-              )}
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                  <KeyRound className="h-3.5 w-3.5" /> Verification Code
-                </label>
-                <input type="text" required autoFocus maxLength={6} value={code} onChange={e => setCode(e.target.value.replace(/\D/g, ""))}
-                  className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-center text-2xl tracking-[0.5em] font-mono text-white placeholder-slate-600 outline-none transition focus:border-sky-500/50 focus:ring-1 focus:ring-sky-500/50"
-                  placeholder="------" />
-              </div>
-              <button type="submit" disabled={loading || code.length !== 6}
-                className="group relative flex w-full items-center justify-center gap-2 overflow-hidden rounded-xl bg-gradient-to-r from-emerald-500 to-sky-600 px-4 py-3.5 text-sm font-bold text-white shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 mt-2">
-                {loading ? <><Activity className="h-5 w-5 animate-spin" /> Confirming...</> : <><CheckCircle2 className="h-5 w-5" /> Confirm &amp; Activate</>}
-              </button>
-            </form>
-          )}
+            <div className="relative overflow-hidden min-h-[220px]">
+              <AnimatePresence mode="wait" custom={1}>
+                {step === "identify" && !isSignup && (
+                  <motion.form 
+                    key="identify"
+                    custom={1}
+                    variants={slideVariants}
+                    initial="enter" animate="center" exit="exit"
+                    onSubmit={goToPassword}
+                    className="space-y-6"
+                  >
+                    <div className="group relative">
+                      <input 
+                        type="text" 
+                        required 
+                        autoFocus
+                        value={identifier} 
+                        onChange={e => setIdentifier(e.target.value)}
+                        placeholder=" "
+                        className="peer w-full rounded-lg border border-[#3c4043] bg-transparent px-4 py-4.5 text-white outline-none transition-all focus:border-sky-500 focus:ring-1 focus:ring-sky-500 placeholder:opacity-0"
+                      />
+                      <label className="pointer-events-none absolute left-4 top-4.5 text-[#9aa0a6] transition-all 
+                        peer-focus:-top-2.5 peer-focus:left-2 peer-focus:bg-[#161616] peer-focus:px-1 peer-focus:text-xs peer-focus:text-sky-500 
+                        peer-[:not(:placeholder-shown)]:-top-2.5 peer-[:not(:placeholder-shown)]:left-2 peer-[:not(:placeholder-shown)]:bg-[#161616] peer-[:not(:placeholder-shown)]:px-1 peer-[:not(:placeholder-shown)]:text-xs">
+                        Email or Username
+                      </label>
+                    </div>
 
-          {/* ── Step: 2FA Code ── */}
-          {step === "2fa" && (
-            <form onSubmit={handleVerify} className="space-y-5">
-              <div className="rounded-xl bg-sky-500/10 border border-sky-500/20 p-4 text-center">
-                <p className="text-sm text-sky-200">Enter the 6-digit code from your authenticator app.</p>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                  <KeyRound className="h-3.5 w-3.5" /> 2FA Code
-                </label>
-                <input type="text" required autoFocus maxLength={6} value={code} onChange={e => setCode(e.target.value.replace(/\D/g, ""))}
-                  className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-center text-2xl tracking-[0.5em] font-mono text-white placeholder-slate-600 outline-none transition focus:border-sky-500/50 focus:ring-1 focus:ring-sky-500/50"
-                  placeholder="------" />
-              </div>
-              <button type="submit" disabled={loading || code.length !== 6}
-                className="group relative flex w-full items-center justify-center gap-2 overflow-hidden rounded-xl bg-gradient-to-r from-sky-500 to-indigo-600 px-4 py-3.5 text-sm font-bold text-white shadow-lg shadow-sky-500/25 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 mt-2">
-                {loading ? <><Activity className="h-5 w-5 animate-spin" /> Verifying...</> : <><Shield className="h-5 w-5" /> Verify Identity</>}
-              </button>
-              <button type="button" onClick={() => { setStep("login"); setCode(""); }} className="w-full text-center text-xs text-slate-500 hover:text-white transition">
-                Return to Login
-              </button>
-            </form>
-          )}
+                    <div className="flex items-center justify-between">
+                      <button 
+                        type="button" 
+                        onClick={() => setIsSignup(true)}
+                        className="text-sm font-semibold text-sky-500 hover:text-sky-400 transition"
+                      >
+                        Create account
+                      </button>
+                      <button 
+                        type="submit"
+                        className="rounded-lg bg-sky-500 px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-sky-500/20 hover:bg-sky-400 transition-all active:scale-95"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </motion.form>
+                )}
 
-          <div className="mt-8 border-t border-white/10 pt-6 text-center">
-            <p className="font-mono text-[10px] text-slate-600">
-              UNAUTHORIZED ACCESS IS STRICTLY PROHIBITED AND MONITORED.<br />
-              YOUR IP HAS BEEN LOGGED AND RATE LIMITED.
-            </p>
+                {isSignup && (
+                  <motion.form 
+                    key="signup"
+                    custom={1}
+                    variants={slideVariants}
+                    initial="enter" animate="center" exit="exit"
+                    onSubmit={handleSignup}
+                    className="space-y-5"
+                  >
+                    <div className="relative">
+                      <input type="text" required value={username} onChange={e => setUsername(e.target.value)} placeholder=" "
+                        className="peer w-full rounded-lg border border-[#3c4043] bg-transparent px-4 py-4.5 text-white outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 placeholder:opacity-0" />
+                      <label className="pointer-events-none absolute left-4 top-4.5 text-[#9aa0a6] transition-all 
+                        peer-focus:-top-2.5 peer-focus:left-2 peer-focus:bg-[#161616] peer-focus:px-1 peer-focus:text-xs peer-focus:text-sky-500 
+                        peer-[:not(:placeholder-shown)]:-top-2.5 peer-[:not(:placeholder-shown)]:left-2 peer-[:not(:placeholder-shown)]:bg-[#161616] peer-[:not(:placeholder-shown)]:px-1 peer-[:not(:placeholder-shown)]:text-xs">
+                        Username
+                      </label>
+                    </div>
+                    <div className="relative">
+                      <input type="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder=" "
+                        className="peer w-full rounded-lg border border-[#3c4043] bg-transparent px-4 py-4.5 text-white outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 placeholder:opacity-0" />
+                      <label className="pointer-events-none absolute left-4 top-4.5 text-[#9aa0a6] transition-all 
+                        peer-focus:-top-2.5 peer-focus:left-2 peer-focus:bg-[#161616] peer-focus:px-1 peer-focus:text-xs peer-focus:text-sky-500 
+                        peer-[:not(:placeholder-shown)]:-top-2.5 peer-[:not(:placeholder-shown)]:left-2 peer-[:not(:placeholder-shown)]:bg-[#161616] peer-[:not(:placeholder-shown)]:px-1 peer-[:not(:placeholder-shown)]:text-xs">
+                        Email address
+                      </label>
+                    </div>
+                    <div className="relative">
+                      <input type="password" required value={password} onChange={e => setPassword(e.target.value)} placeholder=" "
+                        className="peer w-full rounded-lg border border-[#3c4043] bg-transparent px-4 py-4.5 text-white outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 placeholder:opacity-0" />
+                      <label className="pointer-events-none absolute left-4 top-4.5 text-[#9aa0a6] transition-all 
+                        peer-focus:-top-2.5 peer-focus:left-2 peer-focus:bg-[#161616] peer-focus:px-1 peer-focus:text-xs peer-focus:text-sky-500 
+                        peer-[:not(:placeholder-shown)]:-top-2.5 peer-[:not(:placeholder-shown)]:left-2 peer-[:not(:placeholder-shown)]:bg-[#161616] peer-[:not(:placeholder-shown)]:px-1 peer-[:not(:placeholder-shown)]:text-xs">
+                        Create password
+                      </label>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2">
+                      <button type="button" onClick={() => setIsSignup(false)} className="text-sm font-semibold text-sky-500">Sign in instead</button>
+                      <button type="submit" disabled={loading} className="flex items-center gap-2 rounded-lg bg-sky-500 px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-sky-500/20 hover:bg-sky-400">
+                        {loading && <Loader2 className="h-4 w-4 animate-spin" />} Finish
+                      </button>
+                    </div>
+                  </motion.form>
+                )}
+
+                {step === "password" && (
+                  <motion.form 
+                    key="password"
+                    custom={1}
+                    variants={slideVariants}
+                    initial="enter" animate="center" exit="exit"
+                    onSubmit={handleLogin}
+                    className="space-y-6"
+                  >
+                    <div className="flex flex-col items-center">
+                      <div className="flex items-center gap-2 rounded-full border border-[#3c4043] px-3 py-1 text-sm text-white mb-6">
+                        <User className="h-4 w-4 text-[#9aa0a6]" />
+                        {identifier}
+                        <button type="button" onClick={() => setStep("identify")} className="ml-1 text-sky-500 hover:text-sky-400">
+                          <ChevronLeft className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="relative">
+                      <input 
+                        type="password" 
+                        required 
+                        autoFocus
+                        value={password} 
+                        onChange={e => setPassword(e.target.value)}
+                        placeholder=" "
+                        className="peer w-full rounded-lg border border-[#3c4043] bg-transparent px-4 py-4.5 text-white outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 placeholder:opacity-0"
+                      />
+                      <label className="pointer-events-none absolute left-4 top-4.5 text-[#9aa0a6] transition-all 
+                        peer-focus:-top-2.5 peer-focus:left-2 peer-focus:bg-[#161616] peer-focus:px-1 peer-focus:text-xs peer-focus:text-sky-500 
+                        peer-[:not(:placeholder-shown)]:-top-2.5 peer-[:not(:placeholder-shown)]:left-2 peer-[:not(:placeholder-shown)]:bg-[#161616] peer-[:not(:placeholder-shown)]:px-1 peer-[:not(:placeholder-shown)]:text-xs">
+                        Enter your password
+                      </label>
+                    </div>
+
+                    <div className="flex items-center justify-end">
+                      <button 
+                        type="submit"
+                        disabled={loading}
+                        className="flex items-center gap-2 rounded-lg bg-sky-500 px-8 py-2.5 text-sm font-semibold text-white shadow-lg shadow-sky-500/20 hover:bg-sky-400 transition-all active:scale-95"
+                      >
+                        {loading && <Loader2 className="h-4 w-4 animate-spin" />} Next
+                      </button>
+                    </div>
+                  </motion.form>
+                )}
+
+                {step === "enroll" && (
+                  <motion.form 
+                    key="enroll"
+                    custom={1}
+                    variants={slideVariants}
+                    initial="enter" animate="center" exit="exit"
+                    onSubmit={handleVerify}
+                    className="space-y-6"
+                  >
+                    <div className="text-center">
+                      <h2 className="text-lg font-medium text-white mb-2">Set up 2-Step Verification</h2>
+                      <p className="text-sm text-[#9aa0a6] mb-6">Scan this QR code with Google Authenticator to secure your account.</p>
+                      <div className="inline-block rounded-2xl bg-white p-3 mb-6 shadow-xl shadow-sky-500/10">
+                        <img src={qrCode} alt="2FA" className="h-40 w-40" />
+                      </div>
+                    </div>
+                    <div className="relative">
+                      <input 
+                        type="text" 
+                        required 
+                        maxLength={6}
+                        value={code} 
+                        onChange={e => setCode(e.target.value.replace(/\D/g, ''))}
+                        placeholder=" "
+                        className="peer w-full rounded-lg border border-[#3c4043] bg-transparent px-4 py-4.5 text-center text-2xl tracking-[0.5em] font-mono text-white outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 placeholder:opacity-0"
+                      />
+                      <label className="pointer-events-none absolute left-0 right-0 top-4.5 text-center text-[#9aa0a6] transition-all 
+                        peer-focus:-top-2.5 peer-focus:bg-[#161616] peer-focus:text-xs peer-focus:text-sky-500 
+                        peer-[:not(:placeholder-shown)]:-top-2.5 peer-[:not(:placeholder-shown)]:bg-[#161616] peer-[:not(:placeholder-shown)]:text-xs">
+                        6-digit code
+                      </label>
+                    </div>
+                    <button type="submit" disabled={loading || code.length !== 6} className="flex w-full items-center justify-center gap-2 rounded-lg bg-sky-500 py-3 text-sm font-semibold text-white">
+                      {loading && <Loader2 className="h-4 w-4 animate-spin" />} Verify & Continue
+                    </button>
+                  </motion.form>
+                )}
+
+                {step === "2fa" && (
+                  <motion.form 
+                    key="2fa"
+                    custom={1}
+                    variants={slideVariants}
+                    initial="enter" animate="center" exit="exit"
+                    onSubmit={handleVerify}
+                    className="space-y-6"
+                  >
+                    <div className="text-center">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-sky-500/10 mx-auto mb-4">
+                        <Fingerprint className="h-6 w-6 text-sky-500" />
+                      </div>
+                      <h2 className="text-lg font-medium text-white mb-1">2-Step Verification</h2>
+                      <p className="text-sm text-[#9aa0a6] mb-8">Enter the code from your authenticator app.</p>
+                    </div>
+                    <div className="relative">
+                      <input 
+                        type="text" 
+                        required 
+                        autoFocus
+                        maxLength={6}
+                        value={code} 
+                        onChange={e => setCode(e.target.value.replace(/\D/g, ''))}
+                        placeholder=" "
+                        className="peer w-full rounded-lg border border-[#3c4043] bg-transparent px-4 py-4.5 text-center text-2xl tracking-[0.5em] font-mono text-white outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 placeholder:opacity-0"
+                      />
+                      <label className="pointer-events-none absolute left-0 right-0 top-4.5 text-center text-[#9aa0a6] transition-all 
+                        peer-focus:-top-2.5 peer-focus:bg-[#161616] peer-focus:text-xs peer-focus:text-sky-500 
+                        peer-[:not(:placeholder-shown)]:-top-2.5 peer-[:not(:placeholder-shown)]:bg-[#161616] peer-[:not(:placeholder-shown)]:text-xs">
+                        Verification code
+                      </label>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <button type="button" onClick={() => setStep("identify")} className="text-sm font-semibold text-sky-500">More ways to verify</button>
+                      <button type="submit" disabled={loading || code.length !== 6} className="flex items-center gap-2 rounded-lg bg-sky-500 px-8 py-2.5 text-sm font-semibold text-white">
+                        {loading && <Loader2 className="h-4 w-4 animate-spin" />} Next
+                      </button>
+                    </div>
+                  </motion.form>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
+
+          <div className="px-10 py-6 border-t border-white/5 flex items-center justify-between text-xs text-[#9aa0a6]">
+            <div className="flex items-center gap-4">
+              <span>English (United States)</span>
+            </div>
+            <div className="flex items-center gap-4">
+              <span className="hover:text-white cursor-pointer">Help</span>
+              <span className="hover:text-white cursor-pointer">Privacy</span>
+              <span className="hover:text-white cursor-pointer">Terms</span>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Footer info */}
+        <div className="mt-8 text-center">
+          <p className="text-[12px] text-[#5f6368] leading-relaxed">
+            One account. All of SentinelGrid working for you.<br />
+            Secure monitoring and enterprise-grade threat detection.
+          </p>
         </div>
       </div>
     </div>
   );
 }
+

@@ -2,22 +2,22 @@
 
 **Advanced Real-Time Threat Detection & 24/7 Automated Response**
 
-![Status](https://img.shields.io/badge/status-production--ready-brightgreen)
+![Status](https://img.shields.io/badge/status-prototype-yellow)
 ![Version](https://img.shields.io/badge/version-2.0-blue)
 ![Frameworks](https://img.shields.io/badge/frameworks-5-orange)
 ![License](https://img.shields.io/badge/license-proprietary-red)
 
 ## 🚀 Overview
 
-SentinelGrid is an **enterprise-grade Security Operations Center (SOC)** platform designed for large organizations with complex cybersecurity requirements. It provides:
+SentinelGrid is a **Security Operations Center (SOC) prototype** designed to demonstrate real-time threat detection and compliance tracking. It provides:
 
-- ✅ **5 Major Frameworks** fully integrated (MITRE, NIST, CIS, ISO 27001, OWASP)
-- ✅ **ML-Based Threat Scoring** with 5 ensemble algorithms
-- ✅ **24/7 Continuous Monitoring** of 10,000+ events/second
-- ✅ **Automated Response** with sub-second reaction times
+- ✅ **5 Major Frameworks** integrated (MITRE, NIST, CIS, ISO 27001, OWASP)
+- ✅ **Heuristic Threat Scoring** based on security event patterns
+- ✅ **Host-based Monitoring** of critical system events
+- ✅ **Automated Response** simulation and logic
 - ✅ **Real-Time Compliance Tracking** across multiple standards
-- ✅ **Advanced Threat Analytics** with correlation patterns
-- ✅ **8 Specialized UI Views** for different security roles
+- ✅ **Threat Analytics** with framework correlation
+- ✅ **8 Specialized UI Views** for security analysts
 
 ## 🎯 Key Features
 
@@ -53,13 +53,13 @@ SentinelGrid is an **enterprise-grade Security Operations Center (SOC)** platfor
 - Mitigation strategies
 - Testing checklists
 
-### 2. **Advanced Threat Detection**
+### 2. **Threat Detection**
 
-**Ensemble ML Model (5 Algorithms)**
-- Statistical anomaly detection (Z-score)
-- Behavioral analysis (session profiling)
+**Heuristic Scoring Engine**
+- Pattern-based anomaly detection
+- Host event correlation
 - Signature & IOC matching
-- MITRE technique correlation
+- MITRE technique mapping
 - External threat intelligence context
 
 **Correlation Patterns (5 Built-In)**
@@ -123,16 +123,7 @@ SentinelGrid is an **enterprise-grade Security Operations Center (SOC)** platfor
 - Risk distribution maps
 
 ## 📊 Performance
-
-| Metric | Capacity |
-|--------|----------|
-| Event Ingestion | 1,000,000 events/minute |
-| Threat Scoring | 50,000 threats/second |
-| Detection Latency | <100ms |
-| UI Responsiveness | 60 FPS |
-| Uptime SLA | 99.95% |
-| Storage | 90 days hot + 1 year total |
-| Daily Volume | 4.2 TB |
+This is a prototype implementation. Performance varies based on host OS and system load.
 
 ## 🔐 Compliance Coverage
 

@@ -27,8 +27,9 @@ type SystemData = {
 
 type TelemetryData = {
   system: SystemData;
-  logs: string;
-  network: string;
+  logs: any[];
+  network: any[];
+  rawNetwork: string;
   analysis: AnalysisResult;
 };
 
@@ -82,7 +83,7 @@ CRITICAL TRAINING INSTRUCTIONS:
 3. Verify that outbound traffic is routing properly and flag any potential rogue DNS queries or connections attempting to bypass the gateway (${json.system?.gateway}).
 4. Look for failed logons, cleared audit logs, or privilege escalation in the event logs.
 
-Return ONLY a valid JSON object with this exact structure: {"summary": "A detailed 2-3 sentence analysis string", "score": <integer from 0 to 100 representing security health>, "threats": ["array of specific threat descriptions"], "mitreMappings": ["array of strings like 'TXXXX - Name'"]}. Do not include markdown formatting.\n\nLogs:\n${typeof json.logs === 'string' ? json.logs : JSON.stringify(json.logs, null, 2)}\n\nNetwork:\n${json.network}`;
+Return ONLY a valid JSON object with this exact structure: {"summary": "A detailed 2-3 sentence analysis string", "score": <integer from 0 to 100 representing security health>, "threats": ["array of specific threat descriptions"], "mitreMappings": ["array of strings like 'TXXXX - Name'"]}. Do not include markdown formatting.\n\nLogs:\n${typeof json.logs === 'string' ? json.logs : JSON.stringify(json.logs, null, 2)}\n\nNetwork:\n${json.rawNetwork}`;
           
           const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
             method: "POST",
@@ -103,6 +104,7 @@ Return ONLY a valid JSON object with this exact structure: {"summary": "A detail
       }
 
       setData(json);
+
     } catch (err: any) {
       setError("Failed to connect to Local Telemetry Agent. Ensure 'node backend.js' is running in a separate terminal.");
     } finally {
@@ -348,14 +350,12 @@ Return ONLY a valid JSON object with this exact structure: {"summary": "A detail
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5 font-mono">
-                      {(data.network ? data.network.split('\n').slice(2).filter(Boolean) : []).map((line, i) => {
-                        const parts = line.trim().split(/\s+/);
-                        if (parts.length < 4) return null;
-                        const proto = parts[0];
-                        const local = parts[1];
-                        const foreign = parts[2];
-                        const state = parts.length > 4 ? parts[3] : '';
-                        const pid = parts.length > 4 ? parts[4] : parts[3];
+                      {(Array.isArray(data.network) ? data.network : []).map((conn: any, i: number) => {
+                        const proto = conn.protocol || 'TCP';
+                        const local = conn.local || '0.0.0.0';
+                        const foreign = conn.foreign || '0.0.0.0';
+                        const state = conn.state || '';
+                        const pid = conn.pid || '0';
                         
                         const isAnomalous = state === "LISTENING" && (local.includes(":3389") || local.includes(":22"));
                         
@@ -373,7 +373,7 @@ Return ONLY a valid JSON object with this exact structure: {"summary": "A detail
                             </td>
                             <td className="px-4 py-2 font-bold text-slate-200">{pid}</td>
                             <td className="px-4 py-2">
-                              {pid && pid !== "0" && (
+                              {pid && pid !== "0" && pid !== "-" && (
                                 <button
                                   onClick={() => killProcess(pid)}
                                   className="px-2 py-1 bg-rose-500/10 text-rose-400 border border-rose-500/30 rounded flex items-center gap-1 text-[10px] uppercase font-bold hover:bg-rose-500 hover:text-white transition shadow-sm shadow-rose-500/20"
@@ -386,6 +386,7 @@ Return ONLY a valid JSON object with this exact structure: {"summary": "A detail
                         );
                       })}
                     </tbody>
+
                   </table>
                 </div>
               </div>
