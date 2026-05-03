@@ -26,7 +26,7 @@ import { Token, WS_BASE, logout, refreshAccessToken, apiGet } from "./utils/api"
 
 /* ── types ── */
 type Severity = "low" | "medium" | "high" | "critical";
-type Protocol = "HTTPS" | "SSH" | "RDP" | "DNS" | "TLS" | "MQTT" | "SMB" | "FTP" | "LDAP";
+type Protocol = "HTTPS" | "SSH" | "RDP" | "DNS" | "TLS" | "MQTT" | "SMB" | "FTP" | "LDAP" | "SYSTEM";
 type ConnStatus = "active" | "observing" | "dropped" | "quarantined" | "blocked";
 type TabId = "dashboard" | "mitre" | "nist" | "virustotal" | "winlogs" | "intel" | "sandbox" | "vulnpentest" | "crossplat" | "advancedvb" | "ai_agent" | "ossec";
 
@@ -74,11 +74,12 @@ type SystemStats = {
   memory: number;
   uptime: number;
   timestamp: number;
+  plugins?: number;
 };
 
 /* ── constants ── */
 const ZONES = ["Perimeter", "Identity", "Payments", "Remote Access", "Data Core", "OT Segment", "Cloud", "DMZ"];
-const PORT_MAP: Record<Protocol, number> = { HTTPS: 443, SSH: 22, RDP: 3389, DNS: 53, TLS: 8443, MQTT: 1883, SMB: 445, FTP: 21, LDAP: 389 };
+const PORT_MAP: Record<Protocol, number> = { HTTPS: 443, SSH: 22, RDP: 3389, DNS: 53, TLS: 8443, MQTT: 1883, SMB: 445, FTP: 21, LDAP: 389, SYSTEM: 0 };
 
 
 // Scenarios and simulated constants removed for real system data integration.
@@ -98,14 +99,6 @@ function relative(ts: number, now: number) {
 function timelineLabel(ts: number) {
   return new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(ts);
 }
-
-function timelineAnalysis(traffic: number, threats: number, blocked: number) {
-  if (threats > 0) return "Elevated Threat Activity";
-  if (traffic > 80) return "High Network Load";
-  if (blocked > 0) return "Active Containment";
-  return "Normal Operations";
-}
-
 
 const SEV_BADGE: Record<Severity, string> = {
   low: "border-emerald-400/30 bg-emerald-400/10 text-emerald-200",
@@ -241,11 +234,6 @@ export default function App() {
     navRef.current.scrollLeft = navScrollLeft - walk;
   };
 
-  const connsRef = useRef(connections);
-  const alertsRef = useRef(alerts);
-  useEffect(() => { connsRef.current = connections; }, [connections]);
-  useEffect(() => { alertsRef.current = alerts; }, [alerts]);
-
   /* Session bootstrap: recover from the HttpOnly refresh cookie after a reload. */
   useEffect(() => {
     let cancelled = false;
@@ -266,10 +254,13 @@ export default function App() {
     return () => { cancelled = true; };
   }, []);
 
-   /* Backend event stream for real host-log and admin-action notifications. */
+   /* Backend event stream for real host-log, admin-action notifications, and full telemetry. */
    useEffect(() => {
      if (!isAuthenticated || !Token.getAccess()) return;
-     const ws = new WebSocket(`${WS_BASE}?token=${encodeURIComponent(Token.getAccess())}`);
+     const ws = new WebSocket(WS_BASE);
+     ws.onopen = () => {
+       ws.send(JSON.stringify({ event: "auth", token: Token.getAccess() }));
+     };
      ws.onmessage = event => {
        try {
          const msg = JSON.parse(event.data);
@@ -278,6 +269,85 @@ export default function App() {
          }
          if (msg.event === "process_killed") {
            setResponseLog(prev => [`${clock(msg.ts)} Admin action: process ${msg.data?.pid} terminated`, ...prev].slice(0, 10));
+         }
+         if (msg.event === "telemetry_update") {
+           const data = msg.data;
+           // Map real network traffic to Connections
+           const realConns: Connection[] = (data.network || []).map((c: any, i: number) => {
+             const localParts = (c.local || '').split(':');
+             const port = parseInt(localParts[localParts.length - 1]) || 0;
+             let risk = 0;
+             const state = c.state || '';
+             
+             if (state === 'LISTENING') risk = 30;
+             else if (state === 'ESTABLISHED') risk = 10;
+             
+             const suspiciousPorts: Record<number, number> = {
+               21: 20, 22: 10, 23: 30, 25: 25, 53: 15, 80: 10, 135: 30, 139: 30,
+               443: 10, 445: 40, 1433: 35, 1521: 35, 3306: 35, 3389: 40, 5432: 30,
+               5900: 25, 5901: 25, 6379: 30, 8080: 20, 8443: 15, 9200: 25, 9300: 25
+             };
+             
+             if (suspiciousPorts[port]) risk = Math.max(risk, suspiciousPorts[port]);
+             if (state === 'LISTENING' && suspiciousPorts[port] && suspiciousPorts[port] >= 30) risk = Math.min(100, risk + 20);
+             
+             return {
+               id: `real-conn-${i}`,
+               srcIp: c.local || 'Unknown',
+               dstIp: c.foreign || 'Unknown',
+               dstHost: c.foreign || 'Unknown',
+               protocol: "SYSTEM",
+               port: port,
+               pps: state === 'ESTABLISHED' ? 25 : state === 'LISTENING' ? 0 : 5,
+               latency: state === 'ESTABLISHED' ? 20 : 0,
+               risk: risk,
+               status: state === 'LISTENING' ? 'observing' : state === 'ESTABLISHED' ? 'active' : 'observing',
+               zone: 'System',
+               geo: 'Local',
+               bytes: state === 'ESTABLISHED' ? 250000 : 0,
+               lastSeen: Date.now(),
+             };
+           });
+           setConnections(realConns);
+
+           // Map logs to Alerts
+           const realAlerts: Alert[] = (data.logs || []).map((l: any, i: number) => ({
+             id: `real-alert-${i}`,
+             ts: new Date(l.Date || Date.now()).getTime(),
+             srcIp: l.Computer || 'Local',
+             dstHost: l.ProviderName || l.Source || 'System',
+             protocol: 'SYSTEM',
+             category: 'Threat Detection',
+             severity: l.Suspicious ? 'high' : 'low',
+             mitreId: l.Mitre?.id || 'N/A',
+             mitreName: l.Mitre?.name || 'System Event',
+             signature: l.Description || l.description || l.Message || 'No description',
+             score: l.Suspicious ? 80 : 10,
+             action: 'Logged',
+             status: 'investigating',
+             malicious: !!l.Suspicious,
+             zone: 'System',
+             killed: false,
+           }));
+           setAlerts(realAlerts);
+
+           // Update traffic timeline
+           const ts = Date.now();
+           const threatCount = realAlerts.filter(a => a.malicious).length;
+           const blockedCount = realAlerts.filter(a => a.killed || a.status === "auto-contained").length;
+           const activeConns = realConns.filter(c => c.status === 'active' || c.status === 'observing').length;
+           const totalConns = realConns.length;
+           const trafficPercentage = totalConns > 0 ? Math.min(100, Math.round((activeConns / totalConns) * 100)) : 0;
+           
+           const newPoint: TrafficPoint = {
+             ts,
+             t: timelineLabel(ts),
+             traffic: trafficPercentage,
+             threats: threatCount,
+             blocked: blockedCount,
+             analysis: data.analysis?.summary || 'Analyzing system telemetry...',
+           };
+           setTraffic(prev => [...prev.slice(-59), newPoint]);
          }
        } catch {
          // Ignore malformed messages from stale sockets.
@@ -292,189 +362,32 @@ export default function App() {
     return () => clearInterval(t);
   }, []);
 
-  /* Current live traffic timeline: samples current connections and recent detections every second. */
-  useEffect(() => {
-    const t = setInterval(() => {
-      const ts = Date.now();
-      const curConns = connsRef.current;
-      const curAlerts = alertsRef.current;
-      const activePps = curConns.reduce((sum, c) => sum + (c.status === "active" || c.status === "observing" ? c.pps : 0), 0);
-      const avgLatency = curConns.length ? curConns.reduce((sum, c) => sum + c.latency, 0) / curConns.length : 0;
-      const recentAlerts = curAlerts.filter(a => ts - a.ts <= 10_000);
-      const threats = recentAlerts.filter(a => a.malicious).length;
-      const blocked = recentAlerts.filter(a => a.killed || a.status === "auto-contained").length;
-      const riskBoost = Math.min(25, curConns.reduce((sum, c) => sum + c.risk, 0) / Math.max(1, curConns.length) / 4);
-      const traffic = Math.min(100, Math.round((activePps / 700) + (avgLatency / 8) + riskBoost));
-      const newPoint: TrafficPoint = {
-        ts,
-        t: timelineLabel(ts),
-        traffic,
-        threats,
-        blocked,
-        analysis: timelineAnalysis(traffic, threats, blocked),
-      };
-      setTraffic(prev => [...prev.slice(-59), newPoint]);
-    }, 1000);
-    return () => clearInterval(t);
-  }, []);
+  /* Timeline updates are fed by backend telemetry_update messages only. */
 
-  /* Real-time system data polling */
+
+
+  /* Live System Performance Polling (lightweight fallback beside websocket telemetry) */
   useEffect(() => {
     if (!isAuthenticated) return;
-    
-     const pollData = async () => {
-       try {
-         const res = await fetch(`${WS_BASE.replace(/^ws/, 'http')}/api/analyze`, {
-           headers: { Authorization: `Bearer ${Token.getAccess()}` }
-         });
-         const data = await res.json();
-        
-         // Map real network traffic to Connections
-         const realConns: Connection[] = (data.network || []).map((c: any, i: number) => {
-           // Extract port from local address (format: IP:PORT)
-           const localParts = (c.local || '').split(':');
-           const port = parseInt(localParts[localParts.length - 1]) || 0;
-           
-           // Calculate risk based on state and port
-           let risk = 0;
-           const state = c.state || '';
-           
-           // Base risk by state
-           if (state === 'LISTENING') risk = 30; // Listening services have baseline risk
-           else if (state === 'ESTABLISHED') risk = 10; // Established connections have lower risk
-           
-           // Increase risk for suspicious ports
-           const suspiciousPorts: Record<number, number> = {
-             21: 20,   // FTP
-             22: 10,   // SSH (lower risk if expected)
-             23: 30,   // Telnet
-             25: 25,   // SMTP
-             53: 15,   // DNS
-             80: 10,   // HTTP
-             135: 30,  // RPC
-             139: 30,  // NetBIOS
-             443: 10,  // HTTPS
-             445: 40,  // SMB
-             1433: 35, // SQL Server
-             1521: 35, // Oracle
-             3306: 35, // MySQL
-             3389: 40, // RDP
-             5432: 30, // PostgreSQL
-             5900: 25, // VNC
-             5901: 25, // VNC
-             6379: 30, // Redis
-             8080: 20, // HTTP Proxy
-             8443: 15, // HTTPS Alt
-             9200: 25, // Elasticsearch
-             9300: 25  // Elasticsearch
-           };
-           
-           if (suspiciousPorts[port]) {
-             risk = Math.max(risk, suspiciousPorts[port]);
-           }
-           
-           // Additional risk for listening on suspicious ports
-           if (state === 'LISTENING' && suspiciousPorts[port] && suspiciousPorts[port] >= 30) {
-             risk = Math.min(100, risk + 20);
-           }
-           
-           // Estimate PPS and bytes (since netstat doesn't provide this, we'll use heuristics based on state)
-           const pps = state === 'ESTABLISHED' ? Math.floor(Math.random() * 50) + 10 : 
-                     state === 'LISTENING' ? 0 : 5;
-           const latency = state === 'ESTABLISHED' ? Math.floor(Math.random() * 50) + 10 : 0;
-           const bytes = state === 'ESTABLISHED' ? Math.floor(Math.random() * 1000000) + 100000 : 0;
-           
-           return {
-             id: `real-conn-${i}`,
-             srcIp: c.local || 'Unknown',
-             dstIp: c.foreign || 'Unknown',
-             dstHost: c.foreign || 'Unknown',
-             protocol: (c.protocol || 'TCP') as Protocol,
-             port: port,
-             pps: pps,
-             latency: latency,
-             risk: risk,
-             status: state === 'LISTENING' ? 'observing' : 
-                     state === 'ESTABLISHED' ? 'active' : 
-                     'observing',
-             zone: 'System',
-             geo: 'Local',
-             bytes: bytes,
-             lastSeen: Date.now(),
-           };
-         });
-        setConnections(realConns);
-
-        // Map logs to Alerts
-        const realAlerts: Alert[] = (data.logs || []).map((l: any, i: number) => ({
-          id: `real-alert-${i}`,
-          ts: new Date(l.Date || Date.now()).getTime(),
-          srcIp: l.Computer || 'Local',
-          dstHost: l.Source || 'System',
-          protocol: 'SYSTEM',
-          category: 'Threat Detection',
-          severity: l.Suspicious ? 'high' : 'low',
-          mitreId: l.Mitre?.id || 'N/A',
-          mitreName: l.Mitre?.name || 'System Event',
-          signature: l.description || l.Message || 'No description',
-          score: l.Suspicious ? 80 : 10,
-          action: 'Logged',
-          status: 'investigating',
-          malicious: !!l.Suspicious,
-          zone: 'System',
-          killed: false,
-        }));
-        setAlerts(realAlerts);
-
-         // Update traffic timeline based on real data
-         const ts = Date.now();
-         const threatCount = realAlerts.filter(a => a.malicious).length;
-         const blockedCount = realAlerts.filter(a => a.killed || a.status === "auto-contained").length;
-         
-         // Calculate real traffic percentage based on connection states and risk
-         const activeConns = realConns.filter(c => c.status === 'active' || c.status === 'observing').length;
-         const totalConns = realConns.length;
-         const trafficPercentage = totalConns > 0 
-           ? Math.min(100, Math.round((activeConns / totalConns) * 100)) 
-           : 0;
-           
-         // Calculate risk-based threat score
-         const avgRisk = realConns.length > 0 
-           ? Math.round(realConns.reduce((sum, c) => sum + c.risk, 0) / realConns.length) 
-           : 0;
-         const threatPressure = Math.min(100, Math.round((avgRisk + Math.min(100, threatCount * 5)) / 2));
-         
-         const newPoint: TrafficPoint = {
-           ts,
-           t: timelineLabel(ts),
-           traffic: trafficPercentage,
-           threats: threatCount,
-           blocked: blockedCount,
-           analysis: data.analysis?.summary || 'Analyzing system telemetry...',
-         };
-         setTraffic(prev => [...prev.slice(-59), newPoint]);
-
-      } catch (e) {
-        console.error("Polling error:", e);
-      }
-    };
-
-    const t = setInterval(pollData, 10000);
-    pollData();
-    return () => clearInterval(t);
-  }, [isAuthenticated]);
-
-  /* Live System Performance Polling (Advancement) */
-  useEffect(() => {
-    if (!isAuthenticated) return;
+    let pluginPollTick = 0;
     const pollStats = async () => {
       try {
         const stats: any = await apiGet('/api/system/stats');
         setSystemStats(stats);
         setStatsHistory(prev => [...prev.slice(-29), { ts: stats.timestamp, cpu: parseFloat(stats.cpu), mem: parseFloat(stats.memory) }]);
+        pluginPollTick += 1;
+        if (pluginPollTick % 3 === 0) {
+          try {
+            const pluginData: any = await apiGet('/api/plugins');
+            if (pluginData && pluginData.plugins) {
+               setSystemStats(prev => ({...prev, plugins: pluginData.plugins.length}));
+            }
+          } catch (e) {}
+        }
+
       } catch (e) { /* silent fail */ }
     };
-    const t = setInterval(pollStats, 2000);
+    const t = setInterval(pollStats, 10000);
     pollStats();
     return () => clearInterval(t);
   }, [isAuthenticated]);
@@ -617,7 +530,7 @@ export default function App() {
             {/* Mobile menu */}
             <button
               type="button"
-              className="rounded-xl border border-white/10 bg-white/5 p-2 xl:hidden"
+              className="rounded-xl border border-white/10 bg-white/5 p-2 lg:hidden"
               onClick={() => setMobileMenuOpen(prev => !prev)}
             >
               {mobileMenuOpen ? <X className="h-5 w-5 text-slate-300" /> : <Terminal className="h-5 w-5 text-slate-300" />}
@@ -627,14 +540,14 @@ export default function App() {
 
         {/* Mobile nav */}
         {mobileMenuOpen && (
-          <div className="border-t border-white/10 bg-black/80 px-4 py-3 xl:hidden">
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3">
+          <div className="border-t border-white/10 bg-black/80 px-4 py-3 lg:hidden overflow-y-auto max-h-[70vh]">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {TABS.map(t => (
                 <button
                   key={t.id}
                   type="button"
                   onClick={() => { setTab(t.id); setMobileMenuOpen(false); }}
-                  className={`flex min-w-0 items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition ${tab === t.id ? "bg-white/10 text-white" : "text-slate-400 hover:text-white"}`}
+                  className={`flex min-w-0 items-center gap-2 rounded-xl px-3 py-3 text-sm font-medium transition ${tab === t.id ? "bg-white/10 text-white" : "text-slate-400 hover:text-white"}`}
                 >
                   {t.icon}{t.label}
                 </button>
@@ -726,6 +639,12 @@ export default function App() {
                     </div>
                   </div>
                   <div className="flex items-center gap-4 text-xs font-mono">
+                    {systemStats.plugins !== undefined && (
+                      <div className="flex items-center gap-2 mr-2">
+                        <div className="h-3 w-3 rounded-sm bg-purple-500 animate-pulse" />
+                        <span className="text-slate-300 font-bold">{systemStats.plugins} Enterprise Plugin(s) Active</span>
+                      </div>
+                    )}
                     <div className="flex items-center gap-2">
                       <div className="h-3 w-3 rounded-sm bg-indigo-500" />
                       <span className="text-slate-300">CPU: {systemStats.cpu}%</span>
@@ -782,7 +701,7 @@ export default function App() {
                     </div>
                     <div>
                       <p className="text-[10px] uppercase tracking-widest text-slate-500">Telemetry Pulse</p>
-                      <p className="text-lg font-bold text-white">2.0s</p>
+                      <p className="text-lg font-bold text-white">10.0s</p>
                     </div>
                   </div>
                   <div className="flex h-2 w-2 rounded-full bg-emerald-400 animate-ping" />

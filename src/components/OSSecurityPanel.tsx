@@ -49,6 +49,7 @@ function osPlatformIcon(platform: string) {
     case "win32":  return "🪟";
     case "darwin": return "🍎";
     case "linux":  return "🐧";
+    case "android": return "🤖";
     default:       return "💻";
   }
 }

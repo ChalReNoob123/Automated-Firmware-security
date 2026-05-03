@@ -7,6 +7,23 @@
 export const API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:3001').replace(/\/$/, '');
 export const WS_BASE  = (import.meta.env.VITE_WS_URL  || 'ws://localhost:3001').replace(/\/$/, '');
 
+/* ── storage fallback for Safari Private / IE ───────────────────── */
+const _memStorage: Record<string, string> = {};
+const SafeStorage = {
+  get: (key: string) => {
+    try { return localStorage.getItem(key); }
+    catch { return _memStorage[key] || null; }
+  },
+  set: (key: string, val: string) => {
+    try { localStorage.setItem(key, val); }
+    catch { _memStorage[key] = val; }
+  },
+  remove: (key: string) => {
+    try { localStorage.removeItem(key); }
+    catch { delete _memStorage[key]; }
+  }
+};
+
 /* ── token helpers ──────────────────────────────────────────────── */
 let _accessToken = '';
 
@@ -15,7 +32,7 @@ export const Token = {
   setAccess:   (t: string) => { _accessToken = t; },
   clearAll:    ()    => {
     _accessToken = '';
-    localStorage.removeItem('sg_auth_token'); // legacy
+    SafeStorage.remove('sg_auth_token');
   },
   isLoggedIn:  ()    => !!_accessToken,
 };

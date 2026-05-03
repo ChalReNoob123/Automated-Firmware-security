@@ -438,6 +438,30 @@ export function detectOSSecurityProfile(): OSSecurityProfile {
 
     riskFactors = buildMacOSRiskFactors(osVersion);
 
+  } else if (ua.includes("Android")) {
+    osPlatform = "android";
+    const m = ua.match(/Android\s([\d.]+)/);
+    osName = "Android OS";
+    osVersion = m ? m[1] : "Unknown";
+    architecture = "ARM";
+    securityLevel = "medium";
+    patchStatus = "unknown";
+    isEOL = false;
+
+    vulnerabilities = [
+      "Info: Android OS patches vary heavily by manufacturer.",
+      "Medium: Sideloaded apps can bypass Play Protect."
+    ];
+
+    recommendations = [
+      "Enroll device in an Enterprise MDM.",
+      "Disable ADB and 'Unknown Sources'.",
+      "Enforce mandatory encryption and secure boot."
+    ];
+
+    riskFactors = [
+       { id: "ANDROID-MDM", title: "Unmanaged Device Risk", description: "Android device not managed by MDM lacks remote wipe capability.", severity: "medium", mitreId: "T1610" }
+    ];
   } else if (ua.includes("Linux") || platform.startsWith("Linux")) {
     osPlatform = "linux";
     const linux = detectLinuxDistro(ua);

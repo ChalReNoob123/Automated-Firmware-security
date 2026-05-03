@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+
 import { 
   FileText, Database, AlertTriangle, ChevronDown, ChevronRight, 
   RefreshCw, Filter, HardDrive, Activity, Shield, Cpu, Zap, 
   Terminal, Monitor, CheckCircle2, Info, AlertOctagon
 } from "lucide-react";
+import { List } from "react-window";
 
 import { API_BASE, WS_BASE, Token } from "../utils/api";
 
@@ -194,6 +195,7 @@ export default function WindowsLogViewer() {
   const [filterSuspicious, setFilterSuspicious] = useState(false);
   const [searchText, setSearchText] = useState("");
   const [toast, setToast] = useState<string | null>(null);
+  const [wsRetryNonce, setWsRetryNonce] = useState(0);
 
   const wsRef = useRef<WebSocket | null>(null);
 
@@ -206,7 +208,7 @@ export default function WindowsLogViewer() {
     if (!silent) setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/api/logs/live?channel=${channel}&max=100`, {
+      const res = await fetch(`${API_BASE}/api/logs?channel=${channel}&max=100`, {
         headers: { "Authorization": `Bearer ${Token.getAccess()}` }
       });
       if (res.status === 401) throw new Error("Unauthorized. Please re-login.");
@@ -270,11 +272,11 @@ export default function WindowsLogViewer() {
     const token = Token.getAccess();
     if (!token) return;
 
-    const ws = new WebSocket(`${WS_BASE}?token=${token}`);
+    const ws = new WebSocket(WS_BASE);
     wsRef.current = ws;
 
     ws.onopen = () => {
-      console.log("WebSocket connected for log streaming");
+      ws.send(JSON.stringify({ event: "auth", token }));
     };
 
     ws.onmessage = (event) => {
@@ -316,7 +318,7 @@ export default function WindowsLogViewer() {
       if (viewMode === "live" && autoPoll) {
         setTimeout(() => {
           if (viewMode === "live" && autoPoll) {
-             // Effect will re-run
+            setWsRetryNonce((prev) => prev + 1);
           }
         }, 5000);
       }
@@ -328,7 +330,7 @@ export default function WindowsLogViewer() {
         wsRef.current = null;
       }
     };
-  }, [viewMode, autoPoll]);
+  }, [viewMode, autoPoll, wsRetryNonce]);
 
   useEffect(() => {
     if (viewMode === "live") fetchLiveLogs(logChannel);
@@ -551,21 +553,19 @@ export default function WindowsLogViewer() {
               </div>
               
               {filteredEvents.length > 0 ? (
-                <div className="space-y-3">
-                  <AnimatePresence mode="popLayout">
-                    {filteredEvents.map((event) => (
-                      <motion.div
-                        key={event.id}
-                        initial={{ opacity: 0, y: 20, scale: 0.98 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.95 }}
-                        transition={{ duration: 0.4, ease: "easeOut" }}
-                        layout
-                      >
-                        <EventRow event={event} />
-                      </motion.div>
-                    ))}
-                  </AnimatePresence>
+                <div className="rounded-[2.5rem] border border-white/5 bg-black/20 overflow-hidden">
+                   <List
+                    rowCount={filteredEvents.length}
+                    rowHeight={130}
+                    style={{ height: 600, width: "100%" }}
+                    rowProps={{}}
+                    className="scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent"
+                    rowComponent={({ index, style }) => (
+                      <div style={style} className="px-4 py-2">
+                        <EventRow event={filteredEvents[index]} />
+                      </div>
+                    )}
+                  />
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center py-20 bg-white/2 border border-dashed border-white/10 rounded-[2.5rem] text-center">

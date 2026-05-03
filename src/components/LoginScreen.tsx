@@ -18,16 +18,27 @@ export default function LoginScreen({ onLoginSuccess }: { onLoginSuccess: () => 
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [code, setCode] = useState("");
   
   // Auth State
   const [tempToken, setTempToken] = useState("");
   const [qrCode, setQrCode] = useState("");
+  const [signupSuccess, setSignupSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   // Reset errors when changing steps
   useEffect(() => { setError(null); }, [step]);
+
+  const passwordScore = (() => {
+    let score = 0;
+    if (password.length >= 10) score += 1;
+    if (/[A-Z]/.test(password)) score += 1;
+    if (/[a-z]/.test(password)) score += 1;
+    if (/\d/.test(password)) score += 1;
+    return score;
+  })();
 
   const post = async (path: string, body: object) => {
     try {
@@ -76,14 +87,19 @@ export default function LoginScreen({ onLoginSuccess }: { onLoginSuccess: () => 
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (password !== confirmPassword) {
+      setError("Password and confirm password do not match.");
+      return;
+    }
     setLoading(true);
     setError(null);
+    setSignupSuccess(null);
     try {
       await post("/api/auth/signup", { username, email, password });
       setIsSignup(false);
       setIdentifier(username);
       setStep("identify");
-      // Show success state briefly or just go back to login
+      setSignupSuccess("Account created. Sign in to receive your authenticator QR setup.");
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -161,6 +177,15 @@ export default function LoginScreen({ onLoginSuccess }: { onLoginSuccess: () => 
               >
                 <AlertTriangle className="h-5 w-5 text-rose-500 shrink-0 mt-0.5" />
                 <p className="text-sm text-rose-200 leading-snug">{error}</p>
+              </motion.div>
+            )}
+            {signupSuccess && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="mb-6 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4"
+              >
+                <p className="text-sm text-emerald-200 leading-snug">{signupSuccess}</p>
               </motion.div>
             )}
 
@@ -246,6 +271,29 @@ export default function LoginScreen({ onLoginSuccess }: { onLoginSuccess: () => 
                         Create password
                       </label>
                     </div>
+                    <div className="relative">
+                      <input type="password" required value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder=" "
+                        className="peer w-full rounded-lg border border-[#3c4043] bg-transparent px-4 py-4.5 text-white outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 placeholder:opacity-0" />
+                      <label className="pointer-events-none absolute left-4 top-4.5 text-[#9aa0a6] transition-all 
+                        peer-focus:-top-2.5 peer-focus:left-2 peer-focus:bg-[#161616] peer-focus:px-1 peer-focus:text-xs peer-focus:text-sky-500 
+                        peer-[:not(:placeholder-shown)]:-top-2.5 peer-[:not(:placeholder-shown)]:left-2 peer-[:not(:placeholder-shown)]:bg-[#161616] peer-[:not(:placeholder-shown)]:px-1 peer-[:not(:placeholder-shown)]:text-xs">
+                        Confirm password
+                      </label>
+                    </div>
+                    <div className="rounded-lg border border-white/10 bg-black/20 p-3">
+                      <div className="mb-2 flex items-center justify-between text-xs text-slate-400">
+                        <span>Password strength</span>
+                        <span>{passwordScore}/4</span>
+                      </div>
+                      <div className="grid grid-cols-4 gap-1">
+                        {[0, 1, 2, 3].map((i) => (
+                          <div
+                            key={i}
+                            className={`h-1.5 rounded ${passwordScore > i ? "bg-emerald-400" : "bg-white/10"}`}
+                          />
+                        ))}
+                      </div>
+                    </div>
 
                     <div className="flex items-center justify-between pt-2">
                       <button type="button" onClick={() => setIsSignup(false)} className="text-sm font-semibold text-sky-500">Sign in instead</button>
@@ -318,6 +366,9 @@ export default function LoginScreen({ onLoginSuccess }: { onLoginSuccess: () => 
                       <div className="inline-block rounded-2xl bg-white p-3 mb-6 shadow-xl shadow-sky-500/10">
                         <img src={qrCode} alt="2FA" className="h-40 w-40" />
                       </div>
+                      <p className="text-xs text-slate-500">
+                        Use Google Authenticator, Microsoft Authenticator, or any TOTP-compatible app.
+                      </p>
                     </div>
                     <div className="relative">
                       <input 
