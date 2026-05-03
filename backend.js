@@ -164,6 +164,65 @@ db.exec(`
     count INTEGER DEFAULT 0,
     locked_until INTEGER DEFAULT 0
   );
+  -- Time-series metrics table for real-time traffic analytics
+  CREATE TABLE IF NOT EXISTS metrics_time_series (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp INTEGER NOT NULL,
+    segment TEXT DEFAULT 'global',
+    zone TEXT DEFAULT 'global',
+    metric_type TEXT NOT NULL,
+    value REAL NOT NULL,
+    metadata TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_metrics_time ON metrics_time_series(timestamp DESC);
+  CREATE INDEX IF NOT EXISTS idx_metrics_segment ON metrics_time_series(segment, timestamp DESC);
+  CREATE INDEX IF NOT EXISTS idx_metrics_zone ON metrics_time_series(zone, timestamp DESC);
+  -- Segment/Zone tracking table
+  CREATE TABLE IF NOT EXISTS segments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT UNIQUE NOT NULL,
+    zone TEXT NOT NULL,
+    status TEXT DEFAULT 'active',
+    health_score INTEGER DEFAULT 100,
+    last_seen INTEGER DEFAULT 0,
+    config TEXT
+  );
+  -- Connection state persistence
+  CREATE TABLE IF NOT EXISTS connections (
+    id TEXT PRIMARY KEY,
+    src_ip TEXT,
+    dst_ip TEXT,
+    dst_host TEXT,
+    protocol TEXT,
+    port INTEGER,
+    state TEXT,
+    risk INTEGER DEFAULT 0,
+    segment TEXT DEFAULT 'unknown',
+    zone TEXT DEFAULT 'unknown',
+    first_seen INTEGER,
+    last_seen INTEGER,
+    bytes_in INTEGER DEFAULT 0,
+    bytes_out INTEGER DEFAULT 0
+  );
+  CREATE INDEX IF NOT EXISTS idx_connections_segment ON connections(segment);
+  CREATE INDEX IF NOT EXISTS idx_connections_zone ON connections(zone);
+  CREATE INDEX IF NOT EXISTS idx_connections_state ON connections(state);
+  CREATE INDEX IF NOT EXISTS idx_connections_last_seen ON connections(last_seen DESC);
+  -- Alert routing by segment
+  CREATE TABLE IF NOT EXISTS segment_alerts (
+    id TEXT PRIMARY KEY,
+    timestamp INTEGER NOT NULL,
+    segment TEXT NOT NULL,
+    zone TEXT NOT NULL,
+    severity TEXT NOT NULL,
+    category TEXT,
+    message TEXT,
+    mitre_id TEXT,
+    acknowledged INTEGER DEFAULT 0
+  );
+  CREATE INDEX IF NOT EXISTS idx_alerts_segment ON segment_alerts(segment, timestamp DESC);
+  CREATE INDEX IF NOT EXISTS idx_alerts_zone ON segment_alerts(zone, timestamp DESC);
+  CREATE INDEX IF NOT EXISTS idx_alerts_ack ON segment_alerts(acknowledged);
   CREATE INDEX IF NOT EXISTS idx_users_created_at ON users(created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user ON refresh_tokens(user_id, expires_at DESC);
 `);
@@ -175,6 +234,89 @@ try {
 } catch (e) {
   // Column likely already exists
 }
+
+// Migrations for segment/zone tracking
+try { db.exec(`ALTER TABLE logs ADD COLUMN segment TEXT DEFAULT 'unknown'`); } catch (e) {}
+try { db.exec(`ALTER TABLE logs ADD COLUMN zone TEXT DEFAULT 'unknown'`); } catch (e) {}
+try { db.exec(`CREATE INDEX IF NOT EXISTS idx_logs_segment ON logs(segment)`); } catch (e) {}
+try { db.exec(`CREATE INDEX IF NOT EXISTS idx_logs_zone ON logs(zone)`); } catch (e) {}
+try { db.exec(`CREATE INDEX IF NOT EXISTS idx_logs_suspicious ON logs(suspicious, date DESC)`); } catch (e) {}
+
+// Create new tables if they don't exist
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS metrics_time_series (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      timestamp INTEGER NOT NULL,
+      segment TEXT DEFAULT 'global',
+      zone TEXT DEFAULT 'global',
+      metric_type TEXT NOT NULL,
+      value REAL NOT NULL,
+      metadata TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_metrics_time ON metrics_time_series(timestamp DESC);
+    CREATE INDEX IF NOT EXISTS idx_metrics_segment ON metrics_time_series(segment, timestamp DESC);
+    CREATE INDEX IF NOT EXISTS idx_metrics_zone ON metrics_time_series(zone, timestamp DESC);
+  `);
+} catch (e) { logger.error(e, 'Error creating metrics_time_series table'); }
+
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS segments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT UNIQUE NOT NULL,
+      zone TEXT NOT NULL,
+      status TEXT DEFAULT 'active',
+      health_score INTEGER DEFAULT 100,
+      last_seen INTEGER DEFAULT 0,
+      config TEXT
+    );
+  `);
+} catch (e) { logger.error(e, 'Error creating segments table'); }
+
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS connections (
+      id TEXT PRIMARY KEY,
+      src_ip TEXT,
+      dst_ip TEXT,
+      dst_host TEXT,
+      protocol TEXT,
+      port INTEGER,
+      state TEXT,
+      risk INTEGER DEFAULT 0,
+      segment TEXT DEFAULT 'unknown',
+      zone TEXT DEFAULT 'unknown',
+      first_seen INTEGER,
+      last_seen INTEGER,
+      bytes_in INTEGER DEFAULT 0,
+      bytes_out INTEGER DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_connections_segment ON connections(segment);
+    CREATE INDEX IF NOT EXISTS idx_connections_zone ON connections(zone);
+    CREATE INDEX IF NOT EXISTS idx_connections_state ON connections(state);
+    CREATE INDEX IF NOT EXISTS idx_connections_last_seen ON connections(last_seen DESC);
+  `);
+} catch (e) { logger.error(e, 'Error creating connections table'); }
+
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS segment_alerts (
+      id TEXT PRIMARY KEY,
+      timestamp INTEGER NOT NULL,
+      segment TEXT NOT NULL,
+      zone TEXT NOT NULL,
+      severity TEXT NOT NULL,
+      category TEXT,
+      message TEXT,
+      mitre_id TEXT,
+      acknowledged INTEGER DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_alerts_segment ON segment_alerts(segment, timestamp DESC);
+    CREATE INDEX IF NOT EXISTS idx_alerts_zone ON segment_alerts(zone, timestamp DESC);
+    CREATE INDEX IF NOT EXISTS idx_alerts_ack ON segment_alerts(acknowledged);
+  `);
+} catch (e) { logger.error(e, 'Error creating segment_alerts table'); }
 
 loadPlugins();
 
@@ -474,8 +616,8 @@ function broadcast(event, data) {
 }
 
 const insertLog = db.prepare(`
-  INSERT OR IGNORE INTO logs (hash, eventId, date, level, task, source, description, suspicious)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  INSERT OR IGNORE INTO logs (hash, eventId, date, level, task, source, description, suspicious, segment, zone)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 
 
@@ -735,7 +877,61 @@ const MITRE_MAP = {
 
 const SUSPICIOUS_IDS = new Set(Object.keys(MITRE_MAP));
 
-// Enrich a raw PowerShell log object with Date, LogName, MITRE, Computer, and write to DB
+// Segment/Zone inference based on source and log characteristics
+function inferSegmentZone(log, source, task) {
+  const sourceLower = (source || '').toLowerCase();
+  const taskLower = (task || '').toLowerCase();
+  const msgLower = (log.Message || '').toLowerCase();
+  
+  // Network-related events
+  if (sourceLower.includes('firewall') || sourceLower.includes('network') || 
+      taskLower.includes('network') || msgLower.includes('firewall') ||
+      msgLower.includes('connection')) {
+    return { segment: 'network', zone: 'perimeter' };
+  }
+  
+  // Authentication/Identity events
+  if (sourceLower.includes('security') || taskLower.includes('logon') || 
+      taskLower.includes('auth') || msgLower.includes('logon') ||
+      msgLower.includes('authentication')) {
+    return { segment: 'identity', zone: 'identity' };
+  }
+  
+  // Service/Process events
+  if (sourceLower.includes('service') || taskLower.includes('service') ||
+      sourceLower.includes('process') || taskLower.includes('process')) {
+    return { segment: 'services', zone: 'core' };
+  }
+  
+  // System/kernel events
+  if (sourceLower.includes('system') || sourceLower.includes('kernel') ||
+      sourceLower.includes('driver')) {
+    return { segment: 'system', zone: 'core' };
+  }
+  
+  // Application events
+  if (sourceLower.includes('application') || taskLower.includes('application')) {
+    return { segment: 'applications', zone: 'dmz' };
+  }
+  
+  // Database events
+  if (sourceLower.includes('sql') || sourceLower.includes('database') ||
+      msgLower.includes('database')) {
+    return { segment: 'database', zone: 'data-core' };
+  }
+  
+  // Web/Cloud events
+  if (sourceLower.includes('iis') || sourceLower.includes('web') ||
+      msgLower.includes('cloud') || sourceLower.includes('azure') ||
+      sourceLower.includes('aws')) {
+    return { segment: 'cloud', zone: 'cloud' };
+  }
+  
+  // Default fallback
+  return { segment: 'general', zone: 'unknown' };
+}
+
+// Enrich a raw PowerShell log object with Date, LogName, MITRE, Computer, Segment/Zone, and write to DB
 function enrichAndStore(log, logName) {
   let id = 'Unknown';
   if (log.Id != null) {
@@ -762,7 +958,13 @@ function enrichAndStore(log, logName) {
   const source = log.ProviderName     || '';
   const desc   = log.Message          || '';
   const uid    = crypto.createHash('md5').update(`${id}-${date}-${task}-${source}`).digest('hex');
-  try { insertLog.run(uid, id, date, level, task, source, desc, suspicious); } catch (e) { logger.error(e, 'Error persisting enriched log'); }
+  
+  // Infer segment and zone
+  const { segment, zone } = inferSegmentZone(log, source, task);
+  log.Segment = segment;
+  log.Zone = zone;
+  
+  try { insertLog.run(uid, id, date, level, task, source, desc, suspicious, segment, zone); } catch (e) { logger.error(e, 'Error persisting enriched log'); }
   return log;
 }
 
@@ -977,31 +1179,98 @@ async function collectTelemetrySnapshot() {
   }
 }
 
-// Autonomous real-time collector and broadcast loop
+// Autonomous real-time collector and broadcast loop - 5s interval
+const TELEMETRY_INTERVAL = 5000;
+const ACTIVE_SEGMENTS = [
+  { name: 'perimeter', zone: 'perimeter', label: 'Perimeter' },
+  { name: 'identity', zone: 'identity', label: 'Identity' },
+  { name: 'payments', zone: 'payments', label: 'Payments' },
+  { name: 'remote-access', zone: 'remote-access', label: 'Remote Access' },
+  { name: 'data-core', zone: 'data-core', label: 'Data Core' },
+  { name: 'ot-segment', zone: 'ot-segment', label: 'OT Segment' },
+  { name: 'cloud', zone: 'cloud', label: 'Cloud' },
+  { name: 'dmz', zone: 'dmz', label: 'DMZ' },
+  { name: 'internal', zone: 'internal', label: 'Internal' },
+  { name: 'web', zone: 'dmz', label: 'Web Services' },
+  { name: 'network', zone: 'perimeter', label: 'Network' }
+];
+
+async function storeSegmentMetrics(snapshot, network) {
+  const segments = new Map();
+  network.forEach(conn => {
+    const port = parseInt((conn.local || '').match(/:(\d+)$/)?.[1]) || 0;
+    let seg = 'network', zone = 'perimeter';
+    if ([443, 80, 8080, 8443].includes(port)) { seg = 'web'; zone = 'dmz'; }
+    else if ([22, 3389].includes(port)) { seg = 'remote'; zone = 'remote-access'; }
+    else if ([445, 139].includes(port)) { seg = 'file-sharing'; zone = 'internal'; }
+    else if ([3306, 5432, 1433, 1521].includes(port)) { seg = 'database'; zone = 'data-core'; }
+    const key = `${seg}:${zone}`;
+    if (!segments.has(key)) segments.set(key, { segment: seg, zone, connections: 0, active: 0, listening: 0 });
+    const d = segments.get(key);
+    d.connections++;
+    if (conn.state === 'ESTABLISHED') d.active++;
+    if (conn.state === 'LISTENING') d.listening++;
+  });
+  for (const d of segments.values()) {
+    storeMetric(d.segment, d.zone, 'connection_count', d.connections);
+    storeMetric(d.segment, d.zone, 'active_connections', d.active);
+    storeMetric(d.segment, d.zone, 'listening_ports', d.listening);
+  }
+  storeMetric('global', 'global', 'total_connections', network.length);
+  storeMetric('global', 'global', 'log_count', snapshot.logs.length);
+  storeMetric('global', 'global', 'risk_score', snapshot.analysis?.score ?? 100);
+}
+
+async function broadcastSegmentData(snapshot) {
+  const network = snapshot.network || [];
+  network.forEach(conn => storeConnectionState(conn));
+  const segmentHealth = getSegmentHealth();
+  const segmentSummary = getSegmentLogSummary(10);
+  const segmentMetrics = {};
+  ACTIVE_SEGMENTS.forEach(({ name, zone }) => {
+    const segConns = network.filter(c => {
+      const p = parseInt((c.local || '').match(/:(\d+)$/)?.[1]) || 0;
+      if (name === 'web' && [443,80,8080].includes(p)) return true;
+      if (name === 'database' && [3306,5432,1433].includes(p)) return true;
+      if (name === 'remote' && [22,3389].includes(p)) return true;
+      return false;
+    });
+    segmentMetrics[name] = {
+      connections: segConns.length,
+      active: segConns.filter(c => c.state === 'ESTABLISHED').length,
+      listening: segConns.filter(c => c.state === 'LISTENING').length,
+      risk: segConns.reduce((a, c) => a + (c.risk || 0), 0)
+    };
+  });
+  const alerts = getSegmentAlerts(null, null, 10);
+  return { segmentHealth, segmentSummary, segmentMetrics, alerts };
+}
+
 setInterval(async () => {
   try {
     const snapshot = await collectTelemetrySnapshot();
+    await storeSegmentMetrics(snapshot, snapshot.network);
+    const segmentData = await broadcastSegmentData(snapshot);
     if (wsClients.size === 0) return;
-    broadcast('telemetry_update', snapshot);
+    broadcast('telemetry_update', { ...snapshot, segments: segmentData });
     if (snapshot.logs.length > 0) {
       const toSend = snapshot.logs.slice(0, 10).map(l => ({
-        id:        l.Id != null ? String(l.Id) : 'Unknown',
-        date:      l.Date,
-        level:     l.LevelDisplayName || 'Information',
-        source:    l.ProviderName || '',
-        task:      l.TaskDisplayName  || '',
-        logName:   l.LogName || '',
-        computer:  l.Computer || os.hostname(),
-        message:   l.Message  || '',
-        suspicious: !!l.Suspicious,
-        mitre:     l.Mitre || null,
+        id: l.Id != null ? String(l.Id) : 'Unknown',
+        date: l.Date, level: l.LevelDisplayName || 'Information',
+        source: l.ProviderName || '', task: l.TaskDisplayName || '',
+        logName: l.LogName || '', computer: l.Computer || os.hostname(),
+        message: l.Message || '', suspicious: !!l.Suspicious,
+        mitre: l.Mitre || null, segment: l.Segment || 'unknown', zone: l.Zone || 'unknown'
       }));
       broadcast('new_logs', toSend);
+    }
+    if (segmentData.alerts.length > 0) {
+      broadcast('segment_alerts', segmentData.alerts);
     }
   } catch (e) {
     logger.error(e, 'Error in telemetry broadcast interval');
   }
-}, 10000);
+}, TELEMETRY_INTERVAL);
 
 // Cross-platform network traffic (gap #18)
 async function getNetworkTraffic() {
@@ -1250,6 +1519,156 @@ async function analyzeTelemetry(logs, network, files) {
 
    return analysis;
  }
+
+// ── Segment-based Aggregation Functions ────────────────────────────
+
+// Store time-series metric for a segment/zone
+function storeMetric(segment, zone, metricType, value, metadata = null) {
+  try {
+    const stmt = db.prepare(`
+      INSERT INTO metrics_time_series (timestamp, segment, zone, metric_type, value, metadata)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+    stmt.run(Date.now(), segment, zone, metricType, value, metadata ? JSON.stringify(metadata) : null);
+    
+    // Cleanup old metrics (keep 7 days)
+    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    db.prepare('DELETE FROM metrics_time_series WHERE timestamp < ?').run(cutoff);
+  } catch (e) {
+    logger.error(e, 'Error storing metric');
+  }
+}
+
+// Get segment metrics for a time range
+function getSegmentMetrics(segment, zone, metricType, minutes = 60) {
+  try {
+    const cutoff = Date.now() - minutes * 60 * 1000;
+    const rows = db.prepare(`
+      SELECT timestamp, value, metadata FROM metrics_time_series
+      WHERE segment = ? AND zone = ? AND metric_type = ? AND timestamp > ?
+      ORDER BY timestamp ASC
+    `).all(segment, zone, metricType, cutoff);
+    return rows;
+  } catch (e) {
+    logger.error(e, 'Error getting segment metrics');
+    return [];
+  }
+}
+
+// Aggregate logs by segment
+function getSegmentLogSummary(minutes = 60) {
+  try {
+    const cutoff = new Date(Date.now() - minutes * 60 * 1000).toISOString();
+    const rows = db.prepare(`
+      SELECT 
+        segment,
+        zone,
+        COUNT(*) as total_logs,
+        SUM(CASE WHEN suspicious = 1 THEN 1 ELSE 0 END) as suspicious_count,
+        MAX(date) as last_event
+      FROM logs
+      WHERE date > ?
+      GROUP BY segment, zone
+      ORDER BY suspicious_count DESC
+    `).all(cutoff);
+    return rows;
+  } catch (e) {
+    logger.error(e, 'Error getting segment log summary');
+    return [];
+  }
+}
+
+// Get segment health status
+function getSegmentHealth() {
+  try {
+    const rows = db.prepare(`
+      SELECT 
+        segment,
+        zone,
+        COUNT(*) as active_connections,
+        SUM(CASE WHEN state = 'LISTENING' THEN 1 ELSE 0 END) as listening_ports,
+        SUM(CASE WHEN risk > 50 THEN 1 ELSE 0 END) as high_risk_conns,
+        MAX(last_seen) as last_activity
+      FROM connections
+      WHERE last_seen > ?
+      GROUP BY segment, zone
+    `).all(Date.now() - 60000); // Last 60 seconds
+    
+    return rows.map(r => ({
+      ...r,
+      health_score: Math.max(0, 100 - (r.high_risk_conns * 10) - (r.listening_ports * 2)),
+      status: r.high_risk_conns > 5 ? 'critical' : r.high_risk_conns > 0 ? 'warning' : 'healthy'
+    }));
+  } catch (e) {
+    logger.error(e, 'Error getting segment health');
+    return [];
+  }
+}
+
+// Store connection state
+function storeConnectionState(conn) {
+  try {
+    const id = crypto.createHash('md5').update(`${conn.local}-${conn.foreign}-${conn.protocol}`).digest('hex');
+    const now = Date.now();
+    const stmt = db.prepare(`
+      INSERT INTO connections (id, src_ip, dst_ip, protocol, port, state, risk, segment, zone, first_seen, last_seen)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        state = excluded.state,
+        risk = excluded.risk,
+        last_seen = excluded.last_seen
+    `);
+    
+    const port = parseInt((conn.local || '').match(/:(\d+)$/)?.[1]) || 0;
+    let risk = 0;
+    if (conn.state === 'LISTENING') risk = 30;
+    if (conn.state === 'ESTABLISHED') risk = 10;
+    
+    // Infer segment based on port/protocol
+    let segment = 'network', zone = 'perimeter';
+    if ([443, 80, 8080, 8443].includes(port)) { segment = 'web'; zone = 'dmz'; }
+    else if ([22, 3389].includes(port)) { segment = 'remote'; zone = 'remote-access'; }
+    else if ([445, 139].includes(port)) { segment = 'file-sharing'; zone = 'internal'; }
+    else if ([3306, 5432, 1433, 1521].includes(port)) { segment = 'database'; zone = 'data-core'; }
+    
+    stmt.run(id, conn.local, conn.foreign, conn.protocol, port, conn.state, risk, segment, zone, now, now);
+    return { id, segment, zone, risk };
+  } catch (e) {
+    logger.error(e, 'Error storing connection state');
+    return null;
+  }
+}
+
+// Create alert for a segment
+function createSegmentAlert(segment, zone, severity, category, message, mitreId = null) {
+  try {
+    const id = crypto.randomUUID();
+    db.prepare(`
+      INSERT INTO segment_alerts (id, timestamp, segment, zone, severity, category, message, mitre_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, Date.now(), segment, zone, severity, category, message, mitreId);
+    return id;
+  } catch (e) {
+    logger.error(e, 'Error creating segment alert');
+    return null;
+  }
+}
+
+// Get unacknowledged alerts by segment
+function getSegmentAlerts(segment = null, zone = null, limit = 50) {
+  try {
+    let query = 'SELECT * FROM segment_alerts WHERE acknowledged = 0';
+    const params = [];
+    if (segment) { query += ' AND segment = ?'; params.push(segment); }
+    if (zone) { query += ' AND zone = ?'; params.push(zone); }
+    query += ' ORDER BY timestamp DESC LIMIT ?';
+    params.push(limit);
+    return db.prepare(query).all(...params);
+  } catch (e) {
+    logger.error(e, 'Error getting segment alerts');
+    return [];
+  }
+}
 
 // ── Helper: read body ─────────────────────────────────────────────
 function readBody(req) {
@@ -1575,6 +1994,43 @@ httpServer.on('request', async (req, res) => {
         recentLogs: latestTelemetry.logs.length,
         timestamp: Date.now()
       });
+    }
+
+    // ── GET /api/segments ─────────────────────────────────────────
+    if (pathname === '/api/segments' && req.method === 'GET') {
+      return json(res, 200, { 
+        segments: ACTIVE_SEGMENTS,
+        health: getSegmentHealth(),
+        summary: getSegmentLogSummary(60)
+      });
+    }
+
+    // ── GET /api/segments/:name/metrics ────────────────────────────
+    if (pathname.startsWith('/api/segments/') && pathname.endsWith('/metrics') && req.method === 'GET') {
+      const segName = pathname.split('/')[3];
+      const minutes = parseInt(urlObj.searchParams.get('minutes') || '60');
+      const metrics = getSegmentMetrics(segName, 'unknown', 'connection_count', minutes);
+      return json(res, 200, { segment: segName, metrics });
+    }
+
+    // ── GET /api/segments/alerts ──────────────────────────────────
+    if (pathname === '/api/segments/alerts' && req.method === 'GET') {
+      const segment = urlObj.searchParams.get('segment');
+      const zone = urlObj.searchParams.get('zone');
+      const limit = parseInt(urlObj.searchParams.get('limit') || '50');
+      const alerts = getSegmentAlerts(segment, zone, limit);
+      return json(res, 200, { alerts, total: alerts.length });
+    }
+
+    // ── POST /api/segments/alerts/:id/ack ─────────────────────────
+    if (pathname.startsWith('/api/segments/alerts/') && pathname.endsWith('/ack') && req.method === 'POST') {
+      const alertId = pathname.split('/')[4];
+      try {
+        db.prepare('UPDATE segment_alerts SET acknowledged = 1 WHERE id = ?').run(alertId);
+        return json(res, 200, { success: true, message: 'Alert acknowledged' });
+      } catch (e) {
+        return json(res, 500, { error: 'Failed to acknowledge alert' });
+      }
     }
 
     // ── GET /api/plugins ──────────────────────────────────────────

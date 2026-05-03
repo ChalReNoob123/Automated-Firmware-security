@@ -254,107 +254,180 @@ export default function App() {
     return () => { cancelled = true; };
   }, []);
 
-   /* Backend event stream for real host-log, admin-action notifications, and full telemetry. */
-   useEffect(() => {
-     if (!isAuthenticated || !Token.getAccess()) return;
-     const ws = new WebSocket(WS_BASE);
-     ws.onopen = () => {
-       ws.send(JSON.stringify({ event: "auth", token: Token.getAccess() }));
-     };
-     ws.onmessage = event => {
-       try {
-         const msg = JSON.parse(event.data);
-         if (msg.event === "new_logs") {
-           setResponseLog(prev => [`${clock(msg.ts)} Host log stored (${msg.data?.[0]?.id ?? "event"})`, ...prev].slice(0, 10));
-         }
-         if (msg.event === "process_killed") {
-           setResponseLog(prev => [`${clock(msg.ts)} Admin action: process ${msg.data?.pid} terminated`, ...prev].slice(0, 10));
-         }
-         if (msg.event === "telemetry_update") {
-           const data = msg.data;
-           // Map real network traffic to Connections
-           const realConns: Connection[] = (data.network || []).map((c: any, i: number) => {
-             const localParts = (c.local || '').split(':');
-             const port = parseInt(localParts[localParts.length - 1]) || 0;
-             let risk = 0;
-             const state = c.state || '';
-             
-             if (state === 'LISTENING') risk = 30;
-             else if (state === 'ESTABLISHED') risk = 10;
-             
-             const suspiciousPorts: Record<number, number> = {
-               21: 20, 22: 10, 23: 30, 25: 25, 53: 15, 80: 10, 135: 30, 139: 30,
-               443: 10, 445: 40, 1433: 35, 1521: 35, 3306: 35, 3389: 40, 5432: 30,
-               5900: 25, 5901: 25, 6379: 30, 8080: 20, 8443: 15, 9200: 25, 9300: 25
-             };
-             
-             if (suspiciousPorts[port]) risk = Math.max(risk, suspiciousPorts[port]);
-             if (state === 'LISTENING' && suspiciousPorts[port] && suspiciousPorts[port] >= 30) risk = Math.min(100, risk + 20);
-             
-             return {
-               id: `real-conn-${i}`,
-               srcIp: c.local || 'Unknown',
-               dstIp: c.foreign || 'Unknown',
-               dstHost: c.foreign || 'Unknown',
-               protocol: "SYSTEM",
-               port: port,
-               pps: state === 'ESTABLISHED' ? 25 : state === 'LISTENING' ? 0 : 5,
-               latency: state === 'ESTABLISHED' ? 20 : 0,
-               risk: risk,
-               status: state === 'LISTENING' ? 'observing' : state === 'ESTABLISHED' ? 'active' : 'observing',
-               zone: 'System',
-               geo: 'Local',
-               bytes: state === 'ESTABLISHED' ? 250000 : 0,
-               lastSeen: Date.now(),
-             };
-           });
-           setConnections(realConns);
+  /* Backend event stream with auto-reconnection and segment data handling */
+  const [segmentData, setSegmentData] = useState<{
+    segments: any[];
+    health: any[];
+    summary: any[];
+    metrics: Record<string, any>;
+    alerts: any[];
+  }>({ segments: [], health: [], summary: [], metrics: {}, alerts: [] });
+  const [wsStatus, setWsStatus] = useState<'connecting' | 'connected' | 'disconnected'>('disconnected');
+  const wsRef = useRef<WebSocket | null>(null);
+  const reconnectTimeoutRef = useRef<number>(1000);
+  const maxReconnectTimeout = 30000;
 
-           // Map logs to Alerts
-           const realAlerts: Alert[] = (data.logs || []).map((l: any, i: number) => ({
-             id: `real-alert-${i}`,
-             ts: new Date(l.Date || Date.now()).getTime(),
-             srcIp: l.Computer || 'Local',
-             dstHost: l.ProviderName || l.Source || 'System',
-             protocol: 'SYSTEM',
-             category: 'Threat Detection',
-             severity: l.Suspicious ? 'high' : 'low',
-             mitreId: l.Mitre?.id || 'N/A',
-             mitreName: l.Mitre?.name || 'System Event',
-             signature: l.Description || l.description || l.Message || 'No description',
-             score: l.Suspicious ? 80 : 10,
-             action: 'Logged',
-             status: 'investigating',
-             malicious: !!l.Suspicious,
-             zone: 'System',
-             killed: false,
-           }));
-           setAlerts(realAlerts);
+  useEffect(() => {
+    if (!isAuthenticated || !Token.getAccess()) return;
+    
+    let isActive = true;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    
+    const connect = () => {
+      if (!isActive) return;
+      setWsStatus('connecting');
+      
+      const ws = new WebSocket(WS_BASE);
+      wsRef.current = ws;
+      
+      ws.onopen = () => {
+        setWsStatus('connected');
+        reconnectTimeoutRef.current = 1000;
+        ws.send(JSON.stringify({ event: "auth", token: Token.getAccess() }));
+      };
+      
+      ws.onclose = () => {
+        setWsStatus('disconnected');
+        wsRef.current = null;
+        if (!isActive) return;
+        reconnectTimer = setTimeout(() => {
+          reconnectTimeoutRef.current = Math.min(reconnectTimeoutRef.current * 1.5, maxReconnectTimeout);
+          connect();
+        }, reconnectTimeoutRef.current);
+      };
+      
+      ws.onerror = () => {
+        // Connection failed, will trigger onclose
+      };
+      
+      ws.onmessage = event => {
+        try {
+          const msg = JSON.parse(event.data);
+          
+          if (msg.event === "new_logs") {
+            setResponseLog(prev => [`${clock(msg.ts)} Host log stored (${msg.data?.[0]?.id ?? "event"})`, ...prev].slice(0, 10));
+          }
+          if (msg.event === "process_killed") {
+            setResponseLog(prev => [`${clock(msg.ts)} Admin action: process ${msg.data?.pid} terminated`, ...prev].slice(0, 10));
+          }
+          if (msg.event === "segment_alert") {
+            setResponseLog(prev => [`${clock(msg.ts)} SEGMENT ALERT: ${msg.data.segment}/${msg.data.zone} - ${msg.data.message}`, ...prev].slice(0, 10));
+          }
+          if (msg.event === "segment_alerts") {
+            setSegmentData(prev => ({ ...prev, alerts: msg.data || [] }));
+          }
+          
+          if (msg.event === "telemetry_update") {
+            const data = msg.data;
+            
+            // Update segment data if included
+            if (data.segments) {
+              setSegmentData(prev => ({
+                ...prev,
+                health: data.segments.segmentHealth || [],
+                summary: data.segments.segmentSummary || [],
+                metrics: data.segments.segmentMetrics || {}
+              }));
+            }
+            
+            // Map network traffic to Connections with segment info
+            const realConns: Connection[] = (data.network || []).map((c: any, i: number) => {
+              const localParts = (c.local || '').split(':');
+              const port = parseInt(localParts[localParts.length - 1]) || 0;
+              let risk = 0;
+              const state = c.state || '';
+              
+              if (state === 'LISTENING') risk = 30;
+              else if (state === 'ESTABLISHED') risk = 10;
+              
+              const suspiciousPorts: Record<number, number> = {
+                21: 20, 22: 10, 23: 30, 25: 25, 53: 15, 80: 10, 135: 30, 139: 30,
+                443: 10, 445: 40, 1433: 35, 1521: 35, 3306: 35, 3389: 40, 5432: 30,
+                5900: 25, 5901: 25, 6379: 30, 8080: 20, 8443: 15, 9200: 25, 9300: 25
+              };
+              
+              if (suspiciousPorts[port]) risk = Math.max(risk, suspiciousPorts[port]);
+              if (state === 'LISTENING' && suspiciousPorts[port] && suspiciousPorts[port] >= 30) risk = Math.min(100, risk + 20);
+              
+              // Infer zone from port
+              let zone = 'System';
+              if ([443,80,8080,8443].includes(port)) zone = 'DMZ';
+              else if ([22,3389].includes(port)) zone = 'Remote Access';
+              else if ([445,139].includes(port)) zone = 'Internal';
+              else if ([3306,5432,1433,1521].includes(port)) zone = 'Data Core';
+              
+              return {
+                id: `real-conn-${i}`,
+                srcIp: c.local || 'Unknown',
+                dstIp: c.foreign || 'Unknown',
+                dstHost: c.foreign || 'Unknown',
+                protocol: "SYSTEM",
+                port: port,
+                pps: state === 'ESTABLISHED' ? 25 : state === 'LISTENING' ? 0 : 5,
+                latency: state === 'ESTABLISHED' ? 20 : 0,
+                risk: risk,
+                status: state === 'LISTENING' ? 'observing' : state === 'ESTABLISHED' ? 'active' : 'observing',
+                zone: zone,
+                geo: 'Local',
+                bytes: state === 'ESTABLISHED' ? 250000 : 0,
+                lastSeen: Date.now(),
+              };
+            });
+            setConnections(realConns);
 
-           // Update traffic timeline
-           const ts = Date.now();
-           const threatCount = realAlerts.filter(a => a.malicious).length;
-           const blockedCount = realAlerts.filter(a => a.killed || a.status === "auto-contained").length;
-           const activeConns = realConns.filter(c => c.status === 'active' || c.status === 'observing').length;
-           const totalConns = realConns.length;
-           const trafficPercentage = totalConns > 0 ? Math.min(100, Math.round((activeConns / totalConns) * 100)) : 0;
-           
-           const newPoint: TrafficPoint = {
-             ts,
-             t: timelineLabel(ts),
-             traffic: trafficPercentage,
-             threats: threatCount,
-             blocked: blockedCount,
-             analysis: data.analysis?.summary || 'Analyzing system telemetry...',
-           };
-           setTraffic(prev => [...prev.slice(-59), newPoint]);
-         }
-       } catch {
-         // Ignore malformed messages from stale sockets.
-       }
-     };
-     return () => ws.close();
-   }, [isAuthenticated]);
+            // Map logs to Alerts with segment info
+            const realAlerts: Alert[] = (data.logs || []).map((l: any, i: number) => ({
+              id: `real-alert-${i}`,
+              ts: new Date(l.Date || Date.now()).getTime(),
+              srcIp: l.Computer || 'Local',
+              dstHost: l.ProviderName || l.Source || 'System',
+              protocol: 'SYSTEM',
+              category: 'Threat Detection',
+              severity: l.Suspicious ? 'high' : 'low',
+              mitreId: l.Mitre?.id || 'N/A',
+              mitreName: l.Mitre?.name || 'System Event',
+              signature: l.Description || l.description || l.Message || 'No description',
+              score: l.Suspicious ? 80 : 10,
+              action: 'Logged',
+              status: 'investigating',
+              malicious: !!l.Suspicious,
+              zone: l.Zone || l.zone || 'System',
+              killed: false,
+            }));
+            setAlerts(realAlerts);
+
+            // Update traffic timeline
+            const ts = Date.now();
+            const threatCount = realAlerts.filter(a => a.malicious).length;
+            const blockedCount = realAlerts.filter(a => a.killed || a.status === "auto-contained").length;
+            const activeConns = realConns.filter(c => c.status === 'active' || c.status === 'observing').length;
+            const totalConns = realConns.length;
+            const trafficPercentage = totalConns > 0 ? Math.min(100, Math.round((activeConns / totalConns) * 100)) : 0;
+            
+            const newPoint: TrafficPoint = {
+              ts,
+              t: timelineLabel(ts),
+              traffic: trafficPercentage,
+              threats: threatCount,
+              blocked: blockedCount,
+              analysis: data.analysis?.summary || 'Analyzing system telemetry...',
+            };
+            setTraffic(prev => [...prev.slice(-119), newPoint]); // Keep 10 minutes of history
+          }
+        } catch {
+          // Ignore malformed messages
+        }
+      };
+    };
+    
+    connect();
+    
+    return () => {
+      isActive = false;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (wsRef.current) wsRef.current.close();
+    };
+  }, [isAuthenticated]);
 
   /* Clock */
   useEffect(() => {
@@ -503,6 +576,24 @@ export default function App() {
             {/* Status indicators */}
             <div className="hidden shrink-0 items-center gap-3 2xl:flex">
               <div className="flex items-center gap-4 border-l border-white/10 pl-4">
+                <div className={`flex items-center gap-2 rounded-full border px-3 py-1.5 backdrop-blur-md ${
+                  wsStatus === 'connected' ? 'border-emerald-400/30 bg-emerald-500/10' : 
+                  wsStatus === 'connecting' ? 'border-amber-400/30 bg-amber-500/10' : 
+                  'border-rose-400/30 bg-rose-500/10'
+                }`}>
+                  <div className={`h-2 w-2 rounded-full animate-pulse ${
+                    wsStatus === 'connected' ? 'bg-emerald-400' : 
+                    wsStatus === 'connecting' ? 'bg-amber-400' : 
+                    'bg-rose-400'
+                  }`} />
+                  <span className={`text-xs font-semibold ${
+                    wsStatus === 'connected' ? 'text-emerald-200' : 
+                    wsStatus === 'connecting' ? 'text-amber-200' : 
+                    'text-rose-200'
+                  }`}>
+                    {wsStatus === 'connected' ? 'LIVE' : wsStatus === 'connecting' ? 'CONNECTING' : 'OFFLINE'}
+                  </span>
+                </div>
                 <div className="flex items-center gap-2 rounded-full border border-sky-400/30 bg-sky-500/10 px-3 py-1.5 backdrop-blur-md">
                   <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
                   <span className="text-xs font-semibold text-sky-200">LOCAL TELEMETRY</span>
@@ -511,6 +602,12 @@ export default function App() {
                   <AlertTriangle className="h-3.5 w-3.5 text-rose-400" />
                   <span className="text-xs font-semibold text-rose-200">{criticalCnt} Critical</span>
                 </div>
+                {segmentData.alerts.length > 0 && (
+                  <div className="flex items-center gap-2 rounded-full border border-orange-500/20 bg-orange-500/10 px-3 py-1.5">
+                    <Activity className="h-3.5 w-3.5 text-orange-400" />
+                    <span className="text-xs font-semibold text-orange-200">{segmentData.alerts.length} Seg Alerts</span>
+                  </div>
+                )}
                 <div className="text-right">
                   <p className="font-mono text-xs font-bold text-slate-300">{clock(now)}</p>
                   <p className="font-mono text-[10px] text-slate-500">LOCAL</p>
@@ -860,6 +957,51 @@ export default function App() {
                        <p className="text-lg font-bold text-white">{activeCnt}</p>
                      </div>
                    </div>
+                 </div>
+               </Panel>
+
+               {/* Segment Health Monitoring */}
+               <Panel title="Segment Health Monitor" sub={`${Object.keys(segmentData.metrics).length} active segments monitored`}>
+                 <div className="space-y-3 max-h-60 overflow-y-auto">
+                   {segmentData.health.length === 0 ? (
+                     <p className="text-sm text-slate-500 text-center py-4">Collecting segment data...</p>
+                   ) : (
+                     segmentData.health.map((seg: any) => (
+                       <div key={`${seg.segment}-${seg.zone}`} className="rounded-xl border border-white/10 bg-black/20 p-3">
+                         <div className="flex items-center justify-between mb-2">
+                           <div className="flex items-center gap-2">
+                             <div className={`h-2 w-2 rounded-full ${seg.status === 'healthy' ? 'bg-emerald-400' : seg.status === 'warning' ? 'bg-amber-400' : 'bg-rose-400'} animate-pulse`} />
+                             <span className="text-xs font-semibold text-slate-200 capitalize">{seg.segment}</span>
+                             <span className="text-[10px] text-slate-500">({seg.zone})</span>
+                           </div>
+                           <Badge cls={seg.status === 'healthy' ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200' : seg.status === 'warning' ? 'border-amber-400/30 bg-amber-400/10 text-amber-200' : 'border-rose-400/30 bg-rose-400/10 text-rose-200'}>
+                             {seg.health_score}%
+                           </Badge>
+                         </div>
+                         <div className="flex items-center gap-4 text-[10px] text-slate-400">
+                           <span>Conns: {seg.active_connections}</span>
+                           <span>Listening: {seg.listening_ports}</span>
+                           {seg.high_risk_conns > 0 && <span className="text-rose-400">High Risk: {seg.high_risk_conns}</span>}
+                         </div>
+                       </div>
+                     ))
+                   )}
+                   {segmentData.summary.length > 0 && (
+                     <div className="mt-3 pt-3 border-t border-white/10">
+                       <p className="text-[10px] uppercase tracking-widest text-slate-500 mb-2">Recent Log Activity</p>
+                       {segmentData.summary.slice(0, 3).map((s: any, i: number) => (
+                         <div key={i} className="flex items-center justify-between text-xs py-1">
+                           <span className="text-slate-300 capitalize">{s.segment}</span>
+                           <div className="flex items-center gap-2">
+                             <span className="text-slate-500">{s.total_logs} logs</span>
+                             {s.suspicious_count > 0 && (
+                               <span className="text-rose-400 font-semibold">{s.suspicious_count} suspicious</span>
+                             )}
+                           </div>
+                         </div>
+                       ))}
+                     </div>
+                   )}
                  </div>
                </Panel>
             </div>
