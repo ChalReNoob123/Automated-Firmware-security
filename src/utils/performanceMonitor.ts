@@ -30,6 +30,9 @@ class PerformanceMonitor {
   private frameCount = 0;
   private lastFrameTime = performance.now();
   private fps = 60;
+  private isRunning = false;
+  private rAFId: number | null = null;
+  private memoryTimerId: ReturnType<typeof setTimeout> | null = null;
   
   // Singleton pattern
   private static instance: PerformanceMonitor;
@@ -41,11 +44,26 @@ class PerformanceMonitor {
   }
 
   public startMonitoring(): void {
+    if (this.isRunning) return; // Guard against double-start
+    this.isRunning = true;
     this.measureFPS();
     this.measureMemory();
   }
 
+  public stopMonitoring(): void {
+    this.isRunning = false;
+    if (this.rAFId !== null) {
+      cancelAnimationFrame(this.rAFId);
+      this.rAFId = null;
+    }
+    if (this.memoryTimerId !== null) {
+      clearTimeout(this.memoryTimerId);
+      this.memoryTimerId = null;
+    }
+  }
+
   private measureFPS(): void {
+    if (!this.isRunning) return;
     const now = performance.now();
     this.frameCount++;
     
@@ -55,10 +73,11 @@ class PerformanceMonitor {
       this.lastFrameTime = now;
     }
     
-    requestAnimationFrame(() => this.measureFPS());
+    this.rAFId = requestAnimationFrame(() => this.measureFPS());
   }
 
   private measureMemory(): void {
+    if (!this.isRunning) return;
     if ("memory" in performance) {
       const mem = (performance as any).memory;
       if (mem) {
@@ -76,7 +95,7 @@ class PerformanceMonitor {
       }
     }
     
-    setTimeout(() => this.measureMemory(), 5000);
+    this.memoryTimerId = setTimeout(() => this.measureMemory(), 5000);
   }
 
   public recordMetric(metric: PerformanceMetrics): void {
@@ -113,7 +132,7 @@ class PerformanceMonitor {
     
     return {
       status,
-      uptime: Date.now() - performance.timing?.navigationStart || 0,
+      uptime: Date.now() - (performance.timeOrigin || 0),
       lastRestart: 0,
       errors: 0,
       warnings: status === "degraded" ? 1 : 0,

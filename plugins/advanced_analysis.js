@@ -1,18 +1,18 @@
-export const name = "Advanced Enterprise Heuristics & Geo-Intel Plugin";
+exports.name = "Advanced Enterprise Heuristics & Geo-Intel Plugin";
 
-export async function init({ db, logger }) {
+exports.init = async function({ db, logger }) {
   logger.info("Advanced Enterprise Plugin initialized. Connecting to enterprise intelligence feeds...");
   // Simulated initialization of API connections
-}
+};
 
-export function analyze(analysis, logsArray, networkArray, files) {
+exports.analyze = function(analysis, logsArray, networkArray, files) {
   let foundAdvancedThreat = false;
 
   for (const log of logsArray) {
     const msg = (log.Message || '').toLowerCase();
     
     // Advanced Windows/Linux credential dumping signatures
-    if (msg.includes('mimikatz') || msg.includes('lsass.exe') && msg.includes('dump')) {
+    if (msg.includes('mimikatz') || (msg.includes('lsass.exe') && msg.includes('dump'))) {
       analysis.score -= 50;
       analysis.threats.push("CRITICAL: Credential dumping signature (Mimikatz/LSASS) detected by Advanced Plugin.");
       if (!analysis.mitreMappings.includes("T1003 - OS Credential Dumping")) {
@@ -58,4 +58,4 @@ export function analyze(analysis, logsArray, networkArray, files) {
   if (foundAdvancedThreat) {
     analysis.summary = `[ENTERPRISE PLUGIN ALERT] Advanced threat patterns detected. Risk score adjusted.`;
   }
-}
+};

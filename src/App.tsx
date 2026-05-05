@@ -21,14 +21,17 @@ import AdvancedVirtualBox from "./components/AdvancedVirtualBox";
 import AIAgent from "./components/AIAgent";
 import LoginScreen from "./components/LoginScreen";
 import OSSecurityPanel from "./components/OSSecurityPanel";
-import { Token, WS_BASE, logout, refreshAccessToken, apiGet } from "./utils/api";
+import SystemScanner from "./components/SystemScanner";
+import GlobalAnalytics from "./components/GlobalAnalytics";
+import { Token, WS_BASE, logout, refreshAccessToken, apiGet, fetchMe, type User as ApiUser } from "./utils/api";
 
 
 /* ── types ── */
+type User = ApiUser;
 type Severity = "low" | "medium" | "high" | "critical";
 type Protocol = "HTTPS" | "SSH" | "RDP" | "DNS" | "TLS" | "MQTT" | "SMB" | "FTP" | "LDAP" | "SYSTEM";
 type ConnStatus = "active" | "observing" | "dropped" | "quarantined" | "blocked";
-type TabId = "dashboard" | "mitre" | "nist" | "virustotal" | "winlogs" | "intel" | "sandbox" | "vulnpentest" | "crossplat" | "advancedvb" | "ai_agent" | "ossec";
+type TabId = "dashboard" | "analytics" | "mitre" | "nist" | "virustotal" | "winlogs" | "intel" | "sandbox" | "vulnpentest" | "crossplat" | "advancedvb" | "ai_agent" | "ossec" | "scanner";
 
 type Connection = {
   id: string;
@@ -127,6 +130,20 @@ function Badge({ children, cls }: { children: React.ReactNode; cls: string }) {
   return <span className={`rounded-full border px-2.5 py-1 text-xs font-medium uppercase tracking-wide ${cls}`}>{children}</span>;
 }
 
+function PermissionBadge({ label, enabled, value, icon }: { label: string; enabled: boolean; value?: string; icon?: React.ReactNode }) {
+  return (
+    <div className={`rounded-lg border px-2 py-1.5 flex items-center gap-2 ${enabled ? 'border-emerald-400/30 bg-emerald-500/10' : 'border-rose-400/30 bg-rose-500/10'}`}>
+      {icon && <span className={enabled ? 'text-emerald-400' : 'text-rose-400'}>{icon}</span>}
+      <div className="flex-1 min-w-0">
+        <span className="text-[10px] text-slate-400 block truncate">{label}</span>
+        <span className={`text-xs font-semibold block truncate ${enabled ? 'text-emerald-300' : 'text-rose-300'}`}>
+          {value || (enabled ? 'Yes' : 'No')}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function Panel({ title, sub, action, children, className = "" }: {
   title: string; sub?: string; action?: React.ReactNode; children: React.ReactNode; className?: string;
 }) {
@@ -183,8 +200,10 @@ function StatCard({ label, value, sub, tone, icon }: {
 
 const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
   { id: "dashboard",   label: "SOC Dashboard",      icon: <Activity className="h-4 w-4" /> },
+  { id: "analytics",   label: "Global Analytics",   icon: <Activity className="h-4 w-4 text-sky-400" /> },
   { id: "ossec",       label: "OS Security",         icon: <Monitor className="h-4 w-4 text-sky-400" /> },
   { id: "ai_agent",   label: "AI Analyst",           icon: <Cpu className="h-4 w-4 text-purple-400" /> },
+  { id: "winlogs",    label: "Live Event Logs",      icon: <FileText className="h-4 w-4 text-amber-400" /> },
   { id: "sandbox",    label: "Malware Sandbox",      icon: <Server className="h-4 w-4" /> },
   { id: "crossplat",  label: "Cross-Platform FIM",  icon: <Activity className="h-4 w-4" /> },
   { id: "vulnpentest", label: "Vuln & Pentest",      icon: <Flame className="h-4 w-4" /> },
@@ -192,8 +211,8 @@ const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
   { id: "mitre",      label: "MITRE ATT&CK",         icon: <Shield className="h-4 w-4" /> },
   { id: "nist",       label: "NIST CSF 2.0",         icon: <CheckCircle className="h-4 w-4" /> },
   { id: "virustotal", label: "VirusTotal",           icon: <Globe className="h-4 w-4" /> },
-  { id: "winlogs",    label: "Windows Logs",         icon: <FileText className="h-4 w-4" /> },
   { id: "intel",      label: "Threat Intel",         icon: <Cpu className="h-4 w-4" /> },
+  { id: "scanner",    label: "System Scanner",       icon: <HardDrive className="h-4 w-4 text-indigo-400" /> },
 ];
 
 /* ── MAIN ── */
@@ -202,6 +221,7 @@ export default function App() {
   const [tab, setTab] = useState<TabId>("dashboard");
   const [authReady, setAuthReady] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(() => Token.isLoggedIn());
+  const [user, setUser] = useState<User | null>(() => Token.getUser());
   const [connections, setConnections] = useState<Connection[]>(INIT_CONNS);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [traffic, setTraffic] = useState<TrafficPoint[]>(INIT_TRAFFIC);
@@ -238,16 +258,22 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      // 1. Try recovery from memory/localstorage first
       if (Token.isLoggedIn()) {
-        if (!cancelled) {
+        const u = await fetchMe();
+        if (u && !cancelled) {
+          setUser(u);
           setIsAuthenticated(true);
           setAuthReady(true);
+          return;
         }
-        return;
       }
+      
+      // 2. Try recovery from refresh cookie
       const refreshed = await refreshAccessToken();
       if (!cancelled) {
         setIsAuthenticated(refreshed);
+        setUser(Token.getUser());
         setAuthReady(true);
       }
     })();
@@ -261,11 +287,35 @@ export default function App() {
     summary: any[];
     metrics: Record<string, any>;
     alerts: any[];
-  }>({ segments: [], health: [], summary: [], metrics: {}, alerts: [] });
+    advancedMonitoring: any;
+  }>({ segments: [], health: [], summary: [], metrics: {}, alerts: [], advancedMonitoring: null });
+  const [permissions, setPermissions] = useState<{
+    isAdmin: boolean;
+    isElevated: boolean;
+    canAccessSecurityLog: boolean;
+    canAccessProcessMemory: boolean;
+    canMonitorUSB: boolean;
+    platform: string;
+    recommendations: any[];
+  } | null>(null);
   const [wsStatus, setWsStatus] = useState<'connecting' | 'connected' | 'disconnected'>('disconnected');
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<number>(1000);
   const maxReconnectTimeout = 30000;
+
+  // Fetch initial permissions
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const fetchPermissions = async () => {
+      try {
+        const perms: any = await apiGet('/api/system/permissions');
+        setPermissions(perms);
+      } catch (e) { /* silent fail */ }
+    };
+    fetchPermissions();
+    const interval = setInterval(fetchPermissions, 30000);
+    return () => clearInterval(interval);
+  }, [isAuthenticated]);
 
   useEffect(() => {
     if (!isAuthenticated || !Token.getAccess()) return;
@@ -317,6 +367,10 @@ export default function App() {
             setSegmentData(prev => ({ ...prev, alerts: msg.data || [] }));
           }
           
+          if (msg.event === "permission_status") {
+            setPermissions(msg.data);
+          }
+          
           if (msg.event === "telemetry_update") {
             const data = msg.data;
             
@@ -326,7 +380,8 @@ export default function App() {
                 ...prev,
                 health: data.segments.segmentHealth || [],
                 summary: data.segments.segmentSummary || [],
-                metrics: data.segments.segmentMetrics || {}
+                metrics: data.segments.segmentMetrics || {},
+                advancedMonitoring: data.segments.advancedMonitoring || null
               }));
             }
             
@@ -527,9 +582,16 @@ export default function App() {
 
   if (!isAuthenticated) {
     return (
-      <LoginScreen onLoginSuccess={() => setIsAuthenticated(true)} />
+      <LoginScreen onLoginSuccess={() => {
+        setIsAuthenticated(true);
+        setUser(Token.getUser());
+        setTab("dashboard"); // Ensure we start at dashboard
+      }} />
     );
   }
+
+  // If authenticated, we are here.
+  // The LoginScreen is not rendered.
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-[#020617] text-slate-100 font-sans">
@@ -612,6 +674,17 @@ export default function App() {
                   <p className="font-mono text-xs font-bold text-slate-300">{clock(now)}</p>
                   <p className="font-mono text-[10px] text-slate-500">LOCAL</p>
                 </div>
+                {user && (
+                  <div className="flex items-center gap-3 border-l border-white/10 pl-4">
+                    <div className="text-right hidden sm:block">
+                      <p className="text-xs font-bold text-white leading-tight">{user.username}</p>
+                      <p className="text-[10px] text-slate-500 uppercase tracking-wider leading-tight">{user.role}</p>
+                    </div>
+                    <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-xs font-bold text-white shadow-lg shadow-cyan-500/20">
+                      {user.username.slice(0, 2).toUpperCase()}
+                    </div>
+                  </div>
+                )}
                 <button
                   onClick={async () => {
                     await logout();
@@ -960,47 +1033,153 @@ export default function App() {
                  </div>
                </Panel>
 
-               {/* Segment Health Monitoring */}
-               <Panel title="Segment Health Monitor" sub={`${Object.keys(segmentData.metrics).length} active segments monitored`}>
-                 <div className="space-y-3 max-h-60 overflow-y-auto">
-                   {segmentData.health.length === 0 ? (
+               {/* System Permissions Panel */}
+               <Panel title="System Permissions" sub={permissions ? `${permissions.isAdmin ? 'Admin' : 'Standard'} access` : 'Detecting...'}>
+                 <div className="space-y-3">
+                   {!permissions ? (
+                     <p className="text-sm text-slate-500 text-center py-4">Detecting permissions...</p>
+                   ) : (
+                     <>
+                       <div className={`rounded-xl border p-3 ${permissions.isAdmin ? 'border-emerald-400/30 bg-emerald-500/10' : 'border-amber-400/30 bg-amber-500/10'}`}>
+                         <div className="flex items-center gap-2 mb-2">
+                           <Shield className={`h-4 w-4 ${permissions.isAdmin ? 'text-emerald-400' : 'text-amber-400'}`} />
+                           <span className="text-xs font-semibold text-slate-200">
+                             {permissions.isAdmin ? 'Administrator Access' : 'Standard User'}
+                           </span>
+                         </div>
+                         <p className="text-[10px] text-slate-400">
+                           {permissions.isAdmin 
+                             ? 'Full system monitoring enabled' 
+                             : 'Limited monitoring - Security log access restricted'}
+                         </p>
+                       </div>
+                       
+                       {/* Permission Status Grid */}
+                       <div className="grid grid-cols-2 gap-2">
+                         <PermissionBadge 
+                           label="Security Log" 
+                           enabled={permissions.canAccessSecurityLog}
+                           icon={<FileText className="h-3 w-3" />}
+                         />
+                         <PermissionBadge 
+                           label="Process Memory" 
+                           enabled={permissions.canAccessProcessMemory}
+                           icon={<Cpu className="h-3 w-3" />}
+                         />
+                         <PermissionBadge 
+                           label="USB Monitor" 
+                           enabled={permissions.canMonitorUSB}
+                           icon={<HardDrive className="h-3 w-3" />}
+                         />
+                         <PermissionBadge 
+                           label="Platform" 
+                           enabled={true}
+                           value={permissions.platform}
+                           icon={<Monitor className="h-3 w-3" />}
+                         />
+                       </div>
+                       
+                       {/* Recommendations */}
+                       {permissions.recommendations?.length > 0 && (
+                         <div className="mt-3 pt-3 border-t border-white/10">
+                           <p className="text-[10px] uppercase tracking-widest text-slate-500 mb-2">Recommendations</p>
+                           {permissions.recommendations.slice(0, 2).map((rec: any, i: number) => (
+                             <div key={i} className={`text-xs py-1 ${rec.priority === 'high' ? 'text-rose-400' : 'text-amber-400'}`}>
+                               • {rec.message}
+                             </div>
+                           ))}
+                         </div>
+                       )}
+                     </>
+                   )}
+                 </div>
+               </Panel>
+
+               {/* Segment Health Monitoring - 6 Core Segments */}
+               <Panel title="6-Core Segment Monitor" sub="Identity, Network, System, Endpoints, Apps, Data">
+                 <div className="space-y-3 max-h-72 overflow-y-auto">
+                   {Object.keys(segmentData.metrics).length === 0 ? (
                      <p className="text-sm text-slate-500 text-center py-4">Collecting segment data...</p>
                    ) : (
-                     segmentData.health.map((seg: any) => (
-                       <div key={`${seg.segment}-${seg.zone}`} className="rounded-xl border border-white/10 bg-black/20 p-3">
-                         <div className="flex items-center justify-between mb-2">
-                           <div className="flex items-center gap-2">
-                             <div className={`h-2 w-2 rounded-full ${seg.status === 'healthy' ? 'bg-emerald-400' : seg.status === 'warning' ? 'bg-amber-400' : 'bg-rose-400'} animate-pulse`} />
-                             <span className="text-xs font-semibold text-slate-200 capitalize">{seg.segment}</span>
-                             <span className="text-[10px] text-slate-500">({seg.zone})</span>
+                     <>
+                       {/* 6 Core Segments */}
+                       {['identity', 'network', 'system', 'endpoints', 'applications', 'data'].map((segName) => {
+                         const metrics = segmentData.metrics[segName] || {};
+                         const hasData = metrics.connections > 0 || metrics.authEvents > 0 || metrics.totalProcesses > 0;
+                         const status = metrics.suspiciousProcesses > 0 ? 'warning' : metrics.highRiskProcesses > 0 ? 'critical' : hasData ? 'healthy' : 'idle';
+                         
+                         return (
+                           <div key={segName} className="rounded-xl border border-white/10 bg-black/20 p-3">
+                             <div className="flex items-center justify-between mb-2">
+                               <div className="flex items-center gap-2">
+                                 <div className={`h-2 w-2 rounded-full ${
+                                   status === 'healthy' ? 'bg-emerald-400' : 
+                                   status === 'warning' ? 'bg-amber-400' : 
+                                   status === 'critical' ? 'bg-rose-400' : 'bg-slate-600'
+                                 } ${hasData ? 'animate-pulse' : ''}`} />
+                                 <span className="text-xs font-semibold text-slate-200 capitalize">{segName}</span>
+                               </div>
+                               {metrics.risk > 0 && (
+                                 <span className="text-[10px] text-rose-400">Risk: {metrics.risk}</span>
+                               )}
+                             </div>
+                             
+                             {/* Segment-specific metrics */}
+                             <div className="grid grid-cols-2 gap-2 text-[10px]">
+                               {segName === 'identity' && (
+                                 <>
+                                   <span className="text-slate-400">Auth: {metrics.authEvents || 0}</span>
+                                   <span className={metrics.failedLogons > 0 ? 'text-rose-400' : 'text-slate-400'}>
+                                     Failed: {metrics.failedLogons || 0}
+                                   </span>
+                                 </>
+                               )}
+                               {segName === 'system' && (
+                                 <>
+                                   <span className="text-slate-400">Procs: {metrics.totalProcesses || 0}</span>
+                                   {metrics.suspiciousProcesses > 0 && (
+                                     <span className="text-rose-400">Susp: {metrics.suspiciousProcesses}</span>
+                                   )}
+                                 </>
+                               )}
+                               {(segName === 'network' || segName === 'endpoints' || segName === 'applications' || segName === 'data') && (
+                                 <>
+                                   <span className="text-slate-400">Conns: {metrics.connections || 0}</span>
+                                   <span className="text-slate-400">Active: {metrics.active || 0}</span>
+                                 </>
+                               )}
+                             </div>
                            </div>
-                           <Badge cls={seg.status === 'healthy' ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200' : seg.status === 'warning' ? 'border-amber-400/30 bg-amber-400/10 text-amber-200' : 'border-rose-400/30 bg-rose-400/10 text-rose-200'}>
-                             {seg.health_score}%
-                           </Badge>
-                         </div>
-                         <div className="flex items-center gap-4 text-[10px] text-slate-400">
-                           <span>Conns: {seg.active_connections}</span>
-                           <span>Listening: {seg.listening_ports}</span>
-                           {seg.high_risk_conns > 0 && <span className="text-rose-400">High Risk: {seg.high_risk_conns}</span>}
-                         </div>
-                       </div>
-                     ))
-                   )}
-                   {segmentData.summary.length > 0 && (
-                     <div className="mt-3 pt-3 border-t border-white/10">
-                       <p className="text-[10px] uppercase tracking-widest text-slate-500 mb-2">Recent Log Activity</p>
-                       {segmentData.summary.slice(0, 3).map((s: any, i: number) => (
-                         <div key={i} className="flex items-center justify-between text-xs py-1">
-                           <span className="text-slate-300 capitalize">{s.segment}</span>
-                           <div className="flex items-center gap-2">
-                             <span className="text-slate-500">{s.total_logs} logs</span>
-                             {s.suspicious_count > 0 && (
-                               <span className="text-rose-400 font-semibold">{s.suspicious_count} suspicious</span>
+                         );
+                       })}
+                       
+                       {/* Advanced Monitoring Summary */}
+                       {segmentData.advancedMonitoring && (
+                         <div className="mt-3 pt-3 border-t border-white/10">
+                           <p className="text-[10px] uppercase tracking-widest text-slate-500 mb-2">Advanced Monitoring</p>
+                           <div className="space-y-1 text-[10px]">
+                             {segmentData.advancedMonitoring.defender && (
+                               <div className="flex items-center gap-2">
+                                 <Shield className={`h-3 w-3 ${segmentData.advancedMonitoring.defender.Enabled ? 'text-emerald-400' : 'text-rose-400'}`} />
+                                 <span className={segmentData.advancedMonitoring.defender.Enabled ? 'text-emerald-300' : 'text-rose-300'}>
+                                   Defender: {segmentData.advancedMonitoring.defender.Enabled ? 'Active' : 'Disabled'}
+                                 </span>
+                               </div>
+                             )}
+                             {segmentData.advancedMonitoring.fimChanges?.length > 0 && (
+                               <div className="text-rose-400">
+                                 ⚠️ {segmentData.advancedMonitoring.fimChanges.length} file integrity violations
+                               </div>
+                             )}
+                             {segmentData.advancedMonitoring.usbDevices?.connected?.length > 0 && (
+                               <div className="text-slate-400">
+                                 USB: {segmentData.advancedMonitoring.usbDevices.connected.length} devices
+                               </div>
                              )}
                            </div>
                          </div>
-                       ))}
-                     </div>
+                       )}
+                     </>
                    )}
                  </div>
                </Panel>
@@ -1249,6 +1428,12 @@ export default function App() {
           </div>
         )}
 
+        {tab === "analytics" && (
+          <div className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur-xl">
+            <GlobalAnalytics />
+          </div>
+        )}
+
         {tab === "ossec" && (
           <div className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur-xl">
             <div className="mb-6 flex items-center gap-3">
@@ -1321,6 +1506,12 @@ export default function App() {
         {tab === "intel" && (
           <div className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur-xl">
             <ThreatIntelligence />
+          </div>
+        )}
+
+        {tab === "scanner" && (
+          <div className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur-xl">
+            <SystemScanner />
           </div>
         )}
         </motion.main>

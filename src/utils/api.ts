@@ -24,15 +24,48 @@ const SafeStorage = {
   }
 };
 
+type ApiCacheEntry<T = unknown> = {
+  value: T;
+  expiresAt: number;
+};
+
+const API_GET_CACHE_MS = Number(import.meta.env.VITE_API_GET_CACHE_MS || 2000);
+const _apiGetCache = new Map<string, ApiCacheEntry>();
+
+export function clearApiCache() {
+  _apiGetCache.clear();
+}
+
+function getApiCacheKey(path: string) {
+  return `${API_BASE}${path}`;
+}
+
 /* ── token helpers ──────────────────────────────────────────────── */
 let _accessToken = '';
+let _user: User | null = null;
+
+export type User = {
+  id: number;
+  username: string;
+  email: string;
+  role: string;
+  lastLogin?: string;
+  createdAt?: string;
+};
 
 export const Token = {
   getAccess:   ()    => _accessToken,
-  setAccess:   (t: string) => { _accessToken = t; },
+  getUser:     ()    => _user,
+  setAccess:   (t: string) => { 
+    _accessToken = t;
+    if (t) SafeStorage.set('sg_auth_token', t);
+  },
+  setUser:     (u: User | null) => { _user = u; },
   clearAll:    ()    => {
     _accessToken = '';
+    _user = null;
     SafeStorage.remove('sg_auth_token');
+    clearApiCache();
   },
   isLoggedIn:  ()    => !!_accessToken,
 };
@@ -44,6 +77,20 @@ export function authHeaders(): HeadersInit {
     'Content-Type': 'application/json',
     ...(t ? { Authorization: `Bearer ${t}` } : {}),
   };
+}
+
+export async function fetchMe(): Promise<User | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/auth/me`, {
+      headers: authHeaders()
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    Token.setUser(data.user);
+    return data.user;
+  } catch {
+    return null;
+  }
 }
 
 /* ── token refresh ──────────────────────────────────────────────── */
@@ -62,6 +109,10 @@ export async function refreshAccessToken(): Promise<boolean> {
       if (!res.ok) { Token.clearAll(); return false; }
       const { accessToken } = await res.json();
       Token.setAccess(accessToken);
+      
+      // Also fetch user info after refresh
+      await fetchMe();
+      
       return true;
     } catch {
       Token.clearAll();
@@ -85,10 +136,22 @@ async function apiFetch(url: string, init: RequestInit = {}): Promise<Response> 
   return res;
 }
 
-export async function apiGet<T>(path: string): Promise<T> {
+export async function apiGet<T>(path: string, options: { cacheMs?: number; force?: boolean } = {}): Promise<T> {
+  const ttl = options.cacheMs ?? API_GET_CACHE_MS;
+  const cacheKey = getApiCacheKey(path);
+  if (!options.force && ttl > 0) {
+    const cached = _apiGetCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) return cached.value as T;
+    if (cached) _apiGetCache.delete(cacheKey);
+  }
+
   const res = await apiFetch(`${API_BASE}${path}`);
   if (!res.ok) throw new Error(`GET ${path} → ${res.status}`);
-  return res.json();
+  const data = await res.json();
+  if (ttl > 0) {
+    _apiGetCache.set(cacheKey, { value: data, expiresAt: Date.now() + ttl });
+  }
+  return data;
 }
 
 export async function apiPost<T>(path: string, body: unknown): Promise<T> {
@@ -101,6 +164,7 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
     const err = await res.json().catch(() => ({ error: res.statusText }));
     throw new Error(err.error || `POST ${path} → ${res.status}`);
   }
+  clearApiCache();
   return res.json();
 }
 
@@ -115,6 +179,7 @@ export async function logout() {
     // Ignore errors on logout
   } finally {
     Token.clearAll();
+    clearApiCache();
     window.location.reload();
   }
 }

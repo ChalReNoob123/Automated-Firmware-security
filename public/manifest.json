@@ -1,0 +1,14 @@
+{
+  "name": "SentinelGrid SOC Monitor",
+  "short_name": "SentinelGrid",
+  "description": "Enterprise Security Operations Center — real-time threat monitoring, AI-powered analysis, and compliance management",
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#0b1120",
+  "background_color": "#0b1120",
+  "orientation": "any",
+  "categories": ["security", "productivity", "utilities"],
+  "icons": [
+    { "src": "/favicon.ico", "sizes": "64x64", "type": "image/x-icon" }
+  ]
+}

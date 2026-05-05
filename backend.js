@@ -15,6 +15,12 @@ import pino from 'pino';
 import vm from 'vm';
 import * as tf from '@tensorflow/tfjs';
 import '@tensorflow/tfjs-backend-cpu';
+import { ScannerEngine } from './scanner/engine.js';
+import { GeminiService } from './services/geminiService.js';
+import { runMigrations } from './services/migrations.js';
+import { SecurityAuditLogger, DDoSProtection, validateRequest } from './services/securityMiddleware.js';
+import { SyncManager } from './services/syncService.js';
+import { AnalyticsEngine, SEGMENT_DEFS } from './services/analyticsEngine.js';
 
 dotenv.config();
 
@@ -62,6 +68,86 @@ const CSP_CONNECT_SRC = process.env.CSP_CONNECT_SRC ||
 
 const execAsync = promisify(exec);
 
+// In-process response cache for hot dashboard reads and threat-intel lookups.
+// Keep it bounded because this backend can run for long PM2 sessions.
+const CACHE_MAX_ITEMS = parseInt(process.env.CACHE_MAX_ITEMS || '250', 10);
+const CACHE_DEFAULT_TTL_MS = parseInt(process.env.CACHE_DEFAULT_TTL_MS || '3000', 10);
+const responseCache = new Map();
+const cacheStats = { hits: 0, misses: 0, sets: 0, evictions: 0, invalidations: 0 };
+
+function normalizeCacheParams(urlObj) {
+  const params = new URLSearchParams(urlObj.searchParams);
+  params.sort();
+  const value = params.toString();
+  return value ? `?${value}` : '';
+}
+
+function makeCacheKey(pathname, urlObj, scope = 'global') {
+  return `${scope}:${pathname}${normalizeCacheParams(urlObj)}`;
+}
+
+function getCachedValue(key) {
+  const entry = responseCache.get(key);
+  if (!entry) {
+    cacheStats.misses++;
+    return undefined;
+  }
+  if (entry.expiresAt <= Date.now()) {
+    responseCache.delete(key);
+    cacheStats.misses++;
+    return undefined;
+  }
+  responseCache.delete(key);
+  responseCache.set(key, entry);
+  cacheStats.hits++;
+  return entry.value;
+}
+
+function setCachedValue(key, value, ttlMs = CACHE_DEFAULT_TTL_MS, tags = []) {
+  if (ttlMs <= 0) return value;
+  while (responseCache.size >= CACHE_MAX_ITEMS) {
+    const oldest = responseCache.keys().next().value;
+    if (!oldest) break;
+    responseCache.delete(oldest);
+    cacheStats.evictions++;
+  }
+  responseCache.set(key, {
+    value,
+    tags: new Set(tags),
+    expiresAt: Date.now() + ttlMs,
+  });
+  cacheStats.sets++;
+  return value;
+}
+
+function invalidateCacheTags(tags) {
+  const wanted = new Set(Array.isArray(tags) ? tags : [tags]);
+  let removed = 0;
+  for (const [key, entry] of responseCache.entries()) {
+    for (const tag of entry.tags) {
+      if (wanted.has(tag)) {
+        responseCache.delete(key);
+        removed++;
+        break;
+      }
+    }
+  }
+  cacheStats.invalidations += removed;
+  return removed;
+}
+
+async function cachedJson(res, key, ttlMs, tags, producer) {
+  const cached = getCachedValue(key);
+  if (cached !== undefined) {
+    res.setHeader('X-App-Cache', 'HIT');
+    return json(res, 200, cached);
+  }
+  const body = await producer();
+  setCachedValue(key, body, ttlMs, tags);
+  res.setHeader('X-App-Cache', 'MISS');
+  return json(res, 200, body);
+}
+
 // ── Plugin System ────────────────────────────────────────────────
 const PLUGINS_DIR = path.join(process.cwd(), 'plugins');
 const activePlugins = [];
@@ -75,9 +161,24 @@ async function loadPlugins() {
         const pluginPath = path.join(PLUGINS_DIR, file);
         const code = fs.readFileSync(pluginPath, 'utf8');
         
+        // Read-only DB proxy: plugins can only query, never mutate
+        const pluginDb = {
+          prepare: (sql) => {
+            const normalised = sql.trim().toUpperCase();
+            if (!normalised.startsWith('SELECT')) {
+              throw new Error('Plugin DB access is read-only. Only SELECT queries are permitted.');
+            }
+            const stmt = db.prepare(sql);
+            return {
+              all: (...args) => stmt.all(...args),
+              get: (...args) => stmt.get(...args),
+            };
+          },
+        };
+        
         // Use Node.js vm module for Enterprise-grade sandboxing
         const sandbox = { 
-          db, logger, tf, console, 
+          db: pluginDb, logger, console, 
           Buffer, setTimeout, setInterval,
           process: { env: { NODE_ENV: process.env.NODE_ENV } },
           exports: {} 
@@ -88,7 +189,7 @@ async function loadPlugins() {
         script.runInContext(sandbox);
         
         const instance = sandbox.exports || sandbox;
-        if (instance.init) await instance.init({ db, logger });
+        if (instance.init) await instance.init({ db: pluginDb, logger });
         activePlugins.push({ name: instance.name || file, instance });
         logger.info(`Loaded plugin (sandboxed): ${instance.name || file}`);
       } catch (err) {
@@ -242,81 +343,52 @@ try { db.exec(`CREATE INDEX IF NOT EXISTS idx_logs_segment ON logs(segment)`); }
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_logs_zone ON logs(zone)`); } catch (e) {}
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_logs_suspicious ON logs(suspicious, date DESC)`); } catch (e) {}
 
-// Create new tables if they don't exist
-try {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS metrics_time_series (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      timestamp INTEGER NOT NULL,
-      segment TEXT DEFAULT 'global',
-      zone TEXT DEFAULT 'global',
-      metric_type TEXT NOT NULL,
-      value REAL NOT NULL,
-      metadata TEXT
-    );
-    CREATE INDEX IF NOT EXISTS idx_metrics_time ON metrics_time_series(timestamp DESC);
-    CREATE INDEX IF NOT EXISTS idx_metrics_segment ON metrics_time_series(segment, timestamp DESC);
-    CREATE INDEX IF NOT EXISTS idx_metrics_zone ON metrics_time_series(zone, timestamp DESC);
-  `);
-} catch (e) { logger.error(e, 'Error creating metrics_time_series table'); }
+// Tables already created above via CREATE TABLE IF NOT EXISTS — no duplicate blocks needed.
 
+// ── Scanner DB tables ──
 try {
   db.exec(`
-    CREATE TABLE IF NOT EXISTS segments (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT UNIQUE NOT NULL,
-      zone TEXT NOT NULL,
-      status TEXT DEFAULT 'active',
-      health_score INTEGER DEFAULT 100,
-      last_seen INTEGER DEFAULT 0,
-      config TEXT
+    CREATE TABLE IF NOT EXISTS scan_sessions (
+      id TEXT PRIMARY KEY, started_at INTEGER NOT NULL, completed_at INTEGER,
+      status TEXT DEFAULT 'running', config TEXT, total_files INTEGER DEFAULT 0,
+      scanned_files INTEGER DEFAULT 0, findings INTEGER DEFAULT 0,
+      risk_score REAL DEFAULT 0, summary TEXT
     );
+    CREATE TABLE IF NOT EXISTS scan_findings (
+      id TEXT PRIMARY KEY, session_id TEXT NOT NULL, file_path TEXT NOT NULL,
+      file_name TEXT NOT NULL, file_size INTEGER, file_modified INTEGER,
+      sha256 TEXT, entropy REAL, is_signed INTEGER DEFAULT 0,
+      signature_status TEXT, signer TEXT, has_ads INTEGER DEFAULT 0,
+      ads_streams TEXT, risk_score REAL DEFAULT 0, risk_factors TEXT,
+      mitre_techniques TEXT, directory_category TEXT, directory_criticality TEXT,
+      target_label TEXT, status TEXT DEFAULT 'clean', created_at INTEGER DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_findings_session ON scan_findings(session_id);
+    CREATE INDEX IF NOT EXISTS idx_findings_risk ON scan_findings(risk_score DESC);
+    CREATE INDEX IF NOT EXISTS idx_findings_status ON scan_findings(status);
   `);
-} catch (e) { logger.error(e, 'Error creating segments table'); }
+} catch (e) { logger.error(e, 'Error creating scanner tables'); }
 
+// ── Run database migrations ──
 try {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS connections (
-      id TEXT PRIMARY KEY,
-      src_ip TEXT,
-      dst_ip TEXT,
-      dst_host TEXT,
-      protocol TEXT,
-      port INTEGER,
-      state TEXT,
-      risk INTEGER DEFAULT 0,
-      segment TEXT DEFAULT 'unknown',
-      zone TEXT DEFAULT 'unknown',
-      first_seen INTEGER,
-      last_seen INTEGER,
-      bytes_in INTEGER DEFAULT 0,
-      bytes_out INTEGER DEFAULT 0
-    );
-    CREATE INDEX IF NOT EXISTS idx_connections_segment ON connections(segment);
-    CREATE INDEX IF NOT EXISTS idx_connections_zone ON connections(zone);
-    CREATE INDEX IF NOT EXISTS idx_connections_state ON connections(state);
-    CREATE INDEX IF NOT EXISTS idx_connections_last_seen ON connections(last_seen DESC);
-  `);
-} catch (e) { logger.error(e, 'Error creating connections table'); }
+  const migrationResult = runMigrations(db, logger);
+  logger.info(migrationResult, 'Database migrations complete');
+} catch (e) { logger.error(e, 'Migration error — continuing with existing schema'); }
 
-try {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS segment_alerts (
-      id TEXT PRIMARY KEY,
-      timestamp INTEGER NOT NULL,
-      segment TEXT NOT NULL,
-      zone TEXT NOT NULL,
-      severity TEXT NOT NULL,
-      category TEXT,
-      message TEXT,
-      mitre_id TEXT,
-      acknowledged INTEGER DEFAULT 0
-    );
-    CREATE INDEX IF NOT EXISTS idx_alerts_segment ON segment_alerts(segment, timestamp DESC);
-    CREATE INDEX IF NOT EXISTS idx_alerts_zone ON segment_alerts(zone, timestamp DESC);
-    CREATE INDEX IF NOT EXISTS idx_alerts_ack ON segment_alerts(acknowledged);
-  `);
-} catch (e) { logger.error(e, 'Error creating segment_alerts table'); }
+// ── Initialize security audit logger ──
+const auditLogger = new SecurityAuditLogger(db, logger);
+
+// ── Initialize DDoS protection ──
+const ddosProtection = new DDoSProtection({ maxRequests: 300, windowMs: 60000, blockDurationMs: 300000 });
+
+// ── Initialize Gemini AI service ──
+const geminiService = new GeminiService({ apiKey: process.env.GEMINI_API_KEY, logger });
+
+// ── Initialize Sync Manager ──
+const syncManager = new SyncManager(db, logger, (payload) => broadcast(payload.event, payload.data));
+
+// ── Initialize Analytics Engine ──
+const analyticsEngine = new AnalyticsEngine(db, logger);
 
 loadPlugins();
 
@@ -501,17 +573,8 @@ function backupDatabase() {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     const ts  = new Date().toISOString().replace(/[:.]/g, '-');
     const dst = path.join(dir, `soc_db_${ts}.sqlite`);
-    // Copy main database file
+    // After TRUNCATE checkpoint, the WAL is empty — only copy the main DB file
     fs.copyFileSync('./soc_database.sqlite', dst);
-    // Copy WAL and SHM files if they exist (for completeness)
-    const walFile = './soc_database.sqlite-wal';
-    const shmFile = './soc_database.sqlite-shm';
-    if (fs.existsSync(walFile)) {
-      fs.copyFileSync(walFile, `${dst}-wal`);
-    }
-    if (fs.existsSync(shmFile)) {
-      fs.copyFileSync(shmFile, `${dst}-shm`);
-    }
     
     const files = fs.readdirSync(dir).filter(f => f.endsWith('.sqlite')).sort();
     if (files.length > 7) files.slice(0, files.length - 7).forEach(f => fs.unlinkSync(path.join(dir, f)));
@@ -615,6 +678,9 @@ function broadcast(event, data) {
   wsClients.forEach(ws => { if (ws.readyState === 1) ws.send(msg); });
 }
 
+// ── Scanner Engine init ──
+const scannerEngine = new ScannerEngine(db, logger, (payload) => broadcast(payload.event, payload.data));
+
 const insertLog = db.prepare(`
   INSERT OR IGNORE INTO logs (hash, eventId, date, level, task, source, description, suspicious, segment, zone)
   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -623,6 +689,7 @@ const insertLog = db.prepare(`
 
 function parseAndStoreLogs(rawText) {
   const blocks = rawText.split(/Event\[\d+\]:/).filter(Boolean);
+  let inserted = 0;
   blocks.forEach(block => {
     const getLine = (key) => {
       const match = block.match(new RegExp(`${key}:\\s*(.*)`));
@@ -637,13 +704,15 @@ function parseAndStoreLogs(rawText) {
     
     if (!id || !date) return;
 
-    const uniqueId = crypto.createHash('md5').update(`${id}-${date}-${task}`).digest('hex');
+    const uniqueId = crypto.createHash('sha256').update(`${id}-${date}-${task}`).digest('hex');
     const suspicious = ['4625', '1102', '4688'].includes(id) ? 1 : 0;
     
     try {
-      insertLog.run(uniqueId, id, date, level, task, source, desc, suspicious);
+      const result = insertLog.run(uniqueId, id, date, level, task, source, desc, suspicious);
+      if (result.changes > 0) inserted++;
     } catch (e) {}
   });
+  if (inserted > 0) invalidateCacheTags(['telemetry', 'logs', 'database', 'segments', 'stats']);
 }
 
 // ── Windows EOL database ──────────────────────────────────────────
@@ -957,7 +1026,7 @@ function enrichAndStore(log, logName) {
   const task   = log.TaskDisplayName  || '';
   const source = log.ProviderName     || '';
   const desc   = log.Message          || '';
-  const uid    = crypto.createHash('md5').update(`${id}-${date}-${task}-${source}`).digest('hex');
+  const uid    = crypto.createHash('sha256').update(`${id}-${date}-${task}-${source}`).digest('hex');
   
   // Infer segment and zone
   const { segment, zone } = inferSegmentZone(log, source, task);
@@ -1173,6 +1242,7 @@ async function collectTelemetrySnapshot() {
       analysis,
       rawNetwork: JSON.stringify(network),
     };
+    invalidateCacheTags(['telemetry', 'logs', 'stats']);
     return latestTelemetry;
   } finally {
     isCollectingTelemetry = false;
@@ -1181,41 +1251,500 @@ async function collectTelemetrySnapshot() {
 
 // Autonomous real-time collector and broadcast loop - 5s interval
 const TELEMETRY_INTERVAL = 5000;
+
+// Core 6 segments based on what can actually be detected from local system telemetry
 const ACTIVE_SEGMENTS = [
-  { name: 'perimeter', zone: 'perimeter', label: 'Perimeter' },
-  { name: 'identity', zone: 'identity', label: 'Identity' },
-  { name: 'payments', zone: 'payments', label: 'Payments' },
-  { name: 'remote-access', zone: 'remote-access', label: 'Remote Access' },
-  { name: 'data-core', zone: 'data-core', label: 'Data Core' },
-  { name: 'ot-segment', zone: 'ot-segment', label: 'OT Segment' },
-  { name: 'cloud', zone: 'cloud', label: 'Cloud' },
-  { name: 'dmz', zone: 'dmz', label: 'DMZ' },
-  { name: 'internal', zone: 'internal', label: 'Internal' },
-  { name: 'web', zone: 'dmz', label: 'Web Services' },
-  { name: 'network', zone: 'perimeter', label: 'Network' }
+  { 
+    name: 'identity', 
+    zone: 'identity', 
+    label: 'Identity & Auth',
+    description: 'Authentication events, logon/logoff, privilege escalation',
+    detectable: true,
+    icon: 'shield'
+  },
+  { 
+    name: 'network', 
+    zone: 'perimeter', 
+    label: 'Network & Firewall',
+    description: 'Network connections, firewall events, traffic analysis',
+    detectable: true,
+    icon: 'network'
+  },
+  { 
+    name: 'system', 
+    zone: 'core', 
+    label: 'System & Kernel',
+    description: 'OS events, drivers, services, system integrity',
+    detectable: true,
+    icon: 'cpu'
+  },
+  { 
+    name: 'endpoints', 
+    zone: 'internal', 
+    label: 'Endpoints & Access',
+    description: 'Remote access, file sharing, USB devices, peripherals',
+    detectable: true,
+    icon: 'hard-drive'
+  },
+  { 
+    name: 'applications', 
+    zone: 'dmz', 
+    label: 'Applications',
+    description: 'Application events, crashes, installations, web services',
+    detectable: true,
+    icon: 'app-window'
+  },
+  { 
+    name: 'data', 
+    zone: 'data-core', 
+    label: 'Data & Database',
+    description: 'Database connections, file integrity, data access',
+    detectable: true,
+    icon: 'database'
+  }
 ];
+
+// ── System Permission & Capability Detection ─────────────────────
+
+const SYSTEM_PERMISSIONS = {
+  isAdmin: false,
+  isElevated: false,
+  canAccessSecurityLog: false,
+  canAccessProcessMemory: false,
+  canMonitorUSB: false,
+  lastChecked: 0,
+  requestedElevation: false
+};
+
+// Detect if running with administrator privileges
+async function detectPermissions() {
+  SYSTEM_PERMISSIONS.lastChecked = Date.now();
+  
+  if (os.platform() === 'win32') {
+    try {
+      // Check admin status via PowerShell
+      const { stdout } = await execAsync('powershell -Command "([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)"');
+      SYSTEM_PERMISSIONS.isAdmin = stdout.trim().toLowerCase() === 'true';
+      SYSTEM_PERMISSIONS.isElevated = SYSTEM_PERMISSIONS.isAdmin;
+      
+      // Test Security log access
+      try {
+        await execAsync('powershell -Command "Get-WinEvent -LogName Security -MaxEvents 1 -ErrorAction Stop"', { timeout: 3000 });
+        SYSTEM_PERMISSIONS.canAccessSecurityLog = true;
+      } catch { 
+        SYSTEM_PERMISSIONS.canAccessSecurityLog = false;
+      }
+      
+      // Test process memory access (admin usually required)
+      SYSTEM_PERMISSIONS.canAccessProcessMemory = SYSTEM_PERMISSIONS.isAdmin;
+      SYSTEM_PERMISSIONS.canMonitorUSB = SYSTEM_PERMISSIONS.isAdmin;
+      
+    } catch (e) {
+      logger.error(e, 'Permission detection failed');
+    }
+  } else if (os.platform() === 'linux') {
+    // Check if root
+    SYSTEM_PERMISSIONS.isAdmin = process.getuid ? process.getuid() === 0 : false;
+    SYSTEM_PERMISSIONS.isElevated = SYSTEM_PERMISSIONS.isAdmin;
+    SYSTEM_PERMISSIONS.canAccessSecurityLog = SYSTEM_PERMISSIONS.isAdmin;
+    SYSTEM_PERMISSIONS.canAccessProcessMemory = SYSTEM_PERMISSIONS.isAdmin;
+    SYSTEM_PERMISSIONS.canMonitorUSB = fs.existsSync('/var/log/syslog') || fs.existsSync('/var/log/messages');
+  } else {
+    // macOS and others
+    SYSTEM_PERMISSIONS.isAdmin = false; // Conservative default
+    SYSTEM_PERMISSIONS.canMonitorUSB = true; // Usually accessible
+  }
+  
+  return SYSTEM_PERMISSIONS;
+}
+
+// Get permission status for API
+function getPermissionStatus() {
+  return {
+    ...SYSTEM_PERMISSIONS,
+    platform: os.platform(),
+    recommendations: getPermissionRecommendations()
+  };
+}
+
+function getPermissionRecommendations() {
+  const recs = [];
+  if (os.platform() === 'win32') {
+    if (!SYSTEM_PERMISSIONS.isAdmin) {
+      recs.push({
+        type: 'elevation',
+        priority: 'high',
+        message: 'Run as Administrator for full security monitoring',
+        action: 'Restart with "Run as administrator"'
+      });
+    }
+    if (!SYSTEM_PERMISSIONS.canAccessSecurityLog) {
+      recs.push({
+        type: 'security_log',
+        priority: 'high',
+        message: 'Cannot access Security event log - identity segment limited',
+        action: 'Grant "Manage auditing and security log" privilege or run as Admin'
+      });
+    }
+  } else if (os.platform() === 'linux') {
+    if (!SYSTEM_PERMISSIONS.isAdmin) {
+      recs.push({
+        type: 'elevation',
+        priority: 'medium',
+        message: 'Run with sudo for complete system monitoring',
+        action: 'Use sudo or configure polkit for log access'
+      });
+    }
+  }
+  return recs;
+}
+
+// Broadcast permission status to all clients
+function broadcastPermissions() {
+  broadcast('permission_status', getPermissionStatus());
+}
+
+// Check permissions periodically
+setInterval(async () => {
+  await detectPermissions();
+  broadcastPermissions();
+}, 30000); // Check every 30 seconds
+
+// ── Advanced System Monitoring ──────────────────────────────────
+
+// 1. Real-time Process Monitoring
+const SUSPICIOUS_PROCESSES = new Set([
+  'mimikatz', 'pwdump', 'pswdump', 'gsecdump', 'wce', 'fgdump',
+  'procdump', 'dumpsec', 'cachedump', 'lsadump', 'secretsdump',
+  'pwdumpx', 'hashdump', 'mimidrv', 'mimilib', 'kappfree',
+  'processhacker', 'pchunter', 'xuetr', 'win64api', 'meterpreter',
+  'shellcode', 'reflectivedll', 'bloodhound', 'sharphound',
+  'rubeus', 'certify', 'seatbelt', 'sharpup', 'winpeas',
+  'lolbas', 'certutil', 'bitsadmin', 'mshta', 'cscript',
+  'wscript', 'regsvr32', 'rundll32', 'installutil',
+  'psexec', 'paexec', 'csexec', 'remcom', 'smbexec',
+  'nc.exe', 'ncat.exe', 'nmap.exe', 'zenmap', 'masscan',
+  'hydra.exe', 'john.exe', 'hashcat.exe', 'aircrack',
+  'wireshark', 'ethereal', 'tcpdump', ' Cain', 'Abel',
+  'vssadmin', 'wbadmin', 'bcdedit', 'wevtutil', 'fsutil',
+  'diskshadow', 'robocopy' // when used suspiciously
+]);
+
+const KNOWN_GOOD_PROCESSES = new Set([
+  'explorer.exe', 'svchost.exe', 'csrss.exe', 'smss.exe',
+  'services.exe', 'lsass.exe', 'wininit.exe', 'winlogon.exe',
+  'taskhostw.exe', 'dwm.exe', 'sihost.exe', 'ctfmon.exe',
+  'msedge.exe', 'chrome.exe', 'firefox.exe', 'code.exe',
+  'node.exe', 'powershell.exe', 'pwsh.exe', 'cmd.exe',
+  'conhost.exe', 'dllhost.exe', 'fontdrvhost.exe',
+  'backgroundtaskhost.exe', 'runtimebroker.exe'
+]);
+
+async function getProcessList() {
+  try {
+    const platform = os.platform();
+    let processes = [];
+    
+    if (platform === 'win32') {
+      // PowerShell with admin check
+      const canAccessAll = SYSTEM_PERMISSIONS.canAccessProcessMemory;
+      const psCmd = canAccessAll 
+        ? `Get-WmiObject Win32_Process | Select-Object ProcessId, Name, ExecutablePath, CommandLine, ParentProcessId, CreationDate | ConvertTo-Json -Compress`
+        : `Get-Process | Select-Object Id, ProcessName, Path, StartTime | ConvertTo-Json -Compress`;
+      
+      try {
+        const { stdout } = await execAsync(`powershell -Command "${psCmd}"`, { timeout: 10000 });
+        const parsed = JSON.parse(stdout);
+        const arr = Array.isArray(parsed) ? parsed : [parsed];
+        processes = arr.map(p => ({
+          pid: p.ProcessId || p.Id,
+          name: (p.Name || p.ProcessName || 'unknown').toLowerCase(),
+          path: p.ExecutablePath || p.Path || 'Unknown',
+          cmdline: p.CommandLine || '',
+          ppid: p.ParentProcessId || 0,
+          created: p.CreationDate || p.StartTime,
+          suspicious: isProcessSuspicious(p.Name || p.ProcessName || '', p.CommandLine || ''),
+          risk: calculateProcessRisk(p.Name || p.ProcessName || '', p.CommandLine || '')
+        }));
+      } catch (e) {
+        // Fallback to tasklist if PowerShell fails
+        const { stdout } = await execAsync('tasklist /fo csv /nh', { timeout: 5000 });
+        processes = stdout.split('\n').filter(Boolean).map(line => {
+          const parts = line.replace(/"/g, '').split(',');
+          return {
+            pid: parts[1] || '0',
+            name: (parts[0] || 'unknown').toLowerCase(),
+            path: 'Unknown',
+            cmdline: '',
+            ppid: 0,
+            created: null,
+            suspicious: isProcessSuspicious(parts[0] || '', ''),
+            risk: calculateProcessRisk(parts[0] || '', '')
+          };
+        });
+      }
+    } else if (platform === 'linux') {
+      const { stdout } = await execAsync('ps aux --no-headers', { timeout: 5000 });
+      processes = stdout.split('\n').filter(Boolean).map(line => {
+        const parts = line.split(/\s+/);
+        return {
+          pid: parts[1] || '0',
+          name: (parts[10] || 'unknown').toLowerCase(),
+          path: parts[10] || '',
+          cmdline: parts.slice(10).join(' '),
+          ppid: 0,
+          created: null,
+          suspicious: isProcessSuspicious(parts[10] || '', parts.slice(10).join(' ')),
+          risk: calculateProcessRisk(parts[10] || '', parts.slice(10).join(' '))
+        };
+      });
+    }
+    
+    // Store suspicious processes as alerts
+    const suspicious = processes.filter(p => p.suspicious || p.risk > 50);
+    suspicious.forEach(p => {
+      createSegmentAlert('system', 'core', p.risk > 70 ? 'critical' : 'warning', 
+        'Suspicious Process', `Process ${p.name} (PID: ${p.pid}) - Risk: ${p.risk}%`, 'T1055');
+    });
+    
+    return processes;
+  } catch (e) {
+    logger.error(e, 'Process monitoring failed');
+    return [];
+  }
+}
+
+function isProcessSuspicious(name, cmdline) {
+  const nameLower = (name || '').toLowerCase();
+  const cmdLower = (cmdline || '').toLowerCase();
+  
+  if (SUSPICIOUS_PROCESSES.has(nameLower)) return true;
+  // Check if any suspicious process name is included in the process name
+  for (const s of SUSPICIOUS_PROCESSES) {
+    if (nameLower.includes(s)) return true;
+  }
+  if (cmdLower.includes('downloadstring') || cmdLower.includes('iex') || cmdLower.includes('invoke-expression')) return true;
+  if (cmdLower.includes('bypass') && cmdLower.includes('executionpolicy')) return true;
+  if (cmdLower.includes('-enc') && cmdLower.length > 50) return true; // Base64 encoded
+  if (cmdLower.includes('net.webclient') || cmdLower.includes('wget') || cmdLower.includes('curl')) return true;
+  
+  return false;
+}
+
+function calculateProcessRisk(name, cmdline) {
+  let risk = 0;
+  const nameLower = (name || '').toLowerCase();
+  const cmdLower = (cmdline || '').toLowerCase();
+  
+  if (SUSPICIOUS_PROCESSES.has(nameLower)) risk += 60;
+  if (KNOWN_GOOD_PROCESSES.has(nameLower)) risk -= 30;
+  
+  // Known LOLBAS techniques
+  if (cmdLower.includes('certutil') && (cmdLower.includes('urlcache') || cmdLower.includes('split'))) risk += 40;
+  if (cmdLower.includes('bitsadmin') && cmdLower.includes('transfer')) risk += 40;
+  if (cmdLower.includes('mshta') && cmdLower.includes('http')) risk += 50;
+  if (cmdLower.includes('regsvr32') && (cmdLower.includes('http') || cmdLower.includes('script'))) risk += 45;
+  if (cmdLower.includes('rundll32') && cmdLower.includes('javascript')) risk += 45;
+  if (cmdLower.includes('installutil') && cmdLower.includes('logtoconsole=false')) risk += 40;
+  
+  // PowerShell obfuscation
+  if (cmdLower.includes('-enc')) risk += 30;
+  if (cmdLower.includes('bypass')) risk += 20;
+  
+  // Network tools
+  if (nameLower.includes('nc') || nameLower.includes('ncat') || nameLower.includes('netcat')) risk += 50;
+  if (nameLower.includes('mimikatz') || nameLower.includes('pwdump')) risk += 80;
+  
+  return Math.max(0, Math.min(100, risk));
+}
+
+// 2. USB Device Monitoring
+async function getUSBDevices() {
+  if (!SYSTEM_PERMISSIONS.canMonitorUSB) return { connected: [], history: [] };
+  
+  try {
+    if (os.platform() === 'win32') {
+      const psCmd = `
+        Get-PnpDevice -Class USB | Where-Object { $_.Status -eq 'OK' } | 
+        Select-Object FriendlyName, InstanceId, Class, Status |
+        ConvertTo-Json -Compress
+      `;
+      const { stdout } = await execAsync(`powershell -Command "${psCmd}"`, { timeout: 5000 });
+      const devices = JSON.parse(stdout);
+      const arr = Array.isArray(devices) ? devices : [devices];
+      
+      // Check for new USB storage devices
+      const storageDevices = arr.filter(d => 
+        d.FriendlyName?.toLowerCase().includes('storage') || 
+        d.FriendlyName?.toLowerCase().includes('disk') ||
+        d.FriendlyName?.toLowerCase().includes('usb mass')
+      );
+      
+      storageDevices.forEach(d => {
+        createSegmentAlert('endpoints', 'internal', 'medium', 'USB Device Connected',
+          `USB storage device: ${d.FriendlyName}`, 'T1091');
+      });
+      
+      return { connected: arr, timestamp: Date.now() };
+    }
+    return { connected: [], timestamp: Date.now() };
+  } catch (e) {
+    return { connected: [], timestamp: Date.now() };
+  }
+}
+
+// 3. Windows Defender / AV Status
+async function getDefenderStatus() {
+  if (os.platform() !== 'win32') return null;
+  
+  try {
+    const psCmd = `
+      $defender = Get-MpComputerStatus;
+      $pref = Get-MpPreference;
+      @{ 
+        Enabled = $defender.RealTimeProtectionEnabled;
+        BehavMonitor = $defender.BehaviorMonitorEnabled;
+        OnAccess = $defender.OnAccessProtectionEnabled;
+        Antivirus = $defender.AntivirusEnabled;
+        Antispyware = $defender.AntispywareEnabled;
+        NIS = $defender.NISEnabled;
+        SigAge = $defender.DefenderSignatureAge;
+        QuickScanAge = $defender.QuickScanAge;
+        FullScanAge = $defender.FullScanAge;
+        Exclusions = $pref.ExclusionPath.Count;
+      } | ConvertTo-Json -Compress
+    `;
+    const { stdout } = await execAsync(`powershell -Command "${psCmd}"`, { timeout: 5000 });
+    const status = JSON.parse(stdout);
+    
+    // Alert on disabled protection
+    if (!status.Enabled || !status.Antivirus) {
+      createSegmentAlert('system', 'core', 'critical', 'Protection Disabled',
+        'Windows Defender real-time protection is disabled', 'T1562.001');
+    }
+    if (status.SigAge > 7) {
+      createSegmentAlert('system', 'core', 'warning', 'Outdated Definitions',
+        `Antivirus definitions are ${status.SigAge} days old`, 'T1562.001');
+    }
+    
+    return status;
+  } catch (e) {
+    return { error: 'Cannot access Defender status', enabled: false };
+  }
+}
+
+// 4. Network Adapter Monitoring
+async function getNetworkAdapters() {
+  try {
+    const platform = os.platform();
+    let adapters = [];
+    
+    if (platform === 'win32') {
+      const psCmd = `
+        Get-NetAdapter | Where-Object { $_.Status -eq 'Up' } |
+        Select-Object Name, InterfaceDescription, MacAddress, LinkSpeed, Status |
+        ConvertTo-Json -Compress
+      `;
+      const { stdout } = await execAsync(`powershell -Command "${psCmd}"`, { timeout: 5000 });
+      adapters = JSON.parse(stdout);
+      adapters = Array.isArray(adapters) ? adapters : [adapters];
+    } else if (platform === 'linux') {
+      const { stdout } = await execAsync('ip -j link show', { timeout: 5000 });
+      const links = JSON.parse(stdout);
+      adapters = links.filter(l => l.operstate === 'UP').map(l => ({
+        Name: l.ifname,
+        MacAddress: l.address,
+        LinkSpeed: 'Unknown',
+        Status: 'Up'
+      }));
+    }
+    
+    return adapters;
+  } catch (e) {
+    return [];
+  }
+}
+
+// 5. File Integrity Monitoring (FIM)
+const FIM_WATCHED_PATHS = [
+  { path: 'C:\\Windows\\System32\\drivers\\etc\\hosts', segment: 'system', zone: 'core' },
+  { path: 'C:\\Windows\\System32\\config\\SAM', segment: 'identity', zone: 'identity' },
+  { path: '/etc/passwd', segment: 'identity', zone: 'identity' },
+  { path: '/etc/shadow', segment: 'identity', zone: 'identity' },
+  { path: '/etc/hosts', segment: 'system', zone: 'core' }
+];
+
+const fimHashes = new Map();
+
+async function checkFileIntegrity() {
+  const changes = [];
+  
+  for (const watched of FIM_WATCHED_PATHS) {
+    try {
+      if (!fs.existsSync(watched.path)) continue;
+      
+      const content = fs.readFileSync(watched.path);
+      const hash = crypto.createHash('sha256').update(content).digest('hex');
+      
+      const key = watched.path;
+      const oldHash = fimHashes.get(key);
+      
+      if (oldHash && oldHash !== hash) {
+        changes.push({
+          path: watched.path,
+          segment: watched.segment,
+          zone: watched.zone,
+          oldHash,
+          newHash: hash,
+          timestamp: Date.now()
+        });
+        
+        createSegmentAlert(watched.segment, watched.zone, 'high', 'File Integrity Violation',
+          `Critical file modified: ${watched.path}`, 'T1565');
+      }
+      
+      fimHashes.set(key, hash);
+    } catch (e) {
+      // Permission denied or file locked - expected for some system files
+    }
+  }
+  
+  return changes;
+}
+
+// ── Updated Segment Metrics ─────────────────────────────────────
 
 async function storeSegmentMetrics(snapshot, network) {
   const segments = new Map();
+  
+  // Map network connections to 6 core segments
   network.forEach(conn => {
     const port = parseInt((conn.local || '').match(/:(\d+)$/)?.[1]) || 0;
-    let seg = 'network', zone = 'perimeter';
-    if ([443, 80, 8080, 8443].includes(port)) { seg = 'web'; zone = 'dmz'; }
-    else if ([22, 3389].includes(port)) { seg = 'remote'; zone = 'remote-access'; }
-    else if ([445, 139].includes(port)) { seg = 'file-sharing'; zone = 'internal'; }
-    else if ([3306, 5432, 1433, 1521].includes(port)) { seg = 'database'; zone = 'data-core'; }
-    const key = `${seg}:${zone}`;
-    if (!segments.has(key)) segments.set(key, { segment: seg, zone, connections: 0, active: 0, listening: 0 });
+    let segName = 'network';
+    
+    // Map to 6 core segments
+    if ([445, 139, 22, 3389].includes(port)) segName = 'endpoints';
+    else if ([443, 80, 8080, 8443].includes(port)) segName = 'applications';
+    else if ([3306, 5432, 1433, 1521, 6379, 27017].includes(port)) segName = 'data';
+    else segName = 'network';
+    
+    const key = segName;
+    if (!segments.has(key)) segments.set(key, { segment: segName, connections: 0, active: 0, listening: 0, risk: 0 });
     const d = segments.get(key);
     d.connections++;
     if (conn.state === 'ESTABLISHED') d.active++;
     if (conn.state === 'LISTENING') d.listening++;
+    d.risk += conn.risk || 0;
   });
-  for (const d of segments.values()) {
-    storeMetric(d.segment, d.zone, 'connection_count', d.connections);
-    storeMetric(d.segment, d.zone, 'active_connections', d.active);
-    storeMetric(d.segment, d.zone, 'listening_ports', d.listening);
+  
+  // Store metrics for each segment
+  for (const [segName, d] of segments) {
+    storeMetric(segName, ACTIVE_SEGMENTS.find(s => s.name === segName)?.zone || 'unknown', 'connection_count', d.connections);
+    storeMetric(segName, ACTIVE_SEGMENTS.find(s => s.name === segName)?.zone || 'unknown', 'active_connections', d.active);
+    storeMetric(segName, ACTIVE_SEGMENTS.find(s => s.name === segName)?.zone || 'unknown', 'listening_ports', d.listening);
+    storeMetric(segName, ACTIVE_SEGMENTS.find(s => s.name === segName)?.zone || 'unknown', 'risk_score', Math.min(100, d.risk));
   }
+  
   storeMetric('global', 'global', 'total_connections', network.length);
   storeMetric('global', 'global', 'log_count', snapshot.logs.length);
   storeMetric('global', 'global', 'risk_score', snapshot.analysis?.score ?? 100);
@@ -1224,17 +1753,33 @@ async function storeSegmentMetrics(snapshot, network) {
 async function broadcastSegmentData(snapshot) {
   const network = snapshot.network || [];
   network.forEach(conn => storeConnectionState(conn));
+  // Batch invalidation after all connections stored (not per-connection)
+  if (network.length > 0) invalidateCacheTags(['segments', 'stats']);
+  
+  // Collect advanced monitoring data
+  const [processes, usbDevices, defenderStatus, adapters, fimChanges] = await Promise.allSettled([
+    getProcessList(),
+    getUSBDevices(),
+    getDefenderStatus(),
+    getNetworkAdapters(),
+    checkFileIntegrity()
+  ]);
+  
   const segmentHealth = getSegmentHealth();
   const segmentSummary = getSegmentLogSummary(10);
+  
+  // Calculate metrics for each of the 6 segments
   const segmentMetrics = {};
-  ACTIVE_SEGMENTS.forEach(({ name, zone }) => {
+  ACTIVE_SEGMENTS.forEach(({ name }) => {
     const segConns = network.filter(c => {
       const p = parseInt((c.local || '').match(/:(\d+)$/)?.[1]) || 0;
-      if (name === 'web' && [443,80,8080].includes(p)) return true;
-      if (name === 'database' && [3306,5432,1433].includes(p)) return true;
-      if (name === 'remote' && [22,3389].includes(p)) return true;
+      if (name === 'applications' && [443,80,8080,8443].includes(p)) return true;
+      if (name === 'data' && [3306,5432,1433,1521,6379,27017].includes(p)) return true;
+      if (name === 'endpoints' && [445,139,22,3389,5900,5901].includes(p)) return true;
+      if (name === 'network') return ![443,80,8080,8443,3306,5432,1433,1521,445,139,22,3389].includes(p);
       return false;
     });
+    
     segmentMetrics[name] = {
       connections: segConns.length,
       active: segConns.filter(c => c.state === 'ESTABLISHED').length,
@@ -1242,8 +1787,42 @@ async function broadcastSegmentData(snapshot) {
       risk: segConns.reduce((a, c) => a + (c.risk || 0), 0)
     };
   });
+  
+  // Add identity metrics from logs
+  const identityLogs = snapshot.logs?.filter(l => l.Segment === 'identity') || [];
+  segmentMetrics.identity = {
+    ...segmentMetrics.identity,
+    authEvents: identityLogs.length,
+    failedLogons: identityLogs.filter(l => (l.Id === '4625' || (l.Message || '').toLowerCase().includes('failed'))).length,
+    privilegeEscalation: identityLogs.filter(l => (l.Id === '4672' || l.Id === '4673' || l.Id === '4674')).length
+  };
+  
+  // Add system metrics from processes
+  const processData = processes.status === 'fulfilled' ? processes.value : [];
+  const suspiciousProcs = processData.filter(p => p.suspicious || p.risk > 50);
+  segmentMetrics.system = {
+    ...segmentMetrics.system,
+    totalProcesses: processData.length,
+    suspiciousProcesses: suspiciousProcs.length,
+    highRiskProcesses: processData.filter(p => p.risk > 70).length,
+    defenderEnabled: defenderStatus.status === 'fulfilled' ? defenderStatus.value?.Enabled : false
+  };
+  
   const alerts = getSegmentAlerts(null, null, 10);
-  return { segmentHealth, segmentSummary, segmentMetrics, alerts };
+  
+  return { 
+    segmentHealth, 
+    segmentSummary, 
+    segmentMetrics, 
+    alerts,
+    advancedMonitoring: {
+      processes: processData.slice(0, 50), // Top 50 processes
+      usbDevices: usbDevices.status === 'fulfilled' ? usbDevices.value : { connected: [] },
+      defender: defenderStatus.status === 'fulfilled' ? defenderStatus.value : null,
+      adapters: adapters.status === 'fulfilled' ? adapters.value : [],
+      fimChanges: fimChanges.status === 'fulfilled' ? fimChanges.value : []
+    }
+  };
 }
 
 setInterval(async () => {
@@ -1465,9 +2044,13 @@ async function analyzeTelemetry(logs, network, files) {
           riskScore / 100
         ];
         
-        const prediction = aiModel.predict(tf.tensor2d([features]));
+        const inputTensor = tf.tensor2d([features]);
+        const prediction = aiModel.predict(inputTensor);
         const scoreData = await prediction.data();
         const score = scoreData[0];
+        // Dispose tensors to prevent memory leak (runs every 5s telemetry cycle)
+        prediction.dispose();
+        inputTensor.dispose();
         
         if (score > 0.7) {
           const aiRiskPenalty = Math.round(score * 30);
@@ -1530,14 +2113,22 @@ function storeMetric(segment, zone, metricType, value, metadata = null) {
       VALUES (?, ?, ?, ?, ?, ?)
     `);
     stmt.run(Date.now(), segment, zone, metricType, value, metadata ? JSON.stringify(metadata) : null);
-    
-    // Cleanup old metrics (keep 7 days)
-    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
-    db.prepare('DELETE FROM metrics_time_series WHERE timestamp < ?').run(cutoff);
+    // Note: cache invalidation is done once per batch in storeSegmentMetrics, not per-insert
   } catch (e) {
     logger.error(e, 'Error storing metric');
   }
 }
+
+// Periodic cleanup for old metrics (every 10 minutes instead of every insert)
+setInterval(() => {
+  try {
+    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const result = db.prepare('DELETE FROM metrics_time_series WHERE timestamp < ?').run(cutoff);
+    if (result.changes > 0) logger.info({ deleted: result.changes }, 'Cleaned up old metrics');
+  } catch (e) {
+    logger.error(e, 'Metrics cleanup failed');
+  }
+}, 10 * 60 * 1000);
 
 // Get segment metrics for a time range
 function getSegmentMetrics(segment, zone, metricType, minutes = 60) {
@@ -1608,7 +2199,7 @@ function getSegmentHealth() {
 // Store connection state
 function storeConnectionState(conn) {
   try {
-    const id = crypto.createHash('md5').update(`${conn.local}-${conn.foreign}-${conn.protocol}`).digest('hex');
+    const id = crypto.createHash('sha256').update(`${conn.local}-${conn.foreign}-${conn.protocol}`).digest('hex');
     const now = Date.now();
     const stmt = db.prepare(`
       INSERT INTO connections (id, src_ip, dst_ip, protocol, port, state, risk, segment, zone, first_seen, last_seen)
@@ -1632,6 +2223,7 @@ function storeConnectionState(conn) {
     else if ([3306, 5432, 1433, 1521].includes(port)) { segment = 'database'; zone = 'data-core'; }
     
     stmt.run(id, conn.local, conn.foreign, conn.protocol, port, conn.state, risk, segment, zone, now, now);
+    // Cache invalidation moved to broadcastSegmentData to avoid per-connection thrashing
     return { id, segment, zone, risk };
   } catch (e) {
     logger.error(e, 'Error storing connection state');
@@ -1647,6 +2239,7 @@ function createSegmentAlert(segment, zone, severity, category, message, mitreId 
       INSERT INTO segment_alerts (id, timestamp, segment, zone, severity, category, message, mitre_id)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `).run(id, Date.now(), segment, zone, severity, category, message, mitreId);
+    invalidateCacheTags(['segments', 'alerts']);
     return id;
   } catch (e) {
     logger.error(e, 'Error creating segment alert');
@@ -1770,9 +2363,67 @@ httpServer.on('request', async (req, res) => {
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
 
   const clientIp = getClientIp(req);
+  const requestStart = Date.now();
+
+  // Segment mapping: derive segment from URL path
+  const segmentFromPath = (p) => {
+    if (p.startsWith('/api/auth'))       return 'auth';
+    if (p.startsWith('/api/scanner'))    return 'scanner';
+    if (p.startsWith('/api/ai'))         return 'ai_agent';
+    if (p.startsWith('/api/analytics'))  return 'api';
+    if (p.startsWith('/api/virustotal')) return 'virustotal';
+    if (p.startsWith('/api/threat'))     return 'intel';
+    if (p.startsWith('/api/sandbox'))    return 'sandbox';
+    if (p.startsWith('/api/logs') || p.startsWith('/api/database/logs')) return 'winlogs';
+    if (p.startsWith('/api/segments'))   return 'dashboard';
+    if (p.startsWith('/api/system'))     return 'dashboard';
+    if (p.startsWith('/api/analyze'))    return 'ai_agent';
+    if (p.startsWith('/api/sync'))       return 'api';
+    if (p.startsWith('/api/security'))   return 'ossec';
+    return 'api';
+  };
+
+  // ── DDoS protection check ──
+  const ddosCheck = ddosProtection.check(clientIp);
+  if (!ddosCheck.allowed) {
+    auditLogger.suspiciousActivity(clientIp, { reason: ddosCheck.reason });
+    res.writeHead(429, { 'Retry-After': String(ddosCheck.retryAfter || 60) });
+    return res.end(JSON.stringify({ error: ddosCheck.reason }));
+  }
+
+  // ── WAF request validation ──
+  const wafResult = validateRequest(req, logger);
+  if (!wafResult.valid) {
+    auditLogger.suspiciousActivity(clientIp, { reason: wafResult.reason, url: req.url });
+    return json(res, 403, { error: 'Request blocked by security policy' });
+  }
+
+  // ── Analytics telemetry: record on response finish ──
+  let _analyticsUserId = null;
+  res.on('finish', () => {
+    setImmediate(() => {
+      try {
+        const urlObj2 = new URL(req.url, 'http://localhost');
+        const p2 = urlObj2.pathname.replace(/\/+/g, '/').replace(/\/$/, '') || '/';
+        if (!p2.startsWith('/api/analytics')) { // avoid infinite self-tracking
+          analyticsEngine.recordRequest({
+            segment:    segmentFromPath(p2),
+            method:     req.method,
+            path:       p2,
+            statusCode: res.statusCode,
+            durationMs: Date.now() - requestStart,
+            userId:     _analyticsUserId,
+            clientIp,
+            bytesSent:  parseInt(res.getHeader?.('content-length') || '0') || 0,
+          });
+        }
+      } catch {}
+    });
+  });
+
   const urlObj   = new URL(req.url, `http://localhost`);
   const pathname = urlObj.pathname.replace(/\/+/g, '/').replace(/\/$/, '') || '/';
-
+  console.log(`[DEBUG] Request: ${req.method} ${pathname}`);
   logger.info({ method: req.method, path: pathname, ip: clientIp }, 'Request'); // gap #19
 
   try {
@@ -1857,7 +2508,18 @@ httpServer.on('request', async (req, res) => {
       logger.info({ username: user.username }, 'Login success');
       
       res.setHeader('Set-Cookie', `sg_refresh_token=${refreshToken}; HttpOnly; Path=/; Max-Age=${7 * 24 * 60 * 60}; SameSite=Strict${NODE_ENV === 'production' ? '; Secure' : ''}`);
-      return json(res, 200, { success: true, accessToken, role: user.role });
+      return json(res, 200, { 
+        success: true, 
+        accessToken, 
+        user: {
+          id: user.id,
+          username: user.username,
+          email: user.email,
+          role: user.role,
+          lastLogin: user.last_login,
+          createdAt: user.created_at
+        }
+      });
     }
 
     // ── POST /api/auth/refresh — rotate access token (gap #3) ──
@@ -1903,14 +2565,32 @@ httpServer.on('request', async (req, res) => {
 
     // ── All routes below require valid JWT ───────────────────────
     let caller;
-    try { caller = authenticate(req); }
+    try { caller = authenticate(req); _analyticsUserId = caller?.sub; }
     catch (e) { return json(res, 401, { error: e.message }); }
 
     // ── GET /api/auth/me ────────────────────────────────────────
     if (pathname === '/api/auth/me' && req.method === 'GET') {
+      const user = db.prepare('SELECT id, username, email, role, last_login, created_at FROM users WHERE id=?').get(caller.sub);
+      if (!user) return json(res, 404, { error: 'User not found' });
       return json(res, 200, {
         authenticated: true,
-        user: { id: caller.sub, username: caller.username, role: caller.role },
+        user: { 
+          id: user.id, 
+          username: user.username, 
+          email: user.email,
+          role: user.role,
+          lastLogin: user.last_login,
+          createdAt: user.created_at
+        },
+      });
+    }
+
+    if (pathname === '/api/cache/stats' && req.method === 'GET') {
+      return json(res, 200, {
+        ...cacheStats,
+        size: responseCache.size,
+        maxItems: CACHE_MAX_ITEMS,
+        defaultTtlMs: CACHE_DEFAULT_TTL_MS,
       });
     }
 
@@ -1926,100 +2606,138 @@ httpServer.on('request', async (req, res) => {
 
     // ── GET /api/os-info ─────────────────────────────────────────
     if (pathname === '/api/os-info' && req.method === 'GET') {
-      return json(res, 200, await getSystemTelemetry());
+      return cachedJson(res, makeCacheKey(pathname, urlObj), 15000, ['system'], () => getSystemTelemetry());
     }
 
     // ── GET /api/fim/events ────────────────────────────────────────
     if (pathname === '/api/fim/events' && req.method === 'GET') {
-      const changes = await getFileChanges();
-      const events = changes.map(f => ({
-        id: crypto.randomUUID(),
-        timestamp: f.modified.toISOString(),
-        path: f.path,
-        name: f.name,
-        size: f.size,
-        suspicious: f.path.includes('etc') || f.path.includes('System32'),
-        mitreTechnique: f.path.includes('etc') ? 'T1003 - OS Credential Dumping' : 'T1543 - Create or Modify System Process',
-      }));
-      return json(res, 200, { events });
+      return cachedJson(res, makeCacheKey(pathname, urlObj), 15000, ['fim'], async () => {
+        const changes = await getFileChanges();
+        const events = changes.map(f => ({
+          id: crypto.randomUUID(),
+          timestamp: f.modified.toISOString(),
+          path: f.path,
+          name: f.name,
+          size: f.size,
+          suspicious: f.path.includes('etc') || f.path.includes('System32'),
+          mitreTechnique: f.path.includes('etc') ? 'T1003 - OS Credential Dumping' : 'T1543 - Create or Modify System Process',
+        }));
+        return { events };
+      });
     }
     // ── GET /api/logs ────────────────────────────────────────────
     if ((pathname === '/api/logs' || pathname === '/api/logs/live') && req.method === 'GET') {
-      const maxParam  = parseInt(urlObj.searchParams.get('max') || '80', 10);
-      const channel   = urlObj.searchParams.get('channel') || 'all'; // all | security | system | application
-      if (Date.now() - latestTelemetry.ts > 6000) await collectTelemetrySnapshot();
-      let logs = latestTelemetry.logs;
-      // Filter by channel if requested
-      if (channel !== 'all') {
-        const channelMap = { security: 'Security', system: 'System', application: 'Application' };
-        const target = channelMap[channel.toLowerCase()];
-        if (target) logs = logs.filter(l => (l.LogName || '').toLowerCase() === target.toLowerCase());
-      }
-      // Normalise to a flat shape the frontend can consume directly
-      const normalized = logs.slice(0, maxParam).map((l, i) => ({
-        id:          `live-${i}-${l.Id}`,
-        eventId:     l.Id != null ? String(l.Id) : 'Unknown',
-        timestamp:   new Date(l.Date || Date.now()).getTime(),
-        level:       l.LevelDisplayName || 'Information',
-        source:      l.ProviderName || 'Unknown',
-        category:    l.TaskDisplayName || 'System Event',
-        logName:     l.LogName || 'Unknown',
-        computer:    l.Computer || os.hostname(),
-        message:     l.Message || 'No description.',
-        suspicious:  !!l.Suspicious,
-        mitre:       l.Mitre || null,
-      }));
-      return json(res, 200, { logs: normalized, fetchedAt: Date.now(), platform: os.platform(), computer: os.hostname() });
+      return cachedJson(res, makeCacheKey(pathname, urlObj), 2500, ['telemetry', 'logs'], async () => {
+        const maxParam  = parseInt(urlObj.searchParams.get('max') || '80', 10);
+        const channel   = urlObj.searchParams.get('channel') || 'all'; // all | security | system | application
+        if (Date.now() - latestTelemetry.ts > 6000) await collectTelemetrySnapshot();
+        let logs = latestTelemetry.logs;
+        // Filter by channel if requested
+        if (channel !== 'all') {
+          const channelMap = { security: 'Security', system: 'System', application: 'Application' };
+          const target = channelMap[channel.toLowerCase()];
+          if (target) logs = logs.filter(l => (l.LogName || '').toLowerCase() === target.toLowerCase());
+        }
+        // Normalise to a flat shape the frontend can consume directly
+        const normalized = logs.slice(0, maxParam).map((l, i) => {
+          let ts = Date.now();
+          if (l.TimeCreated) {
+            if (typeof l.TimeCreated === 'string' && l.TimeCreated.startsWith('/Date(')) {
+              ts = parseInt(l.TimeCreated.replace(/[^0-9]/g, ''), 10);
+            } else {
+              ts = new Date(l.TimeCreated).getTime();
+            }
+          } else if (l.Date) {
+            ts = new Date(l.Date).getTime();
+          }
+          if (isNaN(ts)) ts = Date.now();
+
+          return {
+            id:          `live-${i}-${l.Id}`,
+            eventId:     l.Id != null ? String(l.Id) : 'Unknown',
+            timestamp:   ts,
+            level:       l.LevelDisplayName || 'Information',
+            source:      l.ProviderName || 'Unknown',
+            category:    l.TaskDisplayName || 'System Event',
+            logName:     l.LogName || 'Unknown',
+            computer:    l.MachineName || l.Computer || os.hostname(),
+            message:     l.Message || 'No description.',
+            suspicious:  !!l.Suspicious,
+            mitre:       l.Mitre || null,
+          };
+        });
+        return { logs: normalized, fetchedAt: Date.now(), platform: os.platform(), computer: os.hostname() };
+      });
     }
 
     // ── GET /api/analyze ─────────────────────────────────────────
     if (pathname === '/api/analyze' && req.method === 'GET') {
-      if (Date.now() - latestTelemetry.ts > 6000) await collectTelemetrySnapshot();
-      return json(res, 200, latestTelemetry);
+      return cachedJson(res, makeCacheKey(pathname, urlObj), 2500, ['telemetry'], async () => {
+        if (Date.now() - latestTelemetry.ts > 6000) await collectTelemetrySnapshot();
+        return latestTelemetry;
+      });
     }
 
     // ── GET /api/system/stats ─────────────────────────────────────
     if (pathname === '/api/system/stats' && req.method === 'GET') {
-      const cpuUsage = sampleCpuUsage();
-      const totalMem = os.totalmem();
-      const freeMem  = os.freemem();
-      const usedMem  = totalMem - freeMem;
-      const memUsage = (usedMem / totalMem) * 100;
-      
-      return json(res, 200, {
-        cpu: cpuUsage.toFixed(1),
-        memory: memUsage.toFixed(1),
-        uptime: os.uptime(),
-        activeConnections: latestTelemetry.network.length,
-        recentLogs: latestTelemetry.logs.length,
-        timestamp: Date.now()
+      return cachedJson(res, makeCacheKey(pathname, urlObj), 2000, ['stats'], async () => {
+        const cpuUsage = sampleCpuUsage();
+        const totalMem = os.totalmem();
+        const freeMem  = os.freemem();
+        const usedMem  = totalMem - freeMem;
+        const memUsage = (usedMem / totalMem) * 100;
+
+        return {
+          cpu: cpuUsage.toFixed(1),
+          memory: memUsage.toFixed(1),
+          uptime: os.uptime(),
+          activeConnections: latestTelemetry.network.length,
+          recentLogs: latestTelemetry.logs.length,
+          timestamp: Date.now()
+        };
       });
+    }
+
+    // ── GET /api/system/permissions ─────────────────────────────
+    if (pathname === '/api/system/permissions' && req.method === 'GET') {
+      return json(res, 200, getPermissionStatus());
+    }
+
+    // ── POST /api/system/permissions/refresh ─────────────────────
+    if (pathname === '/api/system/permissions/refresh' && req.method === 'POST') {
+      await detectPermissions();
+      broadcastPermissions();
+      return json(res, 200, getPermissionStatus());
     }
 
     // ── GET /api/segments ─────────────────────────────────────────
     if (pathname === '/api/segments' && req.method === 'GET') {
-      return json(res, 200, { 
+      return cachedJson(res, makeCacheKey(pathname, urlObj), 5000, ['segments'], () => ({
         segments: ACTIVE_SEGMENTS,
         health: getSegmentHealth(),
         summary: getSegmentLogSummary(60)
-      });
+      }));
     }
 
     // ── GET /api/segments/:name/metrics ────────────────────────────
     if (pathname.startsWith('/api/segments/') && pathname.endsWith('/metrics') && req.method === 'GET') {
-      const segName = pathname.split('/')[3];
-      const minutes = parseInt(urlObj.searchParams.get('minutes') || '60');
-      const metrics = getSegmentMetrics(segName, 'unknown', 'connection_count', minutes);
-      return json(res, 200, { segment: segName, metrics });
+      return cachedJson(res, makeCacheKey(pathname, urlObj), 5000, ['segments'], () => {
+        const segName = pathname.split('/')[3];
+        const minutes = parseInt(urlObj.searchParams.get('minutes') || '60');
+        const metrics = getSegmentMetrics(segName, 'unknown', 'connection_count', minutes);
+        return { segment: segName, metrics };
+      });
     }
 
     // ── GET /api/segments/alerts ──────────────────────────────────
     if (pathname === '/api/segments/alerts' && req.method === 'GET') {
-      const segment = urlObj.searchParams.get('segment');
-      const zone = urlObj.searchParams.get('zone');
-      const limit = parseInt(urlObj.searchParams.get('limit') || '50');
-      const alerts = getSegmentAlerts(segment, zone, limit);
-      return json(res, 200, { alerts, total: alerts.length });
+      return cachedJson(res, makeCacheKey(pathname, urlObj), 5000, ['segments', 'alerts'], () => {
+        const segment = urlObj.searchParams.get('segment');
+        const zone = urlObj.searchParams.get('zone');
+        const limit = parseInt(urlObj.searchParams.get('limit') || '50');
+        const alerts = getSegmentAlerts(segment, zone, limit);
+        return { alerts, total: alerts.length };
+      });
     }
 
     // ── POST /api/segments/alerts/:id/ack ─────────────────────────
@@ -2027,6 +2745,7 @@ httpServer.on('request', async (req, res) => {
       const alertId = pathname.split('/')[4];
       try {
         db.prepare('UPDATE segment_alerts SET acknowledged = 1 WHERE id = ?').run(alertId);
+        invalidateCacheTags(['segments', 'alerts']);
         return json(res, 200, { success: true, message: 'Alert acknowledged' });
       } catch (e) {
         return json(res, 500, { error: 'Failed to acknowledge alert' });
@@ -2035,27 +2754,29 @@ httpServer.on('request', async (req, res) => {
 
     // ── GET /api/plugins ──────────────────────────────────────────
     if (pathname === '/api/plugins' && req.method === 'GET') {
-      return json(res, 200, {
+      return cachedJson(res, makeCacheKey(pathname, urlObj), 30000, ['plugins'], () => ({
         plugins: activePlugins.map(p => ({
           name: p.name,
           hasInit: typeof p.instance.init === 'function',
           hasAnalyze: typeof p.instance.analyze === 'function'
         }))
-      });
+      }));
     }
 
     // ── GET /api/database/logs ────────────────────────────────────
     if (pathname === '/api/database/logs' && req.method === 'GET') {
-      // If Elasticsearch is configured, prefer it for high-scale historical retrieval
-      if (ELASTIC_URL) {
-        const results = await elasticClient.query('logs', { size: 500, sort: [{ date: 'desc' }] });
-        if (results && results.hits) {
-          return json(res, 200, { databaseLogs: results.hits.hits.map(h => h._source) });
+      return cachedJson(res, makeCacheKey(pathname, urlObj), 10000, ['database', 'logs'], async () => {
+        // If Elasticsearch is configured, prefer it for high-scale historical retrieval
+        if (ELASTIC_URL) {
+          const results = await elasticClient.query('logs', { size: 500, sort: [{ date: 'desc' }] });
+          if (results && results.hits) {
+            return { databaseLogs: results.hits.hits.map(h => h._source) };
+          }
         }
-      }
-      const rows = db.prepare('SELECT * FROM logs ORDER BY date DESC LIMIT 5000').all()
-        .map(l => ({ ...l, suspicious: !!l.suspicious }));
-      return json(res, 200, { databaseLogs: rows });
+        const rows = db.prepare('SELECT * FROM logs ORDER BY date DESC LIMIT 5000').all()
+          .map(l => ({ ...l, suspicious: !!l.suspicious }));
+        return { databaseLogs: rows };
+      });
     }
 
     // ── POST /api/kill-process ────────────────────────────────────
@@ -2079,7 +2800,15 @@ httpServer.on('request', async (req, res) => {
     if (pathname.startsWith('/api/threat-intel/virustotal') && req.method === 'GET') {
       const indicator = urlObj.searchParams.get('indicator') || urlObj.searchParams.get('hash');
       const type = urlObj.searchParams.get('type');
+      const cacheKey = makeCacheKey(pathname, urlObj, 'threat-intel');
+      const cached = getCachedValue(cacheKey);
+      if (cached) {
+        res.setHeader('X-App-Cache', 'HIT');
+        return json(res, cached.status, cached.body);
+      }
       const result = await queryVirusTotal(indicator, type);
+      if (result.status === 200) setCachedValue(cacheKey, result, 10 * 60 * 1000, ['threat-intel']);
+      res.setHeader('X-App-Cache', 'MISS');
       return json(res, result.status, result.body);
     }
 
@@ -2151,6 +2880,210 @@ httpServer.on('request', async (req, res) => {
       }
     }
 
+    // ── Analytics Engine API Routes ────────────────────────────────────────
+
+    // GET /api/analytics/global — global KPI summary
+    if (pathname === '/api/analytics/global' && req.method === 'GET') {
+      const window = parseInt(urlObj.searchParams.get('window') || '3600000');
+      return json(res, 200, analyticsEngine.getGlobalKPIs(Math.min(window, 7 * 24 * 3600 * 1000)));
+    }
+
+    // GET /api/analytics/segments — all segment KPIs ranked
+    if (pathname === '/api/analytics/segments' && req.method === 'GET') {
+      const window = parseInt(urlObj.searchParams.get('window') || '3600000');
+      return json(res, 200, { segments: analyticsEngine.getSegmentRanking(Math.min(window, 24 * 3600 * 1000)), defs: SEGMENT_DEFS });
+    }
+
+    // GET /api/analytics/segments/:id — single segment KPIs
+    if (pathname.startsWith('/api/analytics/segments/') && pathname.split('/').length === 5 && req.method === 'GET') {
+      const segId = pathname.split('/')[4];
+      const window = parseInt(urlObj.searchParams.get('window') || '3600000');
+      return json(res, 200, analyticsEngine.computeKPIs(segId, Math.min(window, 7 * 24 * 3600 * 1000)));
+    }
+
+    // GET /api/analytics/segments/:id/timeseries — time-bucketed series
+    if (pathname.startsWith('/api/analytics/segments/') && pathname.endsWith('/timeseries') && req.method === 'GET') {
+      const segId = pathname.split('/')[4];
+      const window = parseInt(urlObj.searchParams.get('window') || String(3 * 3600 * 1000));
+      const bucket = parseInt(urlObj.searchParams.get('bucket') || '300000');
+      return json(res, 200, { segment: segId, series: analyticsEngine.getSegmentTimeSeries(segId, window, bucket) });
+    }
+
+    // GET /api/analytics/segments/:id/compare — historical comparison
+    if (pathname.startsWith('/api/analytics/segments/') && pathname.endsWith('/compare') && req.method === 'GET') {
+      const segId = pathname.split('/')[4];
+      return json(res, 200, { segment: segId, comparison: analyticsEngine.getHistoricalComparison(segId) });
+    }
+
+    // GET /api/analytics/alerts — active threshold alerts
+    if (pathname === '/api/analytics/alerts' && req.method === 'GET') {
+      const since = urlObj.searchParams.get('since') ? parseInt(urlObj.searchParams.get('since')) : null;
+      const segment = urlObj.searchParams.get('segment') || null;
+      const limit = parseInt(urlObj.searchParams.get('limit') || '200');
+      return json(res, 200, { alerts: analyticsEngine.getAllAlerts(since, segment, limit) });
+    }
+
+    // POST /api/analytics/alerts/:id/ack — acknowledge an alert
+    if (pathname.startsWith('/api/analytics/alerts/') && pathname.endsWith('/ack') && req.method === 'POST') {
+      const alertId = parseInt(pathname.split('/')[4]);
+      analyticsEngine.acknowledgeAlert(alertId);
+      return json(res, 200, { acknowledged: true });
+    }
+
+    // GET /api/analytics/thresholds — get all thresholds
+    if (pathname === '/api/analytics/thresholds' && req.method === 'GET') {
+      const segment = urlObj.searchParams.get('segment') || null;
+      return json(res, 200, { thresholds: analyticsEngine.getThresholds(segment) });
+    }
+
+    // PUT /api/analytics/thresholds — update a threshold
+    if (pathname === '/api/analytics/thresholds' && req.method === 'PUT') {
+      const body = await readBody(req);
+      if (caller.role !== 'admin') return json(res, 403, { error: 'Admin role required' });
+      const { segment, metric, warningValue, criticalValue, direction } = body;
+      if (!segment || !metric) return json(res, 400, { error: 'segment and metric required' });
+      analyticsEngine.updateThreshold(segment, metric, warningValue, criticalValue, direction);
+      return json(res, 200, { updated: true });
+    }
+
+    // POST /api/analytics/engage — record engagement event
+    if (pathname === '/api/analytics/engage' && req.method === 'POST') {
+      const body = await readBody(req);
+      analyticsEngine.recordEngagement({ ...body, userId: caller.sub });
+      return json(res, 200, { recorded: true });
+    }
+
+    // GET /api/analytics/snapshots/:segment — historical KPI snapshots (from DB)
+    if (pathname.startsWith('/api/analytics/snapshots/') && req.method === 'GET') {
+      const segId = pathname.split('/')[4];
+      const limit = parseInt(urlObj.searchParams.get('limit') || '120');
+      const snapshots = db.prepare(
+        'SELECT * FROM segment_kpi_snapshots WHERE segment = ? ORDER BY ts DESC LIMIT ?'
+      ).all(segId, Math.min(limit, 500));
+      return json(res, 200, { segment: segId, snapshots });
+    }
+
+    // GET /api/analytics/benchmarks — industry benchmark reference data
+    if (pathname === '/api/analytics/benchmarks' && req.method === 'GET') {
+      const { BENCHMARKS } = await import('./services/analyticsEngine.js');
+      return json(res, 200, { benchmarks: BENCHMARKS, segments: SEGMENT_DEFS });
+    }
+    if (pathname === '/api/scanner/targets' && req.method === 'GET') {
+      return json(res, 200, { targets: scannerEngine.getTargets() });
+    }
+    if (pathname === '/api/scanner/status' && req.method === 'GET') {
+      return json(res, 200, scannerEngine.getStatus());
+    }
+    if (pathname === '/api/scanner/start' && req.method === 'POST') {
+      try {
+        const config = await readBody(req);
+        auditLogger.scanStarted(caller.sub, caller.username, config);
+        scannerEngine.startScan(config).catch(err => logger.error(err, 'Scan error'));
+        return json(res, 200, { status: 'starting' });
+      } catch (err) { return json(res, 409, { error: err.message }); }
+    }
+    if (pathname === '/api/scanner/stop' && req.method === 'POST') {
+      return json(res, 200, { stopped: scannerEngine.stopScan() });
+    }
+    if (pathname === '/api/scanner/sessions' && req.method === 'GET') {
+      const limit = Math.min(parseInt(urlObj.searchParams.get('limit')) || 20, 100);
+      const sessions = db.prepare('SELECT * FROM scan_sessions ORDER BY started_at DESC LIMIT ?').all(limit);
+      return json(res, 200, { sessions: sessions.map(s => ({ ...s, summary: s.summary ? JSON.parse(s.summary) : null, config: s.config ? JSON.parse(s.config) : null })) });
+    }
+    if (pathname.startsWith('/api/scanner/sessions/') && req.method === 'GET') {
+      const parts = pathname.split('/');
+      const sessionId = parts[4];
+      if (parts[5] === 'findings') {
+        const status = urlObj.searchParams.get('status');
+        const sort = urlObj.searchParams.get('sort');
+        let query = 'SELECT * FROM scan_findings WHERE session_id = ?';
+        const params = [sessionId];
+        if (status && status !== 'all') { query += ' AND status = ?'; params.push(status); }
+        query += sort === 'name' ? ' ORDER BY file_name ASC' : ' ORDER BY risk_score DESC';
+        query += ' LIMIT 500';
+        const findings = db.prepare(query).all(...params);
+        return json(res, 200, { findings: findings.map(f => ({ ...f, risk_factors: JSON.parse(f.risk_factors || '[]'), mitre_techniques: JSON.parse(f.mitre_techniques || '[]'), ads_streams: JSON.parse(f.ads_streams || '[]') })) });
+      }
+      const session = db.prepare('SELECT * FROM scan_sessions WHERE id = ?').get(sessionId);
+      if (!session) return json(res, 404, { error: 'Session not found' });
+      return json(res, 200, { ...session, summary: session.summary ? JSON.parse(session.summary) : null });
+    }
+    if (pathname.startsWith('/api/scanner/export/') && req.method === 'GET') {
+      const parts = pathname.split('/');
+      const [sessionId, format] = [parts[4], parts[5]];
+      const session = db.prepare('SELECT * FROM scan_sessions WHERE id = ?').get(sessionId);
+      if (!session) return json(res, 404, { error: 'Session not found' });
+      const findings = db.prepare('SELECT * FROM scan_findings WHERE session_id = ? ORDER BY risk_score DESC').all(sessionId);
+      const { exportJSON, exportCSV, exportSTIX, exportSplunkCIM, exportHTML } = await import('./scanner/exporters.js');
+      const exporters = { json: exportJSON, csv: exportCSV, stix: exportSTIX, splunk: exportSplunkCIM, html: exportHTML };
+      const exporter = exporters[format];
+      if (!exporter) return json(res, 400, { error: 'Unsupported format. Use: json, csv, stix, splunk, html' });
+      auditLogger.dataExport(caller.sub, caller.username, format, `/api/scanner/export/${sessionId}`);
+      const content = format === 'csv' ? exporter(findings) : exporter(session, findings);
+      const types = { json: 'application/json', csv: 'text/csv', stix: 'application/json', splunk: 'application/x-ndjson', html: 'text/html' };
+      res.writeHead(200, { 'Content-Type': types[format], 'Content-Disposition': `attachment; filename="scan-${sessionId}.${format === 'html' ? 'html' : format === 'splunk' ? 'ndjson' : format}"` });
+      return res.end(content);
+    }
+
+    // ── Gemini AI API ──────────────────────────────────────────────
+    if (pathname === '/api/ai/analyze' && req.method === 'POST') {
+      const body = await readBody(req);
+      if (!geminiService.isConfigured() && body.apiKey) geminiService.setApiKey(body.apiKey);
+      if (!geminiService.isConfigured()) return json(res, 400, { error: 'Gemini API key not configured. Set GEMINI_API_KEY env var or provide apiKey in request.' });
+      try {
+        const result = await geminiService.analyzeTelemetry(body);
+        return json(res, 200, result);
+      } catch (e) { return json(res, 500, { error: e.message }); }
+    }
+    if (pathname === '/api/ai/chat' && req.method === 'POST') {
+      const body = await readBody(req);
+      if (!geminiService.isConfigured() && body.apiKey) geminiService.setApiKey(body.apiKey);
+      if (!geminiService.isConfigured()) return json(res, 400, { error: 'AI not configured' });
+      try {
+        const result = await geminiService.chat(body);
+        return json(res, 200, result);
+      } catch (e) { return json(res, 500, { error: e.message }); }
+    }
+    if (pathname === '/api/ai/metrics' && req.method === 'GET') {
+      return json(res, 200, geminiService.getMetrics());
+    }
+
+    // ── Security Audit Log API ────────────────────────────────────
+    if (pathname === '/api/security/audit' && req.method === 'GET') {
+      const eventType = urlObj.searchParams.get('type');
+      const severity = urlObj.searchParams.get('severity');
+      const since = urlObj.searchParams.get('since') ? parseInt(urlObj.searchParams.get('since')) : null;
+      const limit = parseInt(urlObj.searchParams.get('limit') || '100');
+      const logs = auditLogger.query({ eventType, severity, since, limit });
+      return json(res, 200, { logs });
+    }
+    if (pathname === '/api/security/ddos-stats' && req.method === 'GET') {
+      return json(res, 200, ddosProtection.getStats());
+    }
+
+    // ── Database Migration Status ─────────────────────────────────
+    if (pathname === '/api/system/migrations' && req.method === 'GET') {
+      const { getMigrationStatus } = await import('./services/migrations.js');
+      return json(res, 200, { migrations: getMigrationStatus(db) });
+    }
+
+    // ── Sync API ──────────────────────────────────────────────────
+    if (pathname === '/api/sync/changes' && req.method === 'GET') {
+      const since = parseInt(urlObj.searchParams.get('since') || '0');
+      const changes = syncManager.getChangesSince(since, caller.sub);
+      return json(res, 200, { changes });
+    }
+    if (pathname === '/api/sync/upload' && req.method === 'POST') {
+      const body = await readBody(req);
+      const clientId = req.headers['x-client-id'] || 'web-' + caller.sub;
+      const results = syncManager.processClientSync(clientId, caller.sub, body.changes || []);
+      return json(res, 200, { results });
+    }
+    if (pathname === '/api/sync/status' && req.method === 'GET') {
+      const clientId = urlObj.searchParams.get('clientId') || 'web-' + caller.sub;
+      return json(res, 200, syncManager.getClientSyncStatus(clientId));
+    }
+
     json(res, 404, { error: 'Not found' });
 
   } catch (err) {
@@ -2166,6 +3099,7 @@ process.on('uncaughtException',  (err)    => { logger.fatal(err, 'Uncaught Excep
 // ── Graceful shutdown ────────────────────────────────────────────
 function shutdown(signal) {
   logger.info(`${signal} received — shutting down gracefully`);
+  analyticsEngine.destroy();
   for (const timer of wsAuthTimers.values()) clearTimeout(timer);
   httpServer.close(() => { logger.info('HTTP server closed'); process.exit(0); });
   setTimeout(() => process.exit(1), 10000);
@@ -2174,6 +3108,16 @@ process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT',  () => shutdown('SIGINT'));
 
 // ── Start (gap #9 — PM2 will manage process; gap #7 — TLS via reverse proxy) ─
-httpServer.listen(PORT, () => {
+httpServer.listen(PORT, async () => {
   logger.info({ port: PORT, env: NODE_ENV, origins: ALLOWED_ORIGINS }, 'SentinelGrid backend started');
+  
+  // Initialize permission detection
+  await detectPermissions();
+  logger.info({ permissions: SYSTEM_PERMISSIONS }, 'System permissions detected');
+  
+  // Warn if not running with admin privileges
+  if (!SYSTEM_PERMISSIONS.isAdmin) {
+    logger.warn('Not running with administrator privileges - some monitoring features will be limited');
+    logger.warn('Restart with "Run as administrator" for full security monitoring');
+  }
 });
