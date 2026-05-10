@@ -124,16 +124,25 @@ export async function refreshAccessToken(): Promise<boolean> {
   return _refreshing;
 }
 
-/* ── generic fetch with auto-refresh ───────────────────────────── */
-async function apiFetch(url: string, init: RequestInit = {}): Promise<Response> {
+async function apiFetch(url: string, init: RequestInit = {}, retries = 2): Promise<Response> {
   const finalInit = { ...init, credentials: 'include' as RequestCredentials, headers: { ...authHeaders(), ...(init.headers ?? {}) } };
-  const res = await fetch(url, finalInit);
-  if (res.status === 401) {
-    const refreshed = await refreshAccessToken();
-    if (!refreshed) { Token.clearAll(); window.location.reload(); throw new Error('Session expired'); }
-    return fetch(url, { ...finalInit, headers: { ...authHeaders(), ...(init.headers ?? {}) } });
+  
+  try {
+    const res = await fetch(url, finalInit);
+    if (res.status === 401) {
+      const refreshed = await refreshAccessToken();
+      if (!refreshed) { Token.clearAll(); window.location.reload(); throw new Error('Session expired'); }
+      return fetch(url, { ...finalInit, headers: { ...authHeaders(), ...(init.headers ?? {}) } });
+    }
+    return res;
+  } catch (err) {
+    if (retries > 0 && err instanceof TypeError) {
+      // TypeError usually indicates network failure
+      await new Promise(r => setTimeout(r, 1000 * (3 - retries)));
+      return apiFetch(url, init, retries - 1);
+    }
+    throw err;
   }
-  return res;
 }
 
 export async function apiGet<T>(path: string, options: { cacheMs?: number; force?: boolean } = {}): Promise<T> {

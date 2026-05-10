@@ -8,6 +8,11 @@ import authRoutes from './routes/authRoutes.js';
 import telemetryRoutes from './routes/telemetryRoutes.js';
 import threatIntelRoutes from './routes/threatIntelRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
+import analyticsRoutes from './routes/analyticsRoutes.js';
+import scannerRoutes from './routes/scannerRoutes.js';
+import aiRoutes from './routes/aiRoutes.js';
+import syncRoutes from './routes/syncRoutes.js';
+import securityRoutes from './routes/securityRoutes.js';
 import { getSystemHealth } from './services/supervisorService.js';
 import { apiLimiter, authLimiter } from './middleware/rateLimiter.js';
 import logger from './utils/logger.js';
@@ -62,6 +67,11 @@ app.use(cookieParser());
 // Routes
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/analytics', analyticsRoutes);
+app.use('/api/scanner', scannerRoutes);
+app.use('/api/ai', aiRoutes);
+app.use('/api/sync', syncRoutes);
+app.use('/api/security', securityRoutes);
 app.use('/api/threat-intel', threatIntelRoutes);
 app.use('/api', telemetryRoutes);
 

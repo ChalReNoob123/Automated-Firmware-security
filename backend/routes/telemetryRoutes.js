@@ -12,6 +12,8 @@ router.get('/analyze', authorize('read:all'), telemetryController.getAnalyze);
 router.get('/logs', authorize('read:all'), telemetryController.getLiveLogs);
 router.get('/database/logs', authorize('read:all'), telemetryController.getDatabaseLogs);
 router.get('/insights', authorize('read:all'), telemetryController.getInsights);
+router.get('/plugins', authorize('read:telemetry'), telemetryController.getPlugins);
+router.get('/system/migrations', authorize('read:telemetry'), telemetryController.getSystemMigrations);
 router.get('/system/stats', authorize('read:telemetry'), telemetryController.getStats);
 router.get('/system/permissions', telemetryController.getSystemPermissions);
 

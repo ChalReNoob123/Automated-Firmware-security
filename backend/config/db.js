@@ -7,6 +7,7 @@ const db = new DatabaseSync(dbPath);
 // Performance tuning
 db.exec('PRAGMA journal_mode=WAL');
 db.exec('PRAGMA synchronous=NORMAL');
+db.exec('PRAGMA busy_timeout=5000');
 db.exec('PRAGMA cache_size=10000');
 db.exec('PRAGMA temp_store=MEMORY');
 db.exec('PRAGMA mmap_size=268435456');

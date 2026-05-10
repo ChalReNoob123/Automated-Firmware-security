@@ -1,5 +1,6 @@
 import * as telemetryService from '../services/telemetryService.js';
 import logger from '../utils/logger.js';
+import os from 'os';
 
 export const getSystemInfo = async (req, res) => {
   try {
@@ -70,4 +71,23 @@ export const getSystemPermissions = (req, res) => {
     role: req.user.role,
     permissions: ROLE_PERMISSIONS[req.user.role] || []
   });
+};
+
+export const getPlugins = (req, res) => {
+  import('../services/pluginService.js').then(({ getActivePlugins }) => {
+    res.json(getActivePlugins());
+  }).catch(err => {
+    res.status(500).json({ error: 'Failed to fetch plugins' });
+  });
+};
+
+export const getSystemMigrations = (req, res) => {
+  try {
+    import('../config/db.js').then(({ default: db }) => {
+      const migrations = db.prepare('SELECT * FROM _migrations ORDER BY applied_at DESC').all();
+      res.json(migrations);
+    }).catch(e => res.json([]));
+  } catch (err) {
+    res.json([]);
+  }
 };

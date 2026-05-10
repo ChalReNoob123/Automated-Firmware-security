@@ -9,7 +9,7 @@ import path from 'path';
 
 const execAsync = promisify(exec);
 
-const MITRE_MAP = {
+export const MITRE_MAP = {
   '4625': { id: 'T1110',     name: 'Brute Force',                  tactic: 'Credential Access' },
   '4648': { id: 'T1078',     name: 'Valid Accounts',               tactic: 'Defense Evasion' },
   '4672': { id: 'T1078.003', name: 'Local Account — High Priv',    tactic: 'Privilege Escalation' },
@@ -25,7 +25,7 @@ const MITRE_MAP = {
   '4769': { id: 'T1558.003', name: 'Kerberos Service Ticket',      tactic: 'Credential Access' },
 };
 
-const SUSPICIOUS_IDS = new Set(Object.keys(MITRE_MAP));
+export const SUSPICIOUS_IDS = new Set(Object.keys(MITRE_MAP));
 
 let cache = {
   system: null,
@@ -241,6 +241,7 @@ export const getWindowsLogs = async (maxEvents = 100) => {
   
   const psScript = `
     try {
+      $ProgressPreference = 'SilentlyContinue'
       $channels = @('Security', 'System', 'Application')
       $evts = Get-WinEvent -LogName $channels -MaxEvents ${maxEvents} -ErrorAction SilentlyContinue
       if ($null -eq $evts) { return '[]' }
@@ -252,9 +253,16 @@ export const getWindowsLogs = async (maxEvents = 100) => {
   try {
     const encoded = Buffer.from(psScript, 'utf16le').toString('base64');
     const { stdout } = await execAsync(`powershell -NoProfile -NonInteractive -EncodedCommand ${encoded}`, { timeout: 15000 });
-    const trimmed = stdout.trim();
-    if (!trimmed || trimmed === '[]') return [];
-    const parsed = JSON.parse(trimmed);
+    
+    // Defensive extraction to bypass any #< CLIXML or stray progress outputs
+    const jsonStart = stdout.indexOf('[');
+    const jsonEnd = stdout.lastIndexOf(']') + 1;
+    if (jsonStart === -1 || jsonEnd === 0) return [];
+    
+    const cleanJson = stdout.substring(jsonStart, jsonEnd);
+    if (!cleanJson || cleanJson === '[]') return [];
+    
+    const parsed = JSON.parse(cleanJson);
     return (Array.isArray(parsed) ? parsed : [parsed]).filter(l => {
       const msg = l.Message || '';
       return !NOISE_BLACKLIST.some(noise => msg.includes(noise));
@@ -371,7 +379,26 @@ export const saveLogsToDb = (logs) => {
 };
 
 export const getHistoricalLogs = (limit = 1000) => {
-  return db.prepare('SELECT * FROM logs ORDER BY date DESC LIMIT ?').all(limit);
+  try {
+    const rows = db.prepare('SELECT * FROM logs ORDER BY date DESC LIMIT ?').all(limit);
+    // Defensive: validate and sanitize each row before returning
+    return rows.map(row => ({
+      ...row,
+      // Ensure mitre field is valid — parse safely or null
+      mitre: (() => {
+        if (!row.mitre || row.mitre === 'null' || row.mitre === 'undefined') return null;
+        try {
+          const parsed = JSON.parse(row.mitre);
+          return parsed && typeof parsed === 'object' ? parsed : null;
+        } catch {
+          return null;
+        }
+      })()
+    }));
+  } catch (err) {
+    logger.error({ err: err.message }, 'Failed to fetch historical logs from DB');
+    return [];
+  }
 };
 
 export const collectSnapshot = async (force = false) => {
@@ -401,11 +428,31 @@ export const collectSnapshot = async (force = false) => {
   };
 };
 
+let lastCpuSample = os.cpus();
 export const getStats = async () => {
   const totalMem = os.totalmem();
   const freeMem = os.freemem();
+  
+  const currentCpuSample = os.cpus();
+  let idleDifference = 0;
+  let totalDifference = 0;
+  
+  for (let i = 0; i < currentCpuSample.length; i++) {
+    const prev = lastCpuSample[i].times;
+    const curr = currentCpuSample[i].times;
+    
+    const prevTotal = Object.values(prev).reduce((a, b) => a + b, 0);
+    const currTotal = Object.values(curr).reduce((a, b) => a + b, 0);
+    
+    totalDifference += currTotal - prevTotal;
+    idleDifference += curr.idle - prev.idle;
+  }
+  lastCpuSample = currentCpuSample;
+  
+  const cpuUsage = totalDifference === 0 ? 0 : 100 - Math.floor(100 * idleDifference / totalDifference);
+
   return {
-    cpu: (Math.random() * 100).toFixed(1), // Should implement real sampling
+    cpu: cpuUsage.toFixed(1),
     memory: (((totalMem - freeMem) / totalMem) * 100).toFixed(1),
     uptime: os.uptime(),
     timestamp: Date.now()

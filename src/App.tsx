@@ -9,20 +9,22 @@ import {
   Terminal, Database, Globe, RefreshCw, ChevronRight, X,
   CheckCircle, Clock, Cpu, FileText, Server, Flame, Monitor, LogOut, HardDrive,
 } from "lucide-react";
-import MitreMatrix from "./components/MitreMatrix";
-import NistCompliance from "./components/NistCompliance";
-import VirusTotalScanner from "./components/VirusTotalScanner";
-import WindowsLogViewer from "./components/WindowsLogViewer";
-import ThreatIntelligence from "./components/ThreatIntelligence";
-import MalwareSandbox from "./components/MalwareSandbox";
-import VulnPentestManager from "./components/VulnPentestManager";
-import CrossPlatformFim from "./components/CrossPlatformFim";
-import AdvancedVirtualBox from "./components/AdvancedVirtualBox";
-import AIAgent from "./components/AIAgent";
-import LoginScreen from "./components/LoginScreen";
-import OSSecurityPanel from "./components/OSSecurityPanel";
-import SystemScanner from "./components/SystemScanner";
-import GlobalAnalytics from "./components/GlobalAnalytics";
+import { lazy, Suspense } from "react";
+
+const MitreMatrix = lazy(() => import("./components/MitreMatrix"));
+const NistCompliance = lazy(() => import("./components/NistCompliance"));
+const VirusTotalScanner = lazy(() => import("./components/VirusTotalScanner"));
+const WindowsLogViewer = lazy(() => import("./components/WindowsLogViewer"));
+const ThreatIntelligence = lazy(() => import("./components/ThreatIntelligence"));
+const MalwareSandbox = lazy(() => import("./components/MalwareSandbox"));
+const VulnPentestManager = lazy(() => import("./components/VulnPentestManager"));
+const CrossPlatformFim = lazy(() => import("./components/CrossPlatformFim"));
+const AdvancedVirtualBox = lazy(() => import("./components/AdvancedVirtualBox"));
+const AIAgent = lazy(() => import("./components/AIAgent"));
+const LoginScreen = lazy(() => import("./components/LoginScreen"));
+const OSSecurityPanel = lazy(() => import("./components/OSSecurityPanel"));
+const SystemScanner = lazy(() => import("./components/SystemScanner"));
+const GlobalAnalytics = lazy(() => import("./components/GlobalAnalytics"));
 import { Token, WS_BASE, logout, refreshAccessToken, apiGet, fetchMe, type User as ApiUser } from "./utils/api";
 
 
@@ -727,7 +729,8 @@ export default function App() {
         )}
       </header>
 
-      <AnimatePresence mode="wait">
+      <Suspense fallback={<div className="flex h-[50vh] items-center justify-center text-white"><RefreshCw className="h-8 w-8 animate-spin text-sky-500" /></div>}>
+        <AnimatePresence mode="wait">
         <motion.main 
           key={tab}
           initial={{ opacity: 0, y: 30, filter: "blur(10px)", scale: 0.98 }}
@@ -1516,6 +1519,7 @@ export default function App() {
         )}
         </motion.main>
       </AnimatePresence>
+      </Suspense>
 
       {/* Footer */}
       <footer className="border-t border-white/8 py-4 px-6 text-center">

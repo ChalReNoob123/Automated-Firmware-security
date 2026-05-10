@@ -11,10 +11,10 @@ module.exports = {
   apps: [
     {
       name:         'sentinelgrid-backend',
-      script:       'backend.js',
+      script:       'backend/server.js',
       interpreter:  'node',
-      instances:    1,              // scale to 'max' for cluster mode
-      exec_mode:    'fork',
+      instances:    'max',              // scale to 'max' for cluster mode
+      exec_mode:    'cluster',
       watch:        false,
       max_memory_restart: '512M',
       restart_delay: 3000,

@@ -1,0 +1,56 @@
+if (pathname === '/health' && req.method === 'GET') {
+if (pathname.endsWith('/api/auth/signup') && req.method === 'POST') {
+if (pathname.endsWith('/api/auth/login') && req.method === 'POST') {
+if (pathname.endsWith('/api/auth/verify-2fa') && req.method === 'POST') {
+if (pathname.endsWith('/api/auth/refresh') && req.method === 'POST') {
+if (pathname.endsWith('/api/auth/logout') && req.method === 'POST') {
+if (pathname === '/api/auth/me' && req.method === 'GET') {
+if (pathname === '/api/cache/stats' && req.method === 'GET') {
+if (pathname === '/api/auth/admin/reset-totp' && req.method === 'POST') {
+if (pathname === '/api/os-info' && req.method === 'GET') {
+if (pathname === '/api/fim/events' && req.method === 'GET') {
+if (pathname === '/api/analyze' && req.method === 'GET') {
+if (pathname === '/api/system/stats' && req.method === 'GET') {
+if (pathname === '/api/system/permissions' && req.method === 'GET') {
+if (pathname === '/api/system/permissions/refresh' && req.method === 'POST') {
+if (pathname === '/api/segments' && req.method === 'GET') {
+if (pathname.startsWith('/api/segments/') && pathname.endsWith('/metrics') && req.method === 'GET') {
+if (pathname === '/api/segments/alerts' && req.method === 'GET') {
+if (pathname.startsWith('/api/segments/alerts/') && pathname.endsWith('/ack') && req.method === 'POST') {
+if (pathname === '/api/plugins' && req.method === 'GET') {
+if (pathname === '/api/database/logs' && req.method === 'GET') {
+if (pathname === '/api/kill-process' && req.method === 'POST') {
+if (pathname.startsWith('/api/threat-intel/virustotal') && req.method === 'GET') {
+if (pathname === '/api/threat-intel/abusech' && req.method === 'POST') {
+if (pathname.startsWith('/api/threat-intel/otx') && req.method === 'GET') {
+if (pathname === '/api/sandbox/cuckoo/detonate' && req.method === 'POST') {
+if (pathname === '/api/telemetry/mobile' && req.method === 'POST') {
+if (pathname === '/api/telemetry/ios' && req.method === 'POST') {
+if (pathname === '/api/analytics/global' && req.method === 'GET') {
+if (pathname === '/api/analytics/segments' && req.method === 'GET') {
+if (pathname.startsWith('/api/analytics/segments/') && pathname.split('/').length === 5 && req.method === 'GET') {
+if (pathname.startsWith('/api/analytics/segments/') && pathname.endsWith('/timeseries') && req.method === 'GET') {
+if (pathname.startsWith('/api/analytics/segments/') && pathname.endsWith('/compare') && req.method === 'GET') {
+if (pathname === '/api/analytics/alerts' && req.method === 'GET') {
+if (pathname.startsWith('/api/analytics/alerts/') && pathname.endsWith('/ack') && req.method === 'POST') {
+if (pathname === '/api/analytics/thresholds' && req.method === 'GET') {
+if (pathname === '/api/analytics/thresholds' && req.method === 'PUT') {
+if (pathname === '/api/analytics/engage' && req.method === 'POST') {
+if (pathname.startsWith('/api/analytics/snapshots/') && req.method === 'GET') {
+if (pathname === '/api/analytics/benchmarks' && req.method === 'GET') {
+if (pathname === '/api/scanner/targets' && req.method === 'GET') {
+if (pathname === '/api/scanner/status' && req.method === 'GET') {
+if (pathname === '/api/scanner/start' && req.method === 'POST') {
+if (pathname === '/api/scanner/stop' && req.method === 'POST') {
+if (pathname === '/api/scanner/sessions' && req.method === 'GET') {
+if (pathname.startsWith('/api/scanner/sessions/') && req.method === 'GET') {
+if (pathname.startsWith('/api/scanner/export/') && req.method === 'GET') {
+if (pathname === '/api/ai/analyze' && req.method === 'POST') {
+if (pathname === '/api/ai/chat' && req.method === 'POST') {
+if (pathname === '/api/ai/metrics' && req.method === 'GET') {
+if (pathname === '/api/security/audit' && req.method === 'GET') {
+if (pathname === '/api/security/ddos-stats' && req.method === 'GET') {
+if (pathname === '/api/system/migrations' && req.method === 'GET') {
+if (pathname === '/api/sync/changes' && req.method === 'GET') {
+if (pathname === '/api/sync/upload' && req.method === 'POST') {
+if (pathname === '/api/sync/status' && req.method === 'GET') {

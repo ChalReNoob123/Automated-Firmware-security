@@ -1,10 +1,7 @@
 import fs from 'fs';
 import path from 'path';
-import vm from 'vm';
+import { Worker } from 'worker_threads';
 import logger from '../utils/logger.js';
-import db from '../config/db.js';
-import * as tf from '@tensorflow/tfjs';
-import '@tensorflow/tfjs-backend-cpu';
 
 const PLUGINS_DIR = path.join(process.cwd(), 'plugins');
 const activePlugins = [];
@@ -14,26 +11,28 @@ export const loadPlugins = async () => {
   const files = fs.readdirSync(PLUGINS_DIR);
   
   for (const file of files) {
-    if (file.endsWith('.js') || file.endsWith('.mjs')) {
+    if ((file.endsWith('.js') || file.endsWith('.mjs')) && file !== 'worker_runner.js' && file !== 'advanced_analysis.js') {
       try {
         const pluginPath = path.join(PLUGINS_DIR, file);
-        const code = fs.readFileSync(pluginPath, 'utf8');
+        const runnerPath = path.join(PLUGINS_DIR, 'worker_runner.js');
+        if (!fs.existsSync(runnerPath)) continue;
         
-        const sandbox = { 
-          db, logger, tf, console, 
-          Buffer, setTimeout, setInterval,
-          process: { env: { NODE_ENV: process.env.NODE_ENV } },
-          exports: {} 
-        };
-        vm.createContext(sandbox);
+        const worker = new Worker(runnerPath, { workerData: { pluginPath } });
         
-        const script = new vm.Script(code);
-        script.runInContext(sandbox);
+        worker.on('message', (msg) => {
+          if (msg.type === 'log') {
+            if (msg.level === 'info') logger.info(msg.msg);
+            else if (msg.level === 'warn') logger.warn(msg.msg);
+            else logger.error(msg.msg);
+          } else if (msg.type === 'ready') {
+            activePlugins.push({ name: msg.name, worker });
+            logger.info(`Loaded plugin (Worker sandboxed): ${msg.name}`);
+          } else if (msg.type === 'error') {
+            logger.error(`Plugin error (${file}): ${msg.error}`);
+          }
+        });
         
-        const instance = sandbox.exports || sandbox;
-        if (instance.init) await instance.init({ db, logger });
-        activePlugins.push({ name: instance.name || file, instance });
-        logger.info(`Loaded plugin (sandboxed): ${instance.name || file}`);
+        worker.on('error', err => logger.error(`Plugin worker error ${file}: ${err.message}`));
       } catch (err) {
          logger.error(`Failed to load sandboxed plugin ${file}: ${err.message}`);
       }
@@ -44,16 +43,16 @@ export const loadPlugins = async () => {
 export const getActivePlugins = () => {
   return activePlugins.map(p => ({
     name: p.name,
-    hasInit: typeof p.instance.init === 'function',
-    hasAnalyze: typeof p.instance.analyze === 'function'
+    hasInit: true,
+    hasAnalyze: true
   }));
 };
 
 export const runPluginAnalysis = (analysis, logs, network, files) => {
   for (const plugin of activePlugins) {
-    if (typeof plugin.instance.analyze === 'function') {
+    if (plugin.worker) {
       try { 
-        plugin.instance.analyze(analysis, logs, network, files); 
+        plugin.worker.postMessage({ type: 'analyze', id: Date.now(), analysis, logs, network, files }); 
       } catch (e) { 
         logger.error(e, `Plugin analysis error in ${plugin.name}`); 
       }

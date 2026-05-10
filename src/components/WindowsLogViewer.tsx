@@ -1,12 +1,49 @@
-import { useState, useEffect, useCallback, useRef, type ReactNode } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo, type ReactNode } from "react";
 
 import { 
   FileText, AlertTriangle, ChevronDown, ChevronRight, 
   Filter, HardDrive, Activity, Shield, Cpu, Zap, 
-  Terminal, Monitor, CheckCircle2, Info, AlertOctagon, Database
+  Terminal, Monitor, CheckCircle2, Info, AlertOctagon, Database,
+  Eye, EyeOff, RefreshCw, Wifi, WifiOff
 } from "lucide-react";
 
-import { API_BASE, WS_BASE, Token } from "../utils/api";
+import { API_BASE, WS_BASE, Token, refreshAccessToken } from "../utils/api";
+
+// ── Utilities ────────────────────────────────────────────────────
+
+/** Generate a stable unique ID deterministically from log content */
+function stableLogId(log: any): string {
+  const raw = `${log.Id || log.id || ''}-${log.TimeCreated || log.timestamp || ''}-${log.Message?.slice(0, 50) || ''}-${log.ProviderName || log.source || ''}`;
+  let h = 0;
+  for (let i = 0; i < raw.length; i++) h = (h << 5) - h + raw.charCodeAt(i);
+  return `log-${Math.abs(h).toString(36)}`;
+}
+
+/** Parse a timestamp from various backend formats defensively */
+function parseTimestamp(val: any): number {
+  if (!val) return Date.now();
+  if (typeof val === 'number') return isNaN(val) ? Date.now() : val;
+  if (typeof val === 'string') {
+    if (val.startsWith('/Date(')) {
+      const n = parseInt(val.replace(/[^0-9]/g, ''), 10);
+      return isNaN(n) ? Date.now() : n;
+    }
+    const d = new Date(val).getTime();
+    return isNaN(d) ? Date.now() : d;
+  }
+  return Date.now();
+}
+
+/** Format timestamp safely */
+function formatTime(ts: number): string {
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit"
+    }).format(!isNaN(ts) ? ts : Date.now());
+  } catch {
+    return "Unknown Date";
+  }
+}
 
 // Local Badge component for severity labels
 function Badge({ cls, children }: { cls: string; children: ReactNode }) {
@@ -66,23 +103,24 @@ const channelBadge: Record<string, string> = {
   Application: "bg-indigo-500/20 text-indigo-300 border-indigo-500/20",
 };
 
+/** Single-event row with expand/collapse. Uses ref-based expansion to avoid per-row React state */
 function EventRow({ event }: { event: WindowsEventLog }) {
   const [expanded, setExpanded] = useState(false);
+  const [isNewLocal, setIsNewLocal] = useState(event.isNew);
 
-  let timeStr = "Invalid Date";
-  try {
-    timeStr = new Intl.DateTimeFormat("en-US", {
-      month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit"
-    }).format(event.timestamp && !isNaN(event.timestamp) ? event.timestamp : Date.now());
-  } catch (e) {
-    timeStr = "Unknown Date";
-  }
+  // CRITICAL FIX: Clear the "new" animation after 3 seconds to prevent permanent memory leak
+  useEffect(() => {
+    if (!event.isNew) return;
+    const t = setTimeout(() => setIsNewLocal(false), 3000);
+    return () => clearTimeout(t);
+  }, [event.isNew]);
 
+  const timeStr = formatTime(event.timestamp);
   const Icon = levelIcon[event.level] || Info;
   const lColor = levelColor[event.level] || levelColor.Information;
   
   return (
-    <div className={`group rounded-2xl border transition-all duration-500 ${event.isNew ? 'animate-pulse ring-1 ring-sky-500/50 shadow-[0_0_15px_rgba(14,165,233,0.2)]' : ''} ${event.suspicious ? 'border-rose-500/30 bg-rose-500/5 hover:bg-rose-500/10' : 'border-white/5 bg-white/3 hover:bg-white/5'}`}>
+    <div className={`group rounded-2xl border transition-all duration-300 ${isNewLocal ? 'ring-1 ring-sky-500/30' : ''} ${event.suspicious ? 'border-rose-500/30 bg-rose-500/5 hover:bg-rose-500/10' : 'border-white/5 bg-white/3 hover:bg-white/5'}`}>
       <button
         type="button"
         className="w-full p-4 text-left flex items-start gap-4"
@@ -98,6 +136,7 @@ function EventRow({ event }: { event: WindowsEventLog }) {
             <span className={`rounded-lg border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${channelBadge[event.logName] || "bg-slate-500/20 text-slate-300 border-slate-500/20"}`}>{event.logName}</span>
             <span className="font-mono text-xs text-slate-500 bg-white/5 px-1.5 py-0.5 rounded">ID: {event.eventId}</span>
             <span className="text-xs text-slate-400 font-medium truncate max-w-[150px]">{event.source}</span>
+            {isNewLocal && <span className="text-[10px] text-sky-400 font-bold animate-pulse">NEW</span>}
           </div>
           
           <p className={`text-sm leading-relaxed transition-all ${expanded ? 'text-slate-200' : 'text-slate-300 line-clamp-1'}`}>{event.message}</p>
@@ -119,7 +158,7 @@ function EventRow({ event }: { event: WindowsEventLog }) {
       </button>
 
       {expanded && (
-        <div className="border-t border-white/5 p-4 bg-black/20 space-y-4 animate-in slide-in-from-top-2 duration-300">
+        <div className="border-t border-white/5 p-4 bg-black/20 space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-4">
               <div className="rounded-xl border border-white/5 bg-black/40 p-4">
@@ -202,50 +241,105 @@ function FileRow({ file }: { file: FileEntry }) {
 export default function WindowsLogViewer() {
   const [activeTab, setActiveTab] = useState<"events" | "files" | "vulnerabilities" | "registry">("events");
   const [viewMode, setViewMode] = useState<"live" | "historical">("live");
-  const logChannel = "all";
   const [autoPoll, setAutoPoll] = useState(true);
   const [events, setEvents] = useState<WindowsEventLog[]>([]);
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [vulnerabilities, setVulnerabilities] = useState<any[]>([]);
-  const [_loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [computerInfo, setComputerInfo] = useState<string>("Local Machine");
 
   const [filterLevel, setFilterLevel] = useState<string>("All");
-  const filterSuspicious = false;
+  const [filterSuspicious, setFilterSuspicious] = useState(false);
   const [searchText, setSearchText] = useState("");
   const [toast, setToast] = useState<string | null>(null);
-  const [wsRetryNonce, setWsRetryNonce] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [wsStatus, setWsStatus] = useState<'connecting' | 'connected' | 'disconnected'>('disconnected');
+  const EVENTS_PER_PAGE = 50;
+  const MAX_EVENTS_BUFFER = 500; // Hard cap to prevent memory exhaustion
 
   const wsRef = useRef<WebSocket | null>(null);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectDelayRef = useRef(1000);
+  const isMountedRef = useRef(true);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const showToast = (message: string) => {
+  const showToast = useCallback((message: string) => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     setToast(message);
-    setTimeout(() => setToast(null), 3000);
-  };
+    toastTimerRef.current = setTimeout(() => {
+      if (isMountedRef.current) setToast(null);
+    }, 3000);
+  }, []);
 
-  const fetchLiveLogs = useCallback(async (channel: string = "all", silent = false) => {
+  // Map raw backend log to typed frontend event — centralized to avoid duplication
+  const mapRawLog = useCallback((l: any, isNew = false): WindowsEventLog => {
+    const ts = parseTimestamp(l.TimeCreated);
+    const mitreData = l.Mitre || l.mitre || null;
+    const mitre = mitreData && typeof mitreData === 'object' ? {
+      id: mitreData.id || mitreData.Id || '',
+      name: mitreData.name || mitreData.Name || '',
+      tactic: mitreData.tactic || mitreData.Tactic || ''
+    } : null;
+    return {
+      id: stableLogId(l),
+      eventId: l.Id || l.eventId || '0',
+      timestamp: ts,
+      level: l.LevelDisplayName || l.level || 'Information',
+      source: l.ProviderName || l.source || 'System',
+      category: l.TaskDisplayName || l.category || 'System',
+      logName: l.LogName || l.logName || 'System',
+      message: l.Message || l.message || l.description || '',
+      computer: l.MachineName || l.Computer || l.computer || 'Local',
+      suspicious: !!l.Suspicious || !!l.suspicious,
+      mitre,
+      isNew
+    };
+  }, []);
+
+  const fetchLiveLogs = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/api/logs?channel=${channel}&max=100`, {
-        headers: { "Authorization": `Bearer ${Token.getAccess()}` }
+      const token = Token.getAccess();
+      if (!token) throw new Error("No access token. Please re-login.");
+
+      const res = await fetch(`${API_BASE}/api/logs?channel=all&max=100`, {
+        headers: { "Authorization": `Bearer ${token}` }
       });
-      if (res.status === 401) throw new Error("Unauthorized. Please re-login.");
-      if (!res.ok) throw new Error("Log agent unreachable.");
+      if (res.status === 401) {
+        // Try to refresh token once
+        const refreshed = await refreshAccessToken();
+        if (!refreshed) throw new Error("Session expired. Please re-login.");
+        // Retry with new token
+        const retryRes = await fetch(`${API_BASE}/api/logs?channel=all&max=100`, {
+          headers: { "Authorization": `Bearer ${Token.getAccess()}` }
+        });
+        if (!retryRes.ok) throw new Error("Log agent unreachable after token refresh.");
+        const json = await retryRes.json();
+        if (json.logs) {
+          const mapped = json.logs.map((l: any) => mapRawLog(l, false));
+          setEvents(mapped);
+          if (json.computer) setComputerInfo(json.computer);
+          if (!silent) showToast(`Loaded ${mapped.length} device logs`);
+        }
+        return;
+      }
+      if (!res.ok) throw new Error(`Log agent unreachable (${res.status}).`);
 
       const json = await res.json();
       if (json.logs) {
-        setEvents(json.logs);
+        const mapped = json.logs.map((l: any) => mapRawLog(l, false));
+        setEvents(mapped);
         if (json.computer) setComputerInfo(json.computer);
-        if (!silent) showToast(`Loaded ${json.logs.length} actual device logs`);
+        if (!silent) showToast(`Loaded ${mapped.length} device logs`);
       }
     } catch (e: any) {
       setError(e.message || "Failed to fetch device logs.");
     } finally {
       if (!silent) setLoading(false);
     }
-  }, []);
+  }, [mapRawLog, showToast]);
 
   const fetchHistoricalLogs = useCallback(async () => {
     setLoading(true);
@@ -254,24 +348,39 @@ export default function WindowsLogViewer() {
       const res = await fetch(`${API_BASE}/api/database/logs`, {
         headers: { "Authorization": `Bearer ${Token.getAccess()}` }
       });
-      if (!res.ok) throw new Error("Historical database unreachable.");
+      if (!res.ok) throw new Error(`Historical database unreachable (${res.status}).`);
       const json = await res.json();
 
-      const parsedEvents: WindowsEventLog[] = json.databaseLogs.map((log: any, i: number) => ({
-        id: log.hash || `db-${i}`,
-        eventId: log.eventId,
-        timestamp: new Date(log.date).getTime() || Date.now(),
-        level: log.level,
-        source: log.source,
-        category: log.task,
-        logName: log.logName || "Historical",
-        message: log.description || 'No description.',
-        computer: 'Local Host',
-        suspicious: log.suspicious,
-        mitre: log.mitre ? JSON.parse(log.mitre) : null,
-      }));
+      const parsedEvents: WindowsEventLog[] = (json.databaseLogs || []).map((log: any) => {
+        let mitre = null;
+        if (log.mitre) {
+          try {
+            const m = typeof log.mitre === 'string' ? JSON.parse(log.mitre) : log.mitre;
+            if (m && typeof m === 'object') {
+              mitre = { id: m.id || '', name: m.name || '', tactic: m.tactic || '' };
+            }
+          } catch {
+            mitre = null; // Gracefully ignore malformed mitre JSON
+          }
+        }
+        return {
+          id: log.hash || stableLogId(log),
+          eventId: log.eventId || '0',
+          timestamp: new Date(log.date).getTime() || Date.now(),
+          level: log.level || 'Information',
+          source: log.source || 'System',
+          category: log.task || 'System',
+          logName: log.logName || "Historical",
+          message: log.description || 'No description.',
+          computer: 'Local Host',
+          suspicious: !!log.suspicious,
+          mitre,
+          isNew: false
+        };
+      });
 
       setEvents(parsedEvents);
+      setCurrentPage(1);
     } catch (e: any) {
       setError(e.message || "Failed to fetch database records.");
     } finally {
@@ -279,138 +388,150 @@ export default function WindowsLogViewer() {
     }
   }, []);
 
-  // WebSocket Setup for Real-time Streaming
-  useEffect(() => {
-    if (viewMode !== "live" || !autoPoll) {
-      if (wsRef.current) {
-        wsRef.current.close();
-        wsRef.current = null;
-      }
-      return;
-    }
+  // ── WebSocket with exponential backoff and proper cleanup ──
+  const connectWebSocket = useCallback(() => {
+    if (!isMountedRef.current) return;
+    if (viewMode !== "live" || !autoPoll) return;
 
     const token = Token.getAccess();
-    if (!token) return;
+    if (!token) { setWsStatus('disconnected'); return; }
 
-    const ws = new WebSocket(WS_BASE);
-    wsRef.current = ws;
+    setWsStatus('connecting');
 
-    ws.onopen = () => {
-      ws.send(JSON.stringify({ event: "auth", token }));
-    };
+    try {
+      const ws = new WebSocket(WS_BASE);
+      wsRef.current = ws;
 
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.event === "telemetry_update") {
-          const snapshot = data.data || data;
-          
-          if (snapshot.logs) {
-             const newLogs: WindowsEventLog[] = snapshot.logs.map((l: any) => {
-              let ts = Date.now();
-              if (l.TimeCreated) {
-                if (typeof l.TimeCreated === 'string' && l.TimeCreated.startsWith('/Date(')) {
-                  ts = parseInt(l.TimeCreated.replace(/[^0-9]/g, ''), 10);
-                } else {
-                  ts = new Date(l.TimeCreated).getTime();
-                }
-              }
-              if (isNaN(ts)) ts = Date.now();
+      ws.onopen = () => {
+        if (!isMountedRef.current) { ws.close(); return; }
+        reconnectDelayRef.current = 1000;
+        setWsStatus('connected');
+        ws.send(JSON.stringify({ event: "auth", token }));
+      };
 
-              return {
-                ...l,
-                id: l.Id || Math.random().toString(),
-                eventId: l.Id || '0',
-                timestamp: ts,
-                level: l.LevelDisplayName || 'Information',
-                source: l.ProviderName || 'System',
-                category: l.TaskDisplayName || 'System',
-                logName: l.LogName || 'System',
-                message: l.Message || '',
-                computer: l.MachineName || l.Computer || 'Local',
-                suspicious: !!l.Suspicious,
-                isNew: true
-              };
-            });
-            
+      ws.onmessage = (event) => {
+        if (!isMountedRef.current) return;
+        try {
+          const data = JSON.parse(event.data);
+          if (data.event === "telemetry_update") {
+            const snapshot = data.data || data;
+            if (snapshot.logs && Array.isArray(snapshot.logs)) {
+              const newLogs = snapshot.logs.map((logItem: any) => mapRawLog(logItem, true));
+              setEvents(prev => {
+                // Build a set of existing IDs for deduplication
+                const existingIds = new Set(prev.map(e => e.id));
+                const uniqueNew = newLogs.filter((logItem: WindowsEventLog) => !existingIds.has(logItem.id));
+                if (uniqueNew.length === 0) return prev;
+                const combined = [...uniqueNew, ...prev];
+                // Hard memory cap: keep newest MAX_EVENTS_BUFFER
+                return combined.slice(0, MAX_EVENTS_BUFFER);
+              });
+            }
+            if (snapshot.files) setFiles(snapshot.files);
+            if (snapshot.analysis?.threats) {
+              setVulnerabilities(snapshot.analysis.threats.map((t: string, i: number) => ({
+                id: `vuln-${i}`,
+                title: t,
+                severity: t.includes('CRITICAL') ? 'Critical' : t.includes('WARNING') ? 'Warning' : 'Information',
+                ts: Date.now()
+              })));
+            }
+          }
+          if (data.event === "new_logs" && Array.isArray(data.data)) {
+            const newLogs = data.data.map((logItem: any) => mapRawLog(logItem, true));
             setEvents(prev => {
-              const existingIds = new Set(prev.slice(0, 50).map(e => `${e.eventId}-${e.timestamp}`));
-              const uniqueNew = newLogs.filter(l => !existingIds.has(`${l.eventId}-${l.timestamp}`));
+              const existingIds = new Set(prev.map(e => e.id));
+              const uniqueNew = newLogs.filter((logItem: WindowsEventLog) => !existingIds.has(logItem.id));
               if (uniqueNew.length === 0) return prev;
-              const updated = [...uniqueNew, ...prev].slice(0, 200);
-              setTimeout(() => setEvents(current => current.map(e => ({ ...e, isNew: false }))), 3000);
-              return updated;
+              return [...uniqueNew, ...prev].slice(0, MAX_EVENTS_BUFFER);
             });
           }
-
-          if (snapshot.files) setFiles(snapshot.files);
-          if (snapshot.analysis?.threats) {
-            setVulnerabilities(snapshot.analysis.threats.map((t: string, i: number) => ({
-              id: `vuln-${i}`,
-              title: t,
-              severity: t.includes('CRITICAL') ? 'Critical' : t.includes('WARNING') ? 'Warning' : 'Information',
-              ts: Date.now()
-            })));
+        } catch (err) {
+          // Silently ignore malformed WebSocket messages — prevents UI crashes
+          if (process.env.NODE_ENV === 'development') {
+            console.warn("WS parse warning (suppressed in production):", err);
           }
         }
-      } catch (err) {
-        console.error("WS parse error:", err);
-      }
-    };
+      };
 
-    ws.onclose = () => {
-      if (viewMode === "live" && autoPoll) {
-        setTimeout(() => setWsRetryNonce(prev => prev + 1), 5000);
-      }
-    };
+      ws.onerror = () => {
+        if (!isMountedRef.current) return;
+        setWsStatus('disconnected');
+      };
 
-    return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
+      ws.onclose = () => {
+        if (!isMountedRef.current) return;
+        setWsStatus('disconnected');
         wsRef.current = null;
-      }
-    };
-  }, [viewMode, autoPoll, wsRetryNonce]);
-
-  useEffect(() => {
-    if (viewMode === "live") fetchLiveLogs(logChannel);
-    else fetchHistoricalLogs();
-  }, [viewMode, logChannel, fetchLiveLogs, fetchHistoricalLogs]);
-
-  // Initial data fetch
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const res = await fetch(`${API_BASE}/api/analyze`, {
-          headers: { "Authorization": `Bearer ${Token.getAccess()}` }
-        });
-        const json = await res.json();
-        if (json.files) setFiles(json.files);
-        if (json.analysis?.threats) {
-          setVulnerabilities(json.analysis.threats.map((t: string, i: number) => ({
-            id: `vuln-init-${i}`,
-            title: t,
-            severity: t.includes('CRITICAL') ? 'Critical' : t.includes('WARNING') ? 'Warning' : 'Information',
-            ts: Date.now()
-          })));
+        if (viewMode === "live" && autoPoll) {
+          const delay = Math.min(reconnectDelayRef.current, 30000);
+          reconnectDelayRef.current = Math.min(reconnectDelayRef.current * 1.5, 30000);
+          reconnectTimerRef.current = setTimeout(() => {
+            if (isMountedRef.current) connectWebSocket();
+          }, delay);
         }
-      } catch {}
-    };
-    fetchData();
-  }, []);
+      };
+    } catch (err) {
+      setWsStatus('disconnected');
+    }
+  }, [viewMode, autoPoll, mapRawLog]);
 
-  const filteredEvents = events.filter(e => {
-    if (filterLevel !== "All" && e.level !== filterLevel) return false;
-    if (filterSuspicious && !e.suspicious) return false;
-    const isNoise = e.message.includes("ApiSet Function") || e.source.includes("AppModel");
-    if (isNoise && !filterSuspicious) return false;
-    if (searchText && !e.message.toLowerCase().includes(searchText.toLowerCase()) &&
-      !e.source.toLowerCase().includes(searchText.toLowerCase()) &&
-      !String(e.eventId).includes(searchText)) return false;
-    return true;
-  });
+  useEffect(() => {
+    isMountedRef.current = true;
+    if (viewMode === "live" && autoPoll) {
+      connectWebSocket();
+    } else {
+      if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
+      if (reconnectTimerRef.current) { clearTimeout(reconnectTimerRef.current); reconnectTimerRef.current = null; }
+    }
+    return () => {
+      isMountedRef.current = false;
+      if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
+      if (reconnectTimerRef.current) { clearTimeout(reconnectTimerRef.current); reconnectTimerRef.current = null; }
+    };
+  }, [viewMode, autoPoll, connectWebSocket]);
+
+  // Fetch logs when view mode changes
+  useEffect(() => {
+    if (viewMode === "live") fetchLiveLogs();
+    else fetchHistoricalLogs();
+  }, [viewMode, fetchLiveLogs, fetchHistoricalLogs]);
+
+  // Reset pagination when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterLevel, filterSuspicious, searchText]);
+
+  // ── Memoized filtered events (prevents O(n) recompute on every render) ──
+  const filteredEvents = useMemo(() => {
+    const q = searchText.trim().toLowerCase();
+    return events.filter(e => {
+      if (filterLevel !== "All" && e.level !== filterLevel) return false;
+      if (filterSuspicious && !e.suspicious) return false;
+      const msg = e.message || "";
+      const src = e.source || "";
+      const comp = e.computer || "";
+      const cat = e.category || "";
+      // Noise filtering — only when not searching and not showing suspicious-only
+      const isNoise = msg.includes("ApiSet Function") || src.includes("AppModel");
+      if (isNoise && !filterSuspicious && !q) return false;
+      if (q) {
+        if (!msg.toLowerCase().includes(q) &&
+            !src.toLowerCase().includes(q) &&
+            !comp.toLowerCase().includes(q) &&
+            !cat.toLowerCase().includes(q) &&
+            !String(e.eventId).includes(q)) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [events, filterLevel, filterSuspicious, searchText]);
 
   const totalLogs = events.length;
+  const totalPages = Math.max(1, Math.ceil(filteredEvents.length / EVENTS_PER_PAGE));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedEvents = filteredEvents.slice((safePage - 1) * EVENTS_PER_PAGE, safePage * EVENTS_PER_PAGE);
 
   return (
     <div className="space-y-6 relative pb-20">
@@ -447,6 +568,18 @@ export default function WindowsLogViewer() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+          {/* WebSocket Status Indicator */}
+          <div className="flex items-center gap-2 rounded-2xl border px-4 py-2.5 text-xs font-bold transition-all duration-300"
+            style={{
+              borderColor: wsStatus === 'connected' ? 'rgba(16,185,129,0.3)' : wsStatus === 'connecting' ? 'rgba(245,158,11,0.3)' : 'rgba(244,63,94,0.3)',
+              backgroundColor: wsStatus === 'connected' ? 'rgba(16,185,129,0.1)' : wsStatus === 'connecting' ? 'rgba(245,158,11,0.1)' : 'rgba(244,63,94,0.1)',
+              color: wsStatus === 'connected' ? 'rgb(52,211,153)' : wsStatus === 'connecting' ? 'rgb(251,191,36)' : 'rgb(251,113,133)'
+            }}
+          >
+            {wsStatus === 'connected' ? <Wifi className="h-4 w-4" /> : wsStatus === 'connecting' ? <RefreshCw className="h-4 w-4 animate-spin" /> : <WifiOff className="h-4 w-4" />}
+            {wsStatus === 'connected' ? 'LIVE' : wsStatus === 'connecting' ? 'CONNECTING' : 'OFFLINE'}
+          </div>
+
           <div className="flex bg-black/40 rounded-2xl border border-white/5 p-1.5">
             <button
               onClick={() => setViewMode("live")}
@@ -472,9 +605,9 @@ export default function WindowsLogViewer() {
         </div>
       </div>
 
-      {/* ... (error and stats) ... */}
+      {/* Error Banner */}
       {error && (
-        <div className="rounded-2xl border border-rose-500/30 bg-rose-500/5 p-4 flex items-center gap-4 animate-in fade-in zoom-in duration-300">
+        <div className="rounded-2xl border border-rose-500/30 bg-rose-500/5 p-4 flex items-center gap-4">
           <div className="h-10 w-10 shrink-0 rounded-xl bg-rose-500/10 flex items-center justify-center border border-rose-500/20">
             <AlertOctagon className="h-6 w-6 text-rose-400" />
           </div>
@@ -488,21 +621,21 @@ export default function WindowsLogViewer() {
         </div>
       )}
 
-      {/* Modern Stats Grid */}
+      {/* Modern Stats Grid — FIXED: static Tailwind classes instead of dynamic */}
       <div className="grid gap-6 md:grid-cols-4">
         {[
-          { label: "Total Events", value: totalLogs, color: "sky", icon: FileText, desc: "Cross-OS event stream" },
-          { label: "Vulnerabilities", value: vulnerabilities.length, color: "rose", icon: AlertOctagon, desc: "Live threat & vuln matches" },
-          { label: "File Changes", value: files.length, color: "amber", icon: Shield, desc: "Integrity monitoring" },
-          { label: "Agent Pulse", value: "Active", color: "emerald", icon: Activity, desc: "Real-time telemetry heartbeat" },
+          { label: "Total Events", value: totalLogs, cls: "text-sky-400", bg: "bg-sky-500/10", border: "border-sky-500/20", icon: FileText, desc: "Cross-OS event stream" },
+          { label: "Vulnerabilities", value: vulnerabilities.length, cls: "text-rose-400", bg: "bg-rose-500/10", border: "border-rose-500/20", icon: AlertOctagon, desc: "Live threat & vuln matches" },
+          { label: "File Changes", value: files.length, cls: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/20", icon: Shield, desc: "Integrity monitoring" },
+          { label: "Agent Pulse", value: wsStatus === 'connected' ? 'Active' : wsStatus === 'connecting' ? 'Retrying' : 'Paused', cls: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20", icon: Activity, desc: "Real-time telemetry heartbeat" },
         ].map((stat) => (
           <div key={stat.label} className="relative overflow-hidden group bg-white/3 border border-white/5 rounded-[2rem] p-6 hover:bg-white/5 transition-all duration-500 hover:-translate-y-1">
-            <div className={`absolute top-0 right-0 p-8 opacity-[0.03] group-hover:opacity-[0.08] group-hover:scale-150 transition-all duration-700 text-${stat.color}-500`}>
+            <div className="absolute top-0 right-0 p-8 opacity-[0.03] group-hover:opacity-[0.08] group-hover:scale-150 transition-all duration-700 text-slate-500">
               <stat.icon size={120} />
             </div>
             <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-4">{stat.label}</p>
             <div className="flex items-baseline gap-2">
-              <span className={`text-4xl font-black text-${stat.color}-400`}>{stat.value}</span>
+              <span className={`text-4xl font-black ${stat.cls}`}>{stat.value}</span>
             </div>
             <p className="mt-2 text-xs text-slate-500 font-medium">{stat.desc}</p>
           </div>
@@ -539,35 +672,89 @@ export default function WindowsLogViewer() {
 
         {activeTab === "events" && (
           <div className="space-y-6">
-            {/* ... (existing event filter and list) ... */}
+            {/* Filters & Search */}
             <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-center">
               <div className="relative flex-1 group">
                 <Filter className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 group-focus-within:text-sky-400 transition-colors" />
                 <input
                   type="text"
                   value={searchText}
-                  onChange={e => setSearchText(e.target.value)}
+                  onChange={e => { setSearchText(e.target.value); }}
                   placeholder="Search live event stream (Windows, Linux, Android)..."
                   className="w-full rounded-2xl border border-white/5 bg-black/40 py-4 pl-12 pr-6 text-sm text-white placeholder-slate-600 outline-none focus:border-sky-500/40 focus:ring-4 focus:ring-sky-500/5 transition-all"
                 />
               </div>
+
+              {/* Level Filter */}
+              <select
+                value={filterLevel}
+                onChange={e => setFilterLevel(e.target.value)}
+                className="rounded-2xl border border-white/5 bg-black/40 py-4 px-5 text-sm text-white outline-none focus:border-sky-500/40 min-w-[140px]"
+              >
+                <option value="All">All Levels</option>
+                <option value="Critical">Critical</option>
+                <option value="Error">Error</option>
+                <option value="Warning">Warning</option>
+                <option value="Information">Information</option>
+              </select>
+
+              {/* Suspicious Toggle */}
+              <button
+                onClick={() => setFilterSuspicious(v => !v)}
+                className={`flex items-center gap-2 rounded-2xl border px-5 py-3.5 text-xs font-bold transition-all ${filterSuspicious ? 'border-rose-500/30 bg-rose-500/10 text-rose-400' : 'border-white/10 bg-white/5 text-slate-500'}`}
+              >
+                {filterSuspicious ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                SUSPICIOUS ONLY
+              </button>
             </div>
 
+            {/* Loading State */}
+            {loading && events.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-20 bg-white/2 border border-white/5 rounded-[2.5rem]">
+                <RefreshCw className="h-8 w-8 text-sky-400 animate-spin mb-4" />
+                <p className="text-sm text-slate-400">Loading events...</p>
+              </div>
+            )}
+
+            {/* Event List */}
             <div className="space-y-3 min-h-[400px]">
-              {filteredEvents.length > 0 ? (
+              {!loading && filteredEvents.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 bg-white/2 border border-dashed border-white/10 rounded-[2.5rem] text-center">
+                  <h3 className="text-xl font-bold text-slate-300 mb-2">No events matched</h3>
+                  <button onClick={() => { setSearchText(""); setFilterLevel("All"); setFilterSuspicious(false); }} className="mt-4 text-sky-400 font-bold">CLEAR FILTERS</button>
+                </div>
+              ) : (
                 <div className="rounded-[2.5rem] border border-white/5 bg-black/20 overflow-hidden">
-                  <div 
-                    className="overflow-y-auto max-h-[600px] space-y-2 p-4 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent"
-                  >
-                    {filteredEvents.slice(0, 200).map((event) => (
+                  <div className="overflow-y-auto max-h-[600px] space-y-2 p-4">
+                    {paginatedEvents.map((event: WindowsEventLog) => (
                       <EventRow key={event.id} event={event} />
                     ))}
                   </div>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center py-20 bg-white/2 border border-dashed border-white/10 rounded-[2.5rem] text-center">
-                  <h3 className="text-xl font-bold text-slate-300 mb-2">No events matched</h3>
-                  <button onClick={() => {setSearchText(""); setFilterLevel("All");}} className="mt-4 text-sky-400 font-bold">CLEAR FILTERS</button>
+
+                  {/* Pagination */}
+                  {filteredEvents.length > EVENTS_PER_PAGE && (
+                    <div className="border-t border-white/5 bg-black/40 px-6 py-4 flex items-center justify-between">
+                      <p className="text-xs text-slate-500 font-medium">
+                        Page {safePage} of {totalPages} • {(safePage - 1) * EVENTS_PER_PAGE + 1}–{Math.min(safePage * EVENTS_PER_PAGE, filteredEvents.length)} of {filteredEvents.length}
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                          disabled={safePage === 1}
+                          className="px-4 py-2 text-xs font-bold bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-white/5 rounded-xl transition"
+                        >
+                          PREV
+                        </button>
+                        <button
+                          onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                          disabled={safePage === totalPages}
+                          className="px-4 py-2 text-xs font-bold bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-white/5 rounded-xl transition"
+                        >
+                          NEXT
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
