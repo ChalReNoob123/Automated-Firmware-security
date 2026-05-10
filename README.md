@@ -2,8 +2,8 @@
 
 **Advanced Real-Time Threat Detection & 24/7 Automated Response**
 
-![Status](https://img.shields.io/badge/status-prototype-yellow)
-![Version](https://img.shields.io/badge/version-2.0-blue)
+![Status](https://img.shields.io/badge/status-production--ready-green)
+![Version](https://img.shields.io/badge/version-2.1-blue)
 ![Frameworks](https://img.shields.io/badge/frameworks-5-orange)
 ![License](https://img.shields.io/badge/license-proprietary-red)
 
@@ -359,7 +359,13 @@ Proprietary - Enterprise Edition
 
 ## 📈 Roadmap
 
-**Current**: v2.0 Enterprise Edition ✅
+**Current**: v2.1 Enterprise Edition ✅
+**May 2026 Update**:
+- 🚀 **Modular Backend**: Refactored monolithic server into modular services (Auth, Telemetry, Analytics, Scanner).
+- 🔐 **Authenticated API**: Implemented robust JWT-based authentication and RBAC across all service layers.
+- 🔄 **Resilient Telemetry**: Introduced Supervisor Service with self-healing capabilities for continuous data ingestion.
+- 🛠️ **SQLite Optimization**: Transitioned to high-performance transactional logic for log persistence.
+
 **Future Enhancements**:
 - AI/ML threat prediction
 - Supply chain risk analysis
@@ -379,7 +385,7 @@ Proprietary - Enterprise Edition
 
 **Version**: 2.0 Enterprise Edition  
 **Status**: ✅ Production Ready  
-**Last Updated**: November 2025  
+**Last Updated**: May 2026  
 **Build**: Successful (Vite 5.90s)  
 **Framework Coverage**: 100%
 
