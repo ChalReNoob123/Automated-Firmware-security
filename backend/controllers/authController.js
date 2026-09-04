@@ -17,9 +17,43 @@ import QRCode from 'qrcode';
 const LOCKOUT_ATTEMPTS = 5;
 const LOCKOUT_DURATION = 30 * 60 * 1000; // 30 minutes
 
+// Audit trail helper
+function auditLog(event, details, req) {
+  const ip = req.ip || req.headers['x-forwarded-for'] || 'unknown';
+  const ua = req.headers['user-agent'] || 'unknown';
+  try {
+    db.prepare(`INSERT INTO audit_log (event, details, ip_address, user_agent, created_at) VALUES (?, ?, ?, ?, datetime('now'))`)
+      .run(event, JSON.stringify(details), ip, ua);
+  } catch (e) {
+    // Table may not exist yet — log to file instead
+    logger.info({ event, details, ip, ua }, 'Audit event');
+  }
+}
+
+// Ensure audit_log table exists
+try {
+  db.prepare(`CREATE TABLE IF NOT EXISTS audit_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event TEXT NOT NULL,
+    details TEXT,
+    ip_address TEXT,
+    user_agent TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`).run();
+} catch (e) {
+  logger.warn('Could not create audit_log table');
+}
+
 export const signup = async (req, res) => {
   const { username, email, password } = req.body;
   if (!username || !email || !password) return res.status(400).json({ error: 'All fields required' });
+
+  // Server-side password policy enforcement
+  if (password.length < 10) return res.status(400).json({ error: 'Password must be at least 10 characters' });
+  if (!/[A-Z]/.test(password)) return res.status(400).json({ error: 'Password must contain an uppercase letter' });
+  if (!/[a-z]/.test(password)) return res.status(400).json({ error: 'Password must contain a lowercase letter' });
+  if (!/\d/.test(password)) return res.status(400).json({ error: 'Password must contain a digit' });
+  if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) return res.status(400).json({ error: 'Password must contain a special character' });
 
   try {
     const existing = db.prepare('SELECT id FROM users WHERE username=? OR email=?').get(username, email);
@@ -29,6 +63,7 @@ export const signup = async (req, res) => {
     db.prepare('INSERT INTO users (username, email, password_hash, role) VALUES (?, ?, ?, ?)')
       .run(username, email, passwordHash, 'analyst');
 
+    auditLog('signup', { username, email }, req);
     logger.info({ username }, 'User signed up');
     res.status(201).json({ success: true, message: 'User created' });
   } catch (err) {
@@ -44,12 +79,14 @@ export const login = async (req, res) => {
     const user = db.prepare('SELECT * FROM users WHERE username=? OR email=?').get(identifier, identifier);
     
     if (!user) {
+      auditLog('login_failed', { identifier, reason: 'user_not_found' }, req);
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
     // Check if account is locked
     if (user.locked_until && user.locked_until > Date.now()) {
       const remaining = Math.ceil((user.locked_until - Date.now()) / 60000);
+      auditLog('login_locked', { username: user.username, remaining }, req);
       return res.status(403).json({ 
         error: `Account locked due to multiple failed attempts. Try again in ${remaining} minute(s).`,
         lockedUntil: user.locked_until
@@ -64,6 +101,7 @@ export const login = async (req, res) => {
       if (attempts >= LOCKOUT_ATTEMPTS) {
         lockedUntil = now + LOCKOUT_DURATION;
         logger.warn({ username: user.username }, 'Account locked due to brute force protection');
+        auditLog('account_locked', { username: user.username, attempts }, req);
       }
       
       db.prepare('UPDATE users SET failed_attempts=?, locked_until=? WHERE id=?')
@@ -72,6 +110,8 @@ export const login = async (req, res) => {
       const msg = lockedUntil > 0 
         ? `Too many attempts. Account locked for 30 minutes.`
         : `Invalid credentials. ${LOCKOUT_ATTEMPTS - attempts} attempts remaining.`;
+
+      auditLog('login_failed', { username: user.username, attempts, reason: 'wrong_password' }, req);
 
       return res.status(401).json({ 
         error: msg,
@@ -82,6 +122,7 @@ export const login = async (req, res) => {
 
     // Success: Reset failed attempts
     db.prepare("UPDATE users SET last_login=datetime('now'), failed_attempts=0, locked_until=0 WHERE id=?").run(user.id);
+    auditLog('login_success', { username: user.username, rememberMe: !!rememberMe }, req);
 
     if (!user.totp_enrolled) {
       const secret = speakeasy.generateSecret({ name: `SentinelGrid (${user.username})`, length: 20 });
@@ -113,7 +154,10 @@ export const verify2FA = async (req, res) => {
       window: 1
     });
 
-    if (!valid) return res.status(401).json({ error: 'Invalid 2FA code' });
+    if (!valid) {
+      auditLog('2fa_failed', { username: user.username }, req);
+      return res.status(401).json({ error: 'Invalid 2FA code' });
+    }
 
     if (!user.totp_enrolled) {
       db.prepare('UPDATE users SET totp_enrolled=1 WHERE id=?').run(user.id);
@@ -122,6 +166,8 @@ export const verify2FA = async (req, res) => {
     const { token: accessToken } = signAccessToken(user);
     const days = rememberMe ? 30 : 7;
     const { token: refreshToken } = signRefreshToken(user, days);
+
+    auditLog('2fa_success', { username: user.username }, req);
 
     res.cookie('sg_refresh_token', refreshToken, {
       httpOnly: true,
@@ -194,11 +240,12 @@ export const logout = (req, res) => {
   const auth = req.headers.authorization;
   if (auth?.startsWith('Bearer ')) {
     try {
-      const p = verifyJWT(auth.slice(7));
+      const p = verifyRefreshToken(auth.slice(7));
       revokeAccessToken(p.jti, p.exp);
     } catch (e) {}
   }
 
+  auditLog('logout', {}, req);
   res.clearCookie('sg_refresh_token');
   res.json({ success: true });
 };

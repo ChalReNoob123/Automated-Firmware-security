@@ -34,6 +34,10 @@ let cache = {
   ts: 0
 };
 
+const winLogsCache = new Map();
+const linuxLogsCache = new Map();
+const androidLogsCache = new Map();
+
 const CACHE_TTL = 5000; // 5 seconds
 
 export const getSystemTelemetry = async (force = false) => {
@@ -236,86 +240,115 @@ const NOISE_BLACKLIST = [
   'Information: The service was stopped',
 ];
 
-export const getWindowsLogs = async (maxEvents = 100) => {
+export const getWindowsLogs = async (maxEvents = 100, force = false) => {
   if (os.platform() !== 'win32') return [];
-  
-  const psScript = `
-    try {
-      $ProgressPreference = 'SilentlyContinue'
-      $channels = @('Security', 'System', 'Application')
-      $evts = Get-WinEvent -LogName $channels -MaxEvents ${maxEvents} -ErrorAction SilentlyContinue
-      if ($null -eq $evts) { return '[]' }
-      $arr = @($evts | Select-Object @{Name='Id';Expression={[int]$_.Id}}, TimeCreated, LevelDisplayName, TaskDisplayName, ProviderName, LogName, Message)
-      return ($arr | ConvertTo-Json -Compress -Depth 2)
-    } catch { return '[]' }
-  `;
 
-  try {
-    const encoded = Buffer.from(psScript, 'utf16le').toString('base64');
-    const { stdout } = await execAsync(`powershell -NoProfile -NonInteractive -EncodedCommand ${encoded}`, { timeout: 15000 });
-    
-    // Defensive extraction to bypass any #< CLIXML or stray progress outputs
-    const jsonStart = stdout.indexOf('[');
-    const jsonEnd = stdout.lastIndexOf(']') + 1;
-    if (jsonStart === -1 || jsonEnd === 0) return [];
-    
-    const cleanJson = stdout.substring(jsonStart, jsonEnd);
-    if (!cleanJson || cleanJson === '[]') return [];
-    
-    const parsed = JSON.parse(cleanJson);
-    return (Array.isArray(parsed) ? parsed : [parsed]).filter(l => {
-      const msg = l.Message || '';
-      return !NOISE_BLACKLIST.some(noise => msg.includes(noise));
-    });
-  } catch (err) {
-    logger.warn({ err: err.message }, 'Failed to fetch Windows logs');
-    return [];
+  const cached = winLogsCache.get(maxEvents);
+  if (!force && cached && Date.now() - cached.ts < CACHE_TTL) {
+    return cached.promise;
   }
-};
 
-export const getLinuxLogs = async (maxEvents = 100) => {
-  if (os.platform() !== 'linux') return [];
-  
-  try {
-    const { stdout } = await execAsync(`journalctl -n ${maxEvents} --no-pager -o json`, { timeout: 10000 });
-    const lines = stdout.trim().split('\n').filter(Boolean);
-    return lines.map(line => {
+  const promise = (async () => {
+    const psScript = `
       try {
-        const j = JSON.parse(line);
-        return {
-          Id: j.PRIORITY || '0',
-          TimeCreated: j.__REALTIME_TIMESTAMP ? new Date(parseInt(j.__REALTIME_TIMESTAMP) / 1000).toISOString() : new Date().toISOString(),
-          LevelDisplayName: ['0','1','2','3'].includes(j.PRIORITY) ? 'Critical' : j.PRIORITY === '4' ? 'Warning' : 'Information',
-          TaskDisplayName: j._SYSTEMD_UNIT || 'System',
-          ProviderName: j.SYSLOG_IDENTIFIER || 'journald',
-          LogName: 'System Journal',
-          Message: j.MESSAGE || ''
-        };
-      } catch { return null; }
-    }).filter(Boolean);
-  } catch (err) {
-    logger.warn({ err: err.message }, 'Failed to fetch Linux logs');
-    return [];
-  }
+        $ProgressPreference = 'SilentlyContinue'
+        $channels = @('Security', 'System', 'Application')
+        $evts = Get-WinEvent -LogName $channels -MaxEvents ${maxEvents} -ErrorAction SilentlyContinue
+        if ($null -eq $evts) { return '[]' }
+        $arr = @($evts | Select-Object @{Name='Id';Expression={[int]$_.Id}}, TimeCreated, LevelDisplayName, TaskDisplayName, ProviderName, LogName, Message)
+        return ($arr | ConvertTo-Json -Compress -Depth 2)
+      } catch { return '[]' }
+    `;
+
+    try {
+      const encoded = Buffer.from(psScript, 'utf16le').toString('base64');
+      const { stdout } = await execAsync(`powershell -NoProfile -NonInteractive -EncodedCommand ${encoded}`, { timeout: 15000 });
+      
+      const jsonStart = stdout.indexOf('[');
+      const jsonEnd = stdout.lastIndexOf(']') + 1;
+      if (jsonStart === -1 || jsonEnd === 0) return [];
+      
+      const cleanJson = stdout.substring(jsonStart, jsonEnd);
+      if (!cleanJson || cleanJson === '[]') return [];
+      
+      const parsed = JSON.parse(cleanJson);
+      return (Array.isArray(parsed) ? parsed : [parsed]).filter(l => {
+        const msg = l.Message || '';
+        return !NOISE_BLACKLIST.some(noise => msg.includes(noise));
+      });
+    } catch (err) {
+      logger.warn({ err: err.message }, 'Failed to fetch Windows logs');
+      return [];
+    }
+  })();
+
+  winLogsCache.set(maxEvents, { promise, ts: Date.now() });
+  return promise;
 };
 
-export const getAndroidLogs = async (maxEvents = 100) => {
-  try {
-    const { stdout } = await execAsync(`adb logcat -d -v time -t ${maxEvents}`, { timeout: 5000 });
-    const lines = stdout.trim().split('\n').filter(Boolean);
-    return lines.map((line, i) => ({
-      Id: `ANDR-${i}`,
-      TimeCreated: new Date().toISOString(),
-      LevelDisplayName: line.includes(' E ') ? 'Error' : (line.includes(' W ') ? 'Warning' : 'Information'),
-      TaskDisplayName: 'AndroidSystem',
-      ProviderName: 'ADB',
-      LogName: 'Logcat',
-      Message: line
-    }));
-  } catch (err) {
-    // ADB not available, return empty
-    return [];
+export const getLinuxLogs = async (maxEvents = 100, force = false) => {
+  if (os.platform() !== 'linux') return [];
+
+  const cached = linuxLogsCache.get(maxEvents);
+  if (!force && cached && Date.now() - cached.ts < CACHE_TTL) {
+    return cached.promise;
   }
+
+  const promise = (async () => {
+    try {
+      const { stdout } = await execAsync(`journalctl -n ${maxEvents} --no-pager -o json`, { timeout: 10000 });
+      const lines = stdout.trim().split('\n').filter(Boolean);
+      return lines.map(line => {
+        try {
+          const j = JSON.parse(line);
+          return {
+            Id: j.PRIORITY || '0',
+            TimeCreated: j.__REALTIME_TIMESTAMP ? new Date(parseInt(j.__REALTIME_TIMESTAMP) / 1000).toISOString() : new Date().toISOString(),
+            LevelDisplayName: ['0','1','2','3'].includes(j.PRIORITY) ? 'Critical' : j.PRIORITY === '4' ? 'Warning' : 'Information',
+            TaskDisplayName: j._SYSTEMD_UNIT || 'System',
+            ProviderName: j.SYSLOG_IDENTIFIER || 'journald',
+            LogName: 'System Journal',
+            Message: j.MESSAGE || ''
+          };
+        } catch { return null; }
+      }).filter(Boolean);
+    } catch (err) {
+      logger.warn({ err: err.message }, 'Failed to fetch Linux logs');
+      return [];
+    }
+  })();
+
+  linuxLogsCache.set(maxEvents, { promise, ts: Date.now() });
+  return promise;
+};
+
+export const getAndroidLogs = async (maxEvents = 100, force = false) => {
+  const cached = androidLogsCache.get(maxEvents);
+  if (!force && cached && Date.now() - cached.ts < CACHE_TTL) {
+    return cached.promise;
+  }
+
+  const promise = (async () => {
+    try {
+      const { stdout } = await execAsync(`adb logcat -d -v time -t ${maxEvents}`, { timeout: 5000 });
+      const lines = stdout.trim().split('\n').filter(Boolean);
+      return lines.map((line, i) => ({
+        Id: `ANDR-${i}`,
+        TimeCreated: new Date().toISOString(),
+        LevelDisplayName: line.includes(' E ') ? 'Error' : (line.includes(' W ') ? 'Warning' : 'Information'),
+        TaskDisplayName: 'AndroidSystem',
+        ProviderName: 'ADB',
+        LogName: 'Logcat',
+        Message: line
+      }));
+    } catch (err) {
+      // ADB not available, return empty
+      return [];
+    }
+  })();
+
+  androidLogsCache.set(maxEvents, { promise, ts: Date.now() });
+  return promise;
 };
 
 export const getRegistryModifications = async () => {

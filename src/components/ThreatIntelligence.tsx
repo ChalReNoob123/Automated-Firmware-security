@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { THREAT_ACTORS, MALWARE_SIGNATURES } from "../data/threatEngine";
-import { Globe, Cpu, ChevronDown, ChevronRight } from "lucide-react";
+import { Globe, Cpu, ChevronDown, ChevronRight, Search, Activity, RefreshCw } from "lucide-react";
+import { apiGet } from "../utils/api";
 
 const sophisticationColor: Record<string, string> = {
   "Nation-State": "border-rose-500/30 bg-rose-500/10 text-rose-200",
@@ -31,17 +32,94 @@ export default function ThreatIntelligence() {
   const [expandedActor, setExpandedActor] = useState<string | null>(null);
   const [expandedMalware, setExpandedMalware] = useState<string | null>(null);
 
+  // Real-time query state
+  const [indicator, setIndicator] = useState("");
+  const [queryType, setQueryType] = useState<"ip" | "domain" | "hash">("ip");
+  const [queryStatus, setQueryStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [queryResult, setQueryResult] = useState<any>(null);
+
+  const handleQuery = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!indicator) return;
+    setQueryStatus("loading");
+    try {
+      const endpoint = `/api/threat-intel/virustotal?indicator=${encodeURIComponent(indicator)}&type=${queryType}`;
+      const res = await apiGet(endpoint);
+      setQueryResult(res);
+      setQueryStatus("success");
+    } catch (err: any) {
+      setQueryResult({ error: err.message });
+      setQueryStatus("error");
+    }
+  };
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-10 animate-in fade-in duration-500 pb-20">
+      
+      {/* Real-time Intel Query */}
+      <div>
+        <div className="relative glass-v2 rounded-[2rem] border border-emerald-500/20 p-6 shadow-2xl overflow-hidden mb-6 group">
+          <div className="absolute inset-0 holographic opacity-10 pointer-events-none group-hover:opacity-20 transition-opacity duration-700" />
+          <h3 className="relative z-10 text-2xl font-black text-white flex items-center gap-4 tracking-tight drop-shadow-md">
+            <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-emerald-500 via-teal-600 to-cyan-600 flex items-center justify-center shadow-lg shadow-emerald-500/30 breathe-glow">
+              <Activity className="h-6 w-6 text-white" />
+            </div>
+            REAL-TIME INTEL QUERY (VIRUSTOTAL / OTX)
+          </h3>
+        </div>
+
+        <form onSubmit={handleQuery} className="relative glass-v2 rounded-[2rem] border border-white/10 p-6 flex flex-col md:flex-row gap-4">
+          <select 
+            value={queryType} 
+            onChange={e => setQueryType(e.target.value as any)}
+            className="rounded-xl border border-white/10 bg-black/40 text-sm text-slate-300 py-3 px-4 outline-none focus:border-emerald-500/50"
+          >
+            <option value="ip">IP Address</option>
+            <option value="domain">Domain</option>
+            <option value="hash">File Hash</option>
+          </select>
+          <input
+            type="text"
+            placeholder={`Enter ${queryType.toUpperCase()} to scan...`}
+            value={indicator}
+            onChange={e => setIndicator(e.target.value)}
+            className="flex-1 rounded-xl border border-white/10 bg-black/40 text-sm text-white px-4 py-3 outline-none focus:border-emerald-500/50"
+          />
+          <button
+            type="submit"
+            disabled={queryStatus === "loading"}
+            className="flex items-center gap-2 justify-center rounded-xl bg-emerald-500/20 border border-emerald-500/40 px-6 py-3 font-bold text-emerald-300 hover:bg-emerald-500/30 transition-colors disabled:opacity-50"
+          >
+            {queryStatus === "loading" ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+            SCAN
+          </button>
+        </form>
+
+        {queryStatus !== "idle" && queryResult && (
+          <div className="mt-4 p-5 rounded-2xl border border-white/10 bg-black/40 font-mono text-xs overflow-auto max-h-64">
+            {queryStatus === "error" ? (
+              <span className="text-rose-400">Error: {queryResult.error}</span>
+            ) : (
+              <pre className="text-emerald-300">{JSON.stringify(queryResult, null, 2)}</pre>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Threat Actors */}
       <div>
-        <h3 className="text-lg font-bold text-white flex items-center gap-2 mb-4">
-          <Globe className="h-5 w-5 text-rose-400" />
-          Active Threat Actors &amp; APT Groups
-        </h3>
-        <div className="space-y-3">
+        <div className="relative glass-v2 rounded-[2rem] border border-cyan-500/20 p-6 shadow-2xl overflow-hidden mb-6 group">
+          <div className="absolute inset-0 holographic opacity-10 pointer-events-none group-hover:opacity-20 transition-opacity duration-700" />
+          <h3 className="relative z-10 text-2xl font-black text-white flex items-center gap-4 tracking-tight drop-shadow-md">
+            <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-cyan-500 via-blue-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-cyan-500/30 breathe-glow">
+              <Globe className="h-6 w-6 text-white" />
+            </div>
+            ACTIVE THREAT ACTORS & APT GROUPS
+          </h3>
+        </div>
+        <div className="space-y-4">
           {THREAT_ACTORS.map(actor => (
-            <div key={actor.name} className="rounded-3xl border border-white/10 bg-white/5 overflow-hidden">
+            <div key={actor.name} className="relative overflow-hidden group glass-v2 rounded-[2rem] border border-cyan-500/20 transition-all duration-300 hover:border-cyan-400/40 hover:bg-cyan-500/5 shadow-xl shadow-cyan-900/10">
               <button
                 type="button"
                 className="w-full p-5 text-left flex items-start gap-4"
@@ -60,7 +138,7 @@ export default function ThreatIntelligence() {
                 <div className="shrink-0 flex gap-2 items-center">
                   <div className="flex flex-wrap gap-1 justify-end">
                     {actor.targetSectors.slice(0, 2).map(s => (
-                      <span key={s} className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-xs text-slate-300">{s}</span>
+                       <span key={s} className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-xs text-slate-300">{s}</span>
                     ))}
                   </div>
                   {expandedActor === actor.name ? <ChevronDown className="h-4 w-4 text-slate-500" /> : <ChevronRight className="h-4 w-4 text-slate-500" />}
@@ -111,13 +189,18 @@ export default function ThreatIntelligence() {
 
       {/* Malware Signatures */}
       <div>
-        <h3 className="text-lg font-bold text-white flex items-center gap-2 mb-4">
-          <Cpu className="h-5 w-5 text-amber-400" />
-          Known Malware Signatures &amp; YARA Rules
-        </h3>
-        <div className="space-y-3">
+        <div className="relative glass-v2 rounded-[2rem] border border-amber-500/20 p-6 shadow-2xl overflow-hidden mb-6 group mt-10">
+          <div className="absolute inset-0 holographic opacity-10 pointer-events-none group-hover:opacity-20 transition-opacity duration-700" />
+          <h3 className="relative z-10 text-2xl font-black text-white flex items-center gap-4 tracking-tight drop-shadow-md">
+            <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-amber-500 via-orange-600 to-rose-600 flex items-center justify-center shadow-lg shadow-amber-500/30 breathe-glow">
+              <Cpu className="h-6 w-6 text-white" />
+            </div>
+            KNOWN MALWARE SIGNATURES & YARA RULES
+          </h3>
+        </div>
+        <div className="space-y-4">
           {MALWARE_SIGNATURES.map(mal => (
-            <div key={mal.id} className="rounded-3xl border border-white/10 bg-white/5 overflow-hidden">
+            <div key={mal.id} className="relative overflow-hidden group glass-v2 rounded-[2rem] border border-amber-500/20 transition-all duration-300 hover:border-amber-400/40 hover:bg-amber-500/5 shadow-xl shadow-amber-900/10">
               <button
                 type="button"
                 className="w-full p-5 text-left flex items-start gap-4"

@@ -17,13 +17,25 @@
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     <script>
-      // Service Worker registration
+      // Service Worker: only register in production, unregister in dev
       if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js')
-            .then(reg => console.log('[SW] Registered:', reg.scope))
-            .catch(err => console.warn('[SW] Registration failed:', err));
-        });
+        if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+          // DEV: Unregister all service workers to prevent stale cache
+          navigator.serviceWorker.getRegistrations().then(regs => {
+            regs.forEach(r => r.unregister());
+            if (regs.length > 0) {
+              console.warn('[SW] Unregistered', regs.length, 'service worker(s) in dev mode. Reloading...');
+              caches.keys().then(names => Promise.all(names.map(n => caches.delete(n)))).then(() => location.reload());
+            }
+          });
+        } else {
+          // PRODUCTION: register normally
+          window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw.js')
+              .then(reg => console.log('[SW] Registered:', reg.scope))
+              .catch(err => console.warn('[SW] Registration failed:', err));
+          });
+        }
       }
     </script>
   </body>

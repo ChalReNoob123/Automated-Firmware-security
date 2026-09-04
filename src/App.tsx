@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, memo, lazy, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -7,9 +7,18 @@ import {
 import {
   Shield, AlertTriangle, Activity, Network, Eye, Zap,
   Terminal, Database, Globe, RefreshCw, ChevronRight, X,
-  CheckCircle, Clock, Cpu, FileText, Server, Flame, Monitor, LogOut, HardDrive,
+  CheckCircle, Clock, Cpu, FileText, Server, Flame, Monitor, LogOut, HardDrive, Wifi,
 } from "lucide-react";
-import { lazy, Suspense } from "react";
+import HyperbolicTopology from "./components/HyperbolicTopology";
+import ChronoMonitor from "./components/ChronoMonitor";
+import LabEngineInterface from "./components/LabEngineInterface";
+import AkashicHorizon from "./components/AkashicHorizon";
+import EgoLockStatus from "./components/EgoLockStatus";
+import TelemetryIntegrityPanel from "./components/TelemetryIntegrityPanel";
+import { Token, logout, refreshAccessToken, fetchMe } from "./utils/api";
+import { useSOCStore, selectActiveCnt, selectBlockedCnt, selectCriticalCnt, selectContainedCnt, selectThreatPressure, selectTotalPps, selectTotalBytes, type Severity, type TabId, type ConnStatus } from "./stores/socStore";
+import { useWebSocket } from "./hooks/useWebSocket";
+import { useSystemStats, usePermissions, usePluginData } from "./hooks/useSOCQueries";
 
 const MitreMatrix = lazy(() => import("./components/MitreMatrix"));
 const NistCompliance = lazy(() => import("./components/NistCompliance"));
@@ -25,62 +34,9 @@ const LoginScreen = lazy(() => import("./components/LoginScreen"));
 const OSSecurityPanel = lazy(() => import("./components/OSSecurityPanel"));
 const SystemScanner = lazy(() => import("./components/SystemScanner"));
 const GlobalAnalytics = lazy(() => import("./components/GlobalAnalytics"));
-import { Token, WS_BASE, logout, refreshAccessToken, apiGet, fetchMe, type User as ApiUser } from "./utils/api";
+const InteractiveVM = lazy(() => import("./components/InteractiveVM"));
 
-
-/* ── types ── */
-type User = ApiUser;
-type Severity = "low" | "medium" | "high" | "critical";
 type Protocol = "HTTPS" | "SSH" | "RDP" | "DNS" | "TLS" | "MQTT" | "SMB" | "FTP" | "LDAP" | "SYSTEM";
-type ConnStatus = "active" | "observing" | "dropped" | "quarantined" | "blocked";
-type TabId = "dashboard" | "analytics" | "mitre" | "nist" | "virustotal" | "winlogs" | "intel" | "sandbox" | "vulnpentest" | "crossplat" | "advancedvb" | "ai_agent" | "ossec" | "scanner";
-
-type Connection = {
-  id: string;
-  srcIp: string;
-  dstIp: string;
-  dstHost: string;
-  protocol: Protocol;
-  port: number;
-  pps: number;
-  latency: number;
-  risk: number;
-  status: ConnStatus;
-  zone: string;
-  geo: string;
-  bytes: number;
-  lastSeen: number;
-  mitreId?: string;
-};
-
-type Alert = {
-  id: string;
-  ts: number;
-  srcIp: string;
-  dstHost: string;
-  protocol: Protocol;
-  category: "Threat Detection" | "Intrusion Detection" | "Network Monitoring" | "Malware" | "Ransomware" | "Lateral Movement" | "Exfiltration";
-  severity: Severity;
-  mitreId: string;
-  mitreName: string;
-  signature: string;
-  score: number;
-  action: string;
-  status: "auto-contained" | "investigating" | "false-positive";
-  malicious: boolean;
-  zone: string;
-  killed: boolean;
-};
-
-type TrafficPoint = { ts: number; t: string; traffic: number; threats: number; blocked: number; analysis: string };
-
-type SystemStats = {
-  cpu: number;
-  memory: number;
-  uptime: number;
-  timestamp: number;
-  plugins?: number;
-};
 
 /* ── constants ── */
 const ZONES = ["Perimeter", "Identity", "Payments", "Remote Access", "Data Core", "OT Segment", "Cloud", "DMZ"];
@@ -101,10 +57,6 @@ function relative(ts: number, now: number) {
   return `${Math.floor(m / 60)}h ago`;
 }
 
-function timelineLabel(ts: number) {
-  return new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(ts);
-}
-
 const SEV_BADGE: Record<Severity, string> = {
   low: "border-emerald-400/30 bg-emerald-400/10 text-emerald-200",
   medium: "border-amber-400/30 bg-amber-400/10 text-amber-200",
@@ -123,9 +75,6 @@ const CONN_BADGE: Record<ConnStatus, string> = {
 };
 const PIE_COLORS = ["#f43f5e", "#fb923c", "#f59e0b", "#34d399"];
 
-/* ── initial state ── */
-const INIT_CONNS: Connection[] = [];
-const INIT_TRAFFIC: TrafficPoint[] = [];
 
 /* ── sub-components ── */
 function Badge({ children, cls }: { children: React.ReactNode; cls: string }) {
@@ -146,7 +95,7 @@ function PermissionBadge({ label, enabled, value, icon }: { label: string; enabl
   );
 }
 
-function Panel({ title, sub, action, children, className = "" }: {
+const Panel = memo(function Panel({ title, sub, action, children, className = "" }: {
   title: string; sub?: string; action?: React.ReactNode; children: React.ReactNode; className?: string;
 }) {
   return (
@@ -155,21 +104,25 @@ function Panel({ title, sub, action, children, className = "" }: {
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-50px" }}
       transition={{ duration: 0.5, ease: "easeOut" }}
-      className={`rounded-3xl border border-white/10 bg-white/5 p-5 shadow-2xl shadow-slate-950/30 backdrop-blur-xl transition-all duration-300 hover:border-white/20 hover:shadow-sky-500/10 ${className}`}
+      className={`rounded-3xl glass-v2 p-5 shadow-2xl shadow-slate-950/30 transition-all duration-300 hover:border-white/20 hover:shadow-cyan-500/5 relative overflow-hidden ${className}`}
     >
-      <div className="mb-4 flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-lg font-semibold text-white">{title}</h2>
-          {sub && <p className="mt-0.5 text-sm text-slate-400">{sub}</p>}
+      {/* Holographic scan line */}
+      <div className="absolute inset-0 pointer-events-none scan-line opacity-30" />
+      <div className="relative z-10">
+        <div className="mb-4 flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-white">{title}</h2>
+            {sub && <p className="mt-0.5 text-sm text-slate-400">{sub}</p>}
+          </div>
+          {action}
         </div>
-        {action}
+        {children}
       </div>
-      {children}
     </motion.section>
   );
-}
+});
 
-function StatCard({ label, value, sub, tone, icon }: {
+const StatCard = memo(function StatCard({ label, value, sub, tone, icon }: {
   label: string; value: string | number; sub: string;
   tone: "rose" | "emerald" | "sky" | "amber" | "purple" | "orange"; icon: React.ReactNode;
 }) {
@@ -183,22 +136,26 @@ function StatCard({ label, value, sub, tone, icon }: {
   };
   return (
     <motion.div 
-      whileHover={{ scale: 1.05, translateY: -8, rotateX: 5, rotateY: 5 }}
-      whileTap={{ scale: 0.95 }}
+      whileHover={{ scale: 1.05, translateY: -8, rotateX: 5, rotateY: -3 }}
+      whileTap={{ scale: 0.97 }}
       transition={{ type: "spring", stiffness: 300, damping: 20 }}
-      className={`rounded-3xl border border-white/10 bg-gradient-to-br p-5 ring-1 shadow-xl transform-gpu cursor-pointer transition-colors duration-300 hover:bg-black/40 ${t[tone]}`}
+      className={`stat-card-3d rounded-3xl border border-white/10 bg-gradient-to-br p-5 ring-1 shadow-xl transform-gpu cursor-pointer relative overflow-hidden ${t[tone]}`}
     >
-      <div className="flex items-center justify-between">
-        <p className="text-xs font-medium uppercase tracking-widest text-slate-400">{label}</p>
-        <div className={`rounded-xl border border-white/10 bg-black/20 p-2 ${t[tone].split(" ").find(c => c.startsWith("text-"))}`}>
-          {icon}
+      {/* Neon edge glow on hover */}
+      <div className="absolute inset-0 rounded-3xl opacity-0 hover:opacity-100 transition-opacity duration-500 pointer-events-none" style={{ boxShadow: 'inset 0 0 30px rgba(34, 211, 238, 0.05)' }} />
+      <div className="relative z-10">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-medium uppercase tracking-widest text-slate-400">{label}</p>
+          <div className={`rounded-xl border border-white/10 bg-black/30 p-2.5 ${t[tone].split(" ").find(c => c.startsWith("text-"))}`}>
+            {icon}
+          </div>
         </div>
+        <p className="mt-3 text-3xl font-bold text-white drop-shadow-md">{value}</p>
+        <p className="mt-1 text-sm text-slate-400">{sub}</p>
       </div>
-      <p className="mt-3 text-3xl font-bold text-white drop-shadow-md">{value}</p>
-      <p className="mt-1 text-sm text-slate-400">{sub}</p>
     </motion.div>
   );
-}
+});
 
 const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
   { id: "dashboard",   label: "SOC Dashboard",      icon: <Activity className="h-4 w-4" /> },
@@ -215,25 +172,213 @@ const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
   { id: "virustotal", label: "VirusTotal",           icon: <Globe className="h-4 w-4" /> },
   { id: "intel",      label: "Threat Intel",         icon: <Cpu className="h-4 w-4" /> },
   { id: "scanner",    label: "System Scanner",       icon: <HardDrive className="h-4 w-4 text-indigo-400" /> },
+  { id: "vm",         label: "Interactive VM",       icon: <Terminal className="h-4 w-4 text-cyan-400" /> },
 ];
 
 /* ── MAIN ── */
 export default function App() {
   const [now, setNow] = useState(Date.now);
-  const [tab, setTab] = useState<TabId>("dashboard");
-  const [authReady, setAuthReady] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(() => Token.isLoggedIn());
-  const [user, setUser] = useState<User | null>(() => Token.getUser());
-  const [connections, setConnections] = useState<Connection[]>(INIT_CONNS);
-  const [alerts, setAlerts] = useState<Alert[]>([]);
-  const [traffic, setTraffic] = useState<TrafficPoint[]>(INIT_TRAFFIC);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [systemStats, setSystemStats] = useState<SystemStats>({ cpu: 0, memory: 0, uptime: 0, timestamp: Date.now() });
-  const [statsHistory, setStatsHistory] = useState<{ts: number, cpu: number, mem: number}[]>([]);
 
-   const [responseLog, setResponseLog] = useState<string[]>([
-     `System monitoring initialized at ${clock(Date.now())}`,
-   ]);
+  // Zustand store bindings (subscription-based, only rerenders on change)
+  const tab = useSOCStore((s) => s.tab);
+  const setTab = useSOCStore((s) => s.setTab);
+  const authReady = useSOCStore((s) => s.authReady);
+  const isAuthenticated = useSOCStore((s) => s.isAuthenticated);
+  const user = useSOCStore((s) => s.user);
+  const connections = useSOCStore((s) => s.connections);
+  const alerts = useSOCStore((s) => s.alerts);
+  const traffic = useSOCStore((s) => s.traffic);
+  const systemStats = useSOCStore((s) => s.systemStats);
+  const statsHistory = useSOCStore((s) => s.statsHistory);
+  const segmentData = useSOCStore((s) => s.segmentData);
+  const permissions = useSOCStore((s) => s.permissions);
+  const wsStatus = useSOCStore((s) => s.wsStatus);
+  const wsLatency = useSOCStore((s) => s.wsLatency);
+  const responseLog = useSOCStore((s) => s.responseLog);
+  const telemetryMeta = useSOCStore((s) => s.telemetryMeta);
+
+  // Derived selectors (memoized in store)
+  const activeCnt = useSOCStore(selectActiveCnt);
+  const blockedCnt = useSOCStore(selectBlockedCnt);
+  const criticalCnt = useSOCStore(selectCriticalCnt);
+  const containedCnt = useSOCStore(selectContainedCnt);
+  const threatPressure = useSOCStore(selectThreatPressure);
+  const totalPps = useSOCStore(selectTotalPps);
+  const totalBytes = useSOCStore(selectTotalBytes);
+  const malAlerts = useMemo(() => alerts.filter((alert) => alert.malicious), [alerts]);
+  const containRate = malAlerts.length ? Math.round((containedCnt / malAlerts.length) * 100) : 100;
+  const avgRisk = connections.length > 0 ? Math.round(connections.reduce((s, c) => s + c.risk, 0) / connections.length) : 0;
+
+  // --- Poincaré & HUD Deep Segments States ---
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [activeSegmentTab, setActiveSegmentTab] = useState<string>("W");
+  const [threatLevel, setThreatLevel] = useState<"green" | "yellow" | "red">("green");
+  const overrideThreatLevel = useRef<boolean>(false);
+
+  useEffect(() => {
+    if (!overrideThreatLevel.current) {
+      const level = threatPressure >= 70 ? "red" : threatPressure >= 40 ? "yellow" : "green";
+      setThreatLevel(level);
+    }
+  }, [threatPressure]);
+
+  const handleThreatLevelChange = (level: "green" | "yellow" | "red") => {
+    overrideThreatLevel.current = true;
+    setThreatLevel(level);
+  };
+
+  const handleRollbackSuccess = () => {
+    overrideThreatLevel.current = false;
+    setThreatLevel("green");
+  };
+
+  const selectedNode = useMemo(() => {
+    if (!selectedNodeId) return null;
+    const nodesList = [
+      { id: "gateway", name: "Core Firewall / Gateway", ip: "10.0.2.1", type: "gateway" },
+      { id: "win2025", name: "Windows Server 2025 AD", ip: "10.0.2.15", type: "server" },
+      { id: "kali", name: "Kali Attack Platform", ip: "10.0.2.16", type: "external" },
+      { id: "android", name: "Android Test Container", ip: "10.0.2.20", type: "mobile" },
+      { id: "ios", name: "iOS Core Sandbox", ip: "10.0.2.21", type: "mobile" },
+      { id: "db_shard", name: "Database Shard Core", ip: "10.0.2.5", type: "server" },
+      { id: "siem_hub", name: "SIEM Telemetry Collector", ip: "10.0.2.8", type: "server" },
+      { id: "analyst_ws", name: "Analyst Workstation", ip: "10.0.2.100", type: "workstation" }
+    ];
+    return nodesList.find(n => n.id === selectedNodeId) || null;
+  }, [selectedNodeId]);
+
+  useEffect(() => {
+    if (selectedNodeId) {
+      setActiveSegmentTab("W");
+    }
+  }, [selectedNodeId]);
+
+  // --- 3D Spatial Web Audio Setup ---
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const pannerNodeRef = useRef<PannerNode | null>(null);
+
+  const initAudio = () => {
+    if (audioCtxRef.current) return;
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      const ctx = new AudioCtx();
+      const panner = ctx.createPanner();
+      panner.panningModel = "HRTF";
+      panner.distanceModel = "inverse";
+      panner.refDistance = 1;
+      panner.maxDistance = 10000;
+      panner.rolloffFactor = 1;
+      panner.coneInnerAngle = 360;
+      panner.coneOuterAngle = 0;
+      panner.coneOuterGain = 0;
+      
+      panner.connect(ctx.destination);
+      
+      audioCtxRef.current = ctx;
+      pannerNodeRef.current = panner;
+      console.log("3D Audio Context initialized successfully!");
+    } catch (e) {
+      console.error("Failed to initialize Web Audio API", e);
+    }
+  };
+
+  useEffect(() => {
+    const handleInteraction = () => {
+      initAudio();
+      window.removeEventListener("click", handleInteraction);
+      window.removeEventListener("keydown", handleInteraction);
+    };
+    window.addEventListener("click", handleInteraction);
+    window.addEventListener("keydown", handleInteraction);
+    return () => {
+      window.removeEventListener("click", handleInteraction);
+      window.removeEventListener("keydown", handleInteraction);
+    };
+  }, []);
+
+  const prevAlertsLength = useRef(alerts.length);
+  useEffect(() => {
+    if (alerts.length > prevAlertsLength.current) {
+      const newAlert = alerts[alerts.length - 1];
+      if (newAlert && audioCtxRef.current && pannerNodeRef.current) {
+        const zoneIdx = ZONES.indexOf(newAlert.zone);
+        let x = 0;
+        if (zoneIdx !== -1) {
+          x = (zoneIdx / (ZONES.length - 1)) * 2 - 1;
+        } else {
+          let hash = 0;
+          for (let i = 0; i < newAlert.srcIp.length; i++) {
+            hash = newAlert.srcIp.charCodeAt(i) + ((hash << 5) - hash);
+          }
+          x = (hash % 100) / 100;
+        }
+        const y = 0;
+        const z = 1 - Math.abs(x);
+        
+        const panner = pannerNodeRef.current;
+        const ctx = audioCtxRef.current;
+        
+        if (panner.positionX) {
+          panner.positionX.setValueAtTime(x, ctx.currentTime);
+          panner.positionY.setValueAtTime(y, ctx.currentTime);
+          panner.positionZ.setValueAtTime(z, ctx.currentTime);
+        } else {
+          panner.setPosition(x, y, z);
+        }
+        
+        let freq = 160;
+        let duration = 0.5;
+        let type: OscillatorType = "sine";
+        
+        if (newAlert.severity === "critical") {
+          freq = 380;
+          duration = 1.0;
+          type = "sawtooth";
+        } else if (newAlert.severity === "high") {
+          freq = 280;
+          duration = 0.7;
+          type = "triangle";
+        } else if (newAlert.severity === "medium") {
+          freq = 210;
+          duration = 0.5;
+          type = "triangle";
+        }
+        
+        try {
+          const osc = ctx.createOscillator();
+          const gainNode = ctx.createGain();
+          const filter = ctx.createBiquadFilter();
+          
+          osc.type = type;
+          osc.frequency.setValueAtTime(freq, ctx.currentTime);
+          
+          filter.type = "lowpass";
+          filter.frequency.setValueAtTime(800, ctx.currentTime);
+          
+          osc.connect(filter);
+          filter.connect(gainNode);
+          gainNode.connect(panner);
+          
+          gainNode.gain.setValueAtTime(0, ctx.currentTime);
+          gainNode.gain.linearRampToValueAtTime(newAlert.severity === "critical" ? 0.35 : 0.25, ctx.currentTime + 0.05);
+          gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+          
+          osc.start(ctx.currentTime);
+          osc.stop(ctx.currentTime + duration);
+        } catch (e) {
+          console.warn("Could not play spatialized warning hum:", e);
+        }
+      }
+    }
+    prevAlertsLength.current = alerts.length;
+  }, [alerts]);
+
+  // Hooks: WebSocket + React Query
+  useWebSocket();
+  useSystemStats();
+  usePermissions();
+  usePluginData();
 
   // Drag-to-scroll Nav State
   const navRef = useRef<HTMLElement>(null);
@@ -259,232 +404,22 @@ export default function App() {
   /* Session bootstrap: recover from the HttpOnly refresh cookie after a reload. */
   useEffect(() => {
     let cancelled = false;
+    const store = useSOCStore.getState();
     (async () => {
-      // 1. Try recovery from memory/localstorage first
       if (Token.isLoggedIn()) {
         const u = await fetchMe();
         if (u && !cancelled) {
-          setUser(u);
-          setIsAuthenticated(true);
-          setAuthReady(true);
+          store.setAuth(true, true, u);
           return;
         }
       }
-      
-      // 2. Try recovery from refresh cookie
       const refreshed = await refreshAccessToken();
       if (!cancelled) {
-        setIsAuthenticated(refreshed);
-        setUser(Token.getUser());
-        setAuthReady(true);
+        store.setAuth(true, refreshed, Token.getUser());
       }
     })();
     return () => { cancelled = true; };
   }, []);
-
-  /* Backend event stream with auto-reconnection and segment data handling */
-  const [segmentData, setSegmentData] = useState<{
-    segments: any[];
-    health: any[];
-    summary: any[];
-    metrics: Record<string, any>;
-    alerts: any[];
-    advancedMonitoring: any;
-  }>({ segments: [], health: [], summary: [], metrics: {}, alerts: [], advancedMonitoring: null });
-  const [permissions, setPermissions] = useState<{
-    isAdmin: boolean;
-    isElevated: boolean;
-    canAccessSecurityLog: boolean;
-    canAccessProcessMemory: boolean;
-    canMonitorUSB: boolean;
-    platform: string;
-    recommendations: any[];
-  } | null>(null);
-  const [wsStatus, setWsStatus] = useState<'connecting' | 'connected' | 'disconnected'>('disconnected');
-  const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimeoutRef = useRef<number>(1000);
-  const maxReconnectTimeout = 30000;
-
-  // Fetch initial permissions
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    const fetchPermissions = async () => {
-      try {
-        const perms: any = await apiGet('/api/system/permissions');
-        setPermissions(perms);
-      } catch (e) { /* silent fail */ }
-    };
-    fetchPermissions();
-    const interval = setInterval(fetchPermissions, 30000);
-    return () => clearInterval(interval);
-  }, [isAuthenticated]);
-
-  useEffect(() => {
-    if (!isAuthenticated || !Token.getAccess()) return;
-    
-    let isActive = true;
-    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-    
-    const connect = () => {
-      if (!isActive) return;
-      setWsStatus('connecting');
-      
-      const ws = new WebSocket(WS_BASE);
-      wsRef.current = ws;
-      
-      ws.onopen = () => {
-        setWsStatus('connected');
-        reconnectTimeoutRef.current = 1000;
-        ws.send(JSON.stringify({ event: "auth", token: Token.getAccess() }));
-      };
-      
-      ws.onclose = () => {
-        setWsStatus('disconnected');
-        wsRef.current = null;
-        if (!isActive) return;
-        reconnectTimer = setTimeout(() => {
-          reconnectTimeoutRef.current = Math.min(reconnectTimeoutRef.current * 1.5, maxReconnectTimeout);
-          connect();
-        }, reconnectTimeoutRef.current);
-      };
-      
-      ws.onerror = () => {
-        // Connection failed, will trigger onclose
-      };
-      
-      ws.onmessage = event => {
-        try {
-          const msg = JSON.parse(event.data);
-          
-          if (msg.event === "new_logs") {
-            setResponseLog(prev => [`${clock(msg.ts)} Host log stored (${msg.data?.[0]?.id ?? "event"})`, ...prev].slice(0, 10));
-          }
-          if (msg.event === "process_killed") {
-            setResponseLog(prev => [`${clock(msg.ts)} Admin action: process ${msg.data?.pid} terminated`, ...prev].slice(0, 10));
-          }
-          if (msg.event === "segment_alert") {
-            setResponseLog(prev => [`${clock(msg.ts)} SEGMENT ALERT: ${msg.data.segment}/${msg.data.zone} - ${msg.data.message}`, ...prev].slice(0, 10));
-          }
-          if (msg.event === "segment_alerts") {
-            setSegmentData(prev => ({ ...prev, alerts: msg.data || [] }));
-          }
-          
-          if (msg.event === "permission_status") {
-            setPermissions(msg.data);
-          }
-          
-          if (msg.event === "telemetry_update") {
-            const data = msg.data;
-            
-            // Update segment data if included
-            if (data.segments) {
-              setSegmentData(prev => ({
-                ...prev,
-                health: data.segments.segmentHealth || [],
-                summary: data.segments.segmentSummary || [],
-                metrics: data.segments.segmentMetrics || {},
-                advancedMonitoring: data.segments.advancedMonitoring || null
-              }));
-            }
-            
-            // Map network traffic to Connections with segment info
-            const realConns: Connection[] = (data.network || []).map((c: any, i: number) => {
-              const localParts = (c.local || '').split(':');
-              const port = parseInt(localParts[localParts.length - 1]) || 0;
-              let risk = 0;
-              const state = c.state || '';
-              
-              if (state === 'LISTENING') risk = 30;
-              else if (state === 'ESTABLISHED') risk = 10;
-              
-              const suspiciousPorts: Record<number, number> = {
-                21: 20, 22: 10, 23: 30, 25: 25, 53: 15, 80: 10, 135: 30, 139: 30,
-                443: 10, 445: 40, 1433: 35, 1521: 35, 3306: 35, 3389: 40, 5432: 30,
-                5900: 25, 5901: 25, 6379: 30, 8080: 20, 8443: 15, 9200: 25, 9300: 25
-              };
-              
-              if (suspiciousPorts[port]) risk = Math.max(risk, suspiciousPorts[port]);
-              if (state === 'LISTENING' && suspiciousPorts[port] && suspiciousPorts[port] >= 30) risk = Math.min(100, risk + 20);
-              
-              // Infer zone from port
-              let zone = 'System';
-              if ([443,80,8080,8443].includes(port)) zone = 'DMZ';
-              else if ([22,3389].includes(port)) zone = 'Remote Access';
-              else if ([445,139].includes(port)) zone = 'Internal';
-              else if ([3306,5432,1433,1521].includes(port)) zone = 'Data Core';
-              
-              return {
-                id: `real-conn-${i}`,
-                srcIp: c.local || 'Unknown',
-                dstIp: c.foreign || 'Unknown',
-                dstHost: c.foreign || 'Unknown',
-                protocol: "SYSTEM",
-                port: port,
-                pps: state === 'ESTABLISHED' ? 25 : state === 'LISTENING' ? 0 : 5,
-                latency: state === 'ESTABLISHED' ? 20 : 0,
-                risk: risk,
-                status: state === 'LISTENING' ? 'observing' : state === 'ESTABLISHED' ? 'active' : 'observing',
-                zone: zone,
-                geo: 'Local',
-                bytes: state === 'ESTABLISHED' ? 250000 : 0,
-                lastSeen: Date.now(),
-              };
-            });
-            setConnections(realConns);
-
-            // Map logs to Alerts with segment info
-            const realAlerts: Alert[] = (data.logs || []).map((l: any, i: number) => ({
-              id: `real-alert-${i}`,
-              ts: new Date(l.Date || Date.now()).getTime(),
-              srcIp: l.Computer || 'Local',
-              dstHost: l.ProviderName || l.Source || 'System',
-              protocol: 'SYSTEM',
-              category: 'Threat Detection',
-              severity: l.Suspicious ? 'high' : 'low',
-              mitreId: l.Mitre?.id || 'N/A',
-              mitreName: l.Mitre?.name || 'System Event',
-              signature: l.Description || l.description || l.Message || 'No description',
-              score: l.Suspicious ? 80 : 10,
-              action: 'Logged',
-              status: 'investigating',
-              malicious: !!l.Suspicious,
-              zone: l.Zone || l.zone || 'System',
-              killed: false,
-            }));
-            setAlerts(realAlerts);
-
-            // Update traffic timeline
-            const ts = Date.now();
-            const threatCount = realAlerts.filter(a => a.malicious).length;
-            const blockedCount = realAlerts.filter(a => a.killed || a.status === "auto-contained").length;
-            const activeConns = realConns.filter(c => c.status === 'active' || c.status === 'observing').length;
-            const totalConns = realConns.length;
-            const trafficPercentage = totalConns > 0 ? Math.min(100, Math.round((activeConns / totalConns) * 100)) : 0;
-            
-            const newPoint: TrafficPoint = {
-              ts,
-              t: timelineLabel(ts),
-              traffic: trafficPercentage,
-              threats: threatCount,
-              blocked: blockedCount,
-              analysis: data.analysis?.summary || 'Analyzing system telemetry...',
-            };
-            setTraffic(prev => [...prev.slice(-119), newPoint]); // Keep 10 minutes of history
-          }
-        } catch {
-          // Ignore malformed messages
-        }
-      };
-    };
-    
-    connect();
-    
-    return () => {
-      isActive = false;
-      if (reconnectTimer) clearTimeout(reconnectTimer);
-      if (wsRef.current) wsRef.current.close();
-    };
-  }, [isAuthenticated]);
 
   /* Clock */
   useEffect(() => {
@@ -492,60 +427,21 @@ export default function App() {
     return () => clearInterval(t);
   }, []);
 
-  /* Timeline updates are fed by backend telemetry_update messages only. */
-
-
-
-  /* Live System Performance Polling (lightweight fallback beside websocket telemetry) */
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    let pluginPollTick = 0;
-    const pollStats = async () => {
-      try {
-        const stats: any = await apiGet('/api/system/stats');
-        setSystemStats(stats);
-        setStatsHistory(prev => [...prev.slice(-29), { ts: stats.timestamp, cpu: parseFloat(stats.cpu), mem: parseFloat(stats.memory) }]);
-        pluginPollTick += 1;
-        if (pluginPollTick % 3 === 0) {
-          try {
-            const pluginData: any = await apiGet('/api/plugins');
-            if (pluginData && pluginData.plugins) {
-               setSystemStats(prev => ({...prev, plugins: pluginData.plugins.length}));
-            }
-          } catch (e) {}
-        }
-
-      } catch (e) { /* silent fail */ }
-    };
-    const t = setInterval(pollStats, 10000);
-    pollStats();
-    return () => clearInterval(t);
-  }, [isAuthenticated]);
-
-  /* Recycle blocked conns removed for real data integration */
-  useEffect(() => {
-    // No longer needed
-  }, []);
-
-   /* Derived */
-   const activeCnt = useMemo(() => connections.filter(c => c.status === "active" || c.status === "observing").length, [connections]);
-   const blockedCnt = useMemo(() => connections.filter(c => ["dropped", "quarantined", "blocked"].includes(c.status)).length, [connections]);
-   const malAlerts = useMemo(() => alerts.filter(a => a.malicious), [alerts]);
-   const criticalCnt = useMemo(() => alerts.filter(a => a.severity === "critical").length, [alerts]);
-   const containedCnt = useMemo(() => alerts.filter(a => a.status === "auto-contained").length, [alerts]);
-   const containRate = malAlerts.length ? Math.round((containedCnt / malAlerts.length) * 100) : 100;
-   const avgRisk = connections.length > 0 ? Math.round(connections.reduce((s, c) => s + c.risk, 0) / connections.length) : 0;
-   const threatPressure = Math.min(100, Math.round((avgRisk + Math.min(100, malAlerts.length * 5)) / 2));
-   const totalPps = connections.reduce((s, c) => s + c.pps, 0);
-   const totalBytes = connections.reduce((s, c) => s + c.bytes, 0);
-
-  const sevDist = useMemo<Record<Severity, number>>(() =>
-    alerts.reduce((a, al) => { a[al.severity]++; return a; }, { low: 0, medium: 0, high: 0, critical: 0 } as Record<Severity, number>),
-    [alerts]);
+  const sevDist = useMemo(
+    () =>
+      alerts.reduce(
+        (acc, alert) => {
+          acc[alert.severity] += 1;
+          return acc;
+        },
+        { low: 0, medium: 0, high: 0, critical: 0 } as Record<Severity, number>
+      ),
+    [alerts]
+  );
 
   const catDist = useMemo(() => {
     const map = new Map<string, number>();
-    alerts.forEach(a => map.set(a.category, (map.get(a.category) ?? 0) + 1));
+    alerts.forEach((alert) => map.set(alert.category, (map.get(alert.category) ?? 0) + 1));
     return [...map.entries()].map(([name, value]) => ({ name, value }));
   }, [alerts]);
 
@@ -574,10 +470,27 @@ export default function App() {
     };
   }, [traffic]);
 
+  const telemetryAgeMs = telemetryMeta.lastUpdateAt ? now - telemetryMeta.lastUpdateAt : null;
+  const telemetryPulseLabel = telemetryAgeMs === null ? "Waiting" : telemetryAgeMs < 1000 ? "Live" : `${(telemetryAgeMs / 1000).toFixed(1)}s`;
+
   if (!authReady) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#020617] text-sm text-slate-300">
-        Restoring secure session...
+      <div className="flex min-h-screen flex-col items-center justify-center bg-[#020617] gap-6">
+        <div className="pointer-events-none fixed inset-0 cyber-grid opacity-20" />
+        <div className="relative">
+          <div className="h-20 w-20 rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-2xl shadow-cyan-500/30 breathe-glow">
+            <Shield className="h-10 w-10 text-white" />
+          </div>
+          <div className="absolute -inset-3 rounded-2xl border border-cyan-400/30 animate-pulse" />
+          <div className="absolute -inset-6 rounded-3xl border border-cyan-400/10" style={{ animation: 'pulse-ring-expand 2s cubic-bezier(0,0,0.2,1) infinite' }} />
+        </div>
+        <div className="text-center">
+          <p className="text-lg font-bold text-white tracking-tight">SentinelGrid</p>
+          <p className="text-xs text-cyan-300/60 uppercase tracking-[0.3em] mt-1">Restoring Secure Session</p>
+        </div>
+        <div className="w-48 h-1 bg-slate-800 rounded-full overflow-hidden">
+          <motion.div className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full" animate={{ x: ['-100%', '200%'] }} transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }} />
+        </div>
       </div>
     );
   }
@@ -585,9 +498,8 @@ export default function App() {
   if (!isAuthenticated) {
     return (
       <LoginScreen onLoginSuccess={() => {
-        setIsAuthenticated(true);
-        setUser(Token.getUser());
-        setTab("dashboard"); // Ensure we start at dashboard
+        useSOCStore.getState().setAuth(true, true, Token.getUser());
+        useSOCStore.getState().setTab('dashboard');
       }} />
     );
   }
@@ -596,22 +508,31 @@ export default function App() {
   // The LoginScreen is not rendered.
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-[#020617] text-slate-100 font-sans">
-      {/* Background */}
+    <div className="min-h-screen overflow-x-hidden bg-[#020617] text-slate-100 font-sans perspective-container">
+      {/* Immersive background layers */}
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(56,189,248,0.12),_transparent_30%),radial-gradient(circle_at_bottom_right,_rgba(244,63,94,0.12),_transparent_26%)]" />
+      <div className="pointer-events-none fixed inset-0 cyber-grid opacity-40" />
+      {/* Floating ambient particles */}
+      {[...Array(8)].map((_, i) => (
+        <div key={`p-${i}`} className="pointer-events-none fixed rounded-full blur-sm float-particle" style={{ width: 3 + (i % 3) * 2, height: 3 + (i % 3) * 2, background: i % 2 === 0 ? 'rgba(34,211,238,0.15)' : 'rgba(168,85,247,0.12)', left: `${10 + i * 11}%`, top: `${15 + (i % 4) * 20}%`, animationDelay: `${i * 1.2}s` }} />
+      ))}
 
       {/* Top nav */}
-      <header className="sticky top-0 z-50 border-b border-white/10 bg-black/60 backdrop-blur-2xl">
+      <header className="sticky top-0 z-50 bg-black/70 backdrop-blur-2xl">
+        <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-cyan-500/30 to-transparent" />
         <div className="mx-auto w-full max-w-screen-2xl px-4 sm:px-6 lg:px-8">
           <div className="flex h-16 min-w-0 items-center justify-between gap-4">
             {/* Logo */}
-            <div className="flex items-center gap-3 shrink-0">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-rose-500 to-orange-600 shadow-lg shadow-rose-500/30">
-                <Shield className="h-5 w-5 text-white" />
+            <div className="flex items-center gap-3 shrink-0 group">
+              <div className="relative">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 via-blue-600 to-indigo-600 shadow-lg shadow-cyan-500/30 transition-transform group-hover:scale-110">
+                  <Shield className="h-5 w-5 text-white" />
+                </div>
+                <div className="absolute -inset-1 rounded-xl border border-cyan-400/20 opacity-0 group-hover:opacity-100 transition-opacity" />
               </div>
               <div>
-                <p className="text-sm font-bold text-white leading-tight">SentinelGrid</p>
-                <p className="text-xs text-slate-500 leading-tight">Enterprise SOC Platform</p>
+                <p className="text-sm font-bold text-white leading-tight tracking-tight">SentinelGrid<span className="text-cyan-400 ml-1 text-[10px] font-mono align-super">v5</span></p>
+                <p className="text-[10px] text-slate-500 leading-tight uppercase tracking-[0.2em]">Enterprise SOC</p>
               </div>
             </div>
 
@@ -629,7 +550,7 @@ export default function App() {
                   key={t.id}
                   type="button"
                   onClick={() => setTab(t.id)}
-                  className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl px-2.5 py-2 text-xs font-medium transition 2xl:text-sm ${tab === t.id ? "bg-white/10 text-white" : "text-slate-400 hover:text-slate-200 hover:bg-white/5"}`}
+                  className={`relative flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl px-2.5 py-2 text-xs font-medium transition 2xl:text-sm ${tab === t.id ? "bg-white/10 text-white shadow-lg shadow-cyan-500/5 tab-active-glow" : "text-slate-400 hover:text-slate-200 hover:bg-white/5"}`}
                 >
                   {t.icon}
                   {t.label}
@@ -640,14 +561,14 @@ export default function App() {
             {/* Status indicators */}
             <div className="hidden shrink-0 items-center gap-3 2xl:flex">
               <div className="flex items-center gap-4 border-l border-white/10 pl-4">
-                <div className={`flex items-center gap-2 rounded-full border px-3 py-1.5 backdrop-blur-md ${
+                <div className={`flex items-center gap-2 rounded-full border px-3 py-1.5 backdrop-blur-md pulse-ring ${
                   wsStatus === 'connected' ? 'border-emerald-400/30 bg-emerald-500/10' : 
                   wsStatus === 'connecting' ? 'border-amber-400/30 bg-amber-500/10' : 
                   'border-rose-400/30 bg-rose-500/10'
                 }`}>
-                  <div className={`h-2 w-2 rounded-full animate-pulse ${
-                    wsStatus === 'connected' ? 'bg-emerald-400' : 
-                    wsStatus === 'connecting' ? 'bg-amber-400' : 
+                  <div className={`h-2 w-2 rounded-full ${
+                    wsStatus === 'connected' ? 'bg-emerald-400 heartbeat' : 
+                    wsStatus === 'connecting' ? 'bg-amber-400 animate-pulse' : 
                     'bg-rose-400'
                   }`} />
                   <span className={`text-xs font-semibold ${
@@ -655,12 +576,15 @@ export default function App() {
                     wsStatus === 'connecting' ? 'text-amber-200' : 
                     'text-rose-200'
                   }`}>
-                    {wsStatus === 'connected' ? 'LIVE' : wsStatus === 'connecting' ? 'CONNECTING' : 'OFFLINE'}
+                    {wsStatus === 'connected' ? 'LIVE' : wsStatus === 'connecting' ? 'SYNC' : 'OFFLINE'}
                   </span>
+                  {wsStatus === 'connected' && wsLatency > 0 && (
+                    <span className="text-[10px] text-emerald-300/70 font-mono">{wsLatency}ms</span>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 rounded-full border border-sky-400/30 bg-sky-500/10 px-3 py-1.5 backdrop-blur-md">
-                  <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                  <span className="text-xs font-semibold text-sky-200">LOCAL TELEMETRY</span>
+                  <Wifi className="h-3 w-3 text-sky-400 electric" />
+                  <span className="text-xs font-semibold text-sky-200">TELEMETRY</span>
                 </div>
                 <div className="flex items-center gap-2 rounded-full border border-rose-500/20 bg-rose-500/10 px-3 py-1.5">
                   <AlertTriangle className="h-3.5 w-3.5 text-rose-400" />
@@ -733,69 +657,87 @@ export default function App() {
         <AnimatePresence mode="wait">
         <motion.main 
           key={tab}
-          initial={{ opacity: 0, y: 30, filter: "blur(10px)", scale: 0.98 }}
-          animate={{ opacity: 1, y: 0, filter: "blur(0px)", scale: 1 }}
-          exit={{ opacity: 0, y: -30, filter: "blur(10px)", scale: 0.98 }}
-          transition={{ duration: 0.4, ease: "easeOut" }}
+          initial={{ opacity: 0, y: 40, filter: "blur(12px)", scale: 0.96, rotateX: 3 }}
+          animate={{ opacity: 1, y: 0, filter: "blur(0px)", scale: 1, rotateX: 0 }}
+          exit={{ opacity: 0, y: -30, filter: "blur(12px)", scale: 0.96, rotateX: -2 }}
+          transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
           className="mx-auto max-w-screen-2xl px-4 py-6 sm:px-6 lg:px-8 space-y-6"
         >
         {/* Framework banner */}
-        <div className="rounded-3xl border border-white/10 bg-white/5 px-5 py-4 backdrop-blur-xl">
-          <div className="flex flex-wrap items-center gap-3">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Reference Data:</span>
+        <div className="rounded-3xl glass-v2 neon-border px-5 py-4 relative overflow-hidden">
+          <div className="absolute inset-0 holographic opacity-20 pointer-events-none" />
+          <div className="relative z-10 flex flex-wrap items-center gap-3">
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Active Frameworks:</span>
             {[
               { label: "MITRE ATT&CK v15", cls: "border-rose-400/30 bg-rose-400/10 text-rose-200" },
               { label: "NIST CSF 2.0", cls: "border-emerald-400/30 bg-emerald-400/10 text-emerald-200" },
-              { label: "VirusTotal API-ready", cls: "border-sky-400/30 bg-sky-400/10 text-sky-200" },
-              { label: "Host Event Logs", cls: "border-amber-400/30 bg-amber-400/10 text-amber-200" },
-              { label: "Registry/FIM Demo", cls: "border-purple-400/30 bg-purple-400/10 text-purple-200" },
-              { label: "YARA References", cls: "border-orange-400/30 bg-orange-400/10 text-orange-200" },
+              { label: "VirusTotal API", cls: "border-sky-400/30 bg-sky-400/10 text-sky-200" },
+              { label: "Event Telemetry", cls: "border-amber-400/30 bg-amber-400/10 text-amber-200" },
+              { label: "FIM Engine", cls: "border-purple-400/30 bg-purple-400/10 text-purple-200" },
+              { label: "YARA Signatures", cls: "border-orange-400/30 bg-orange-400/10 text-orange-200" },
+              { label: "AI Heuristic", cls: "border-cyan-400/30 bg-cyan-400/10 text-cyan-200" },
             ].map(f => (
-              <span key={f.label} className={`rounded-full border px-3 py-1 text-xs font-medium ${f.cls}`}>
+              <motion.span key={f.label} whileHover={{ scale: 1.08 }} className={`rounded-full border px-3 py-1 text-xs font-medium cursor-default transition-shadow hover:shadow-lg ${f.cls}`}>
                 {f.label}
-              </span>
+              </motion.span>
             ))}
-            <div className="ml-auto flex items-center gap-2">
-              <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-xs text-emerald-300 font-medium">Live Telemetry Active</span>
+            <div className="ml-auto flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <div className="relative h-2 w-2">
+                  <div className="absolute inset-0 rounded-full bg-emerald-400 heartbeat" />
+                  <div className="absolute -inset-1 rounded-full border border-emerald-400/30 animate-ping" />
+                </div>
+                <span className="text-xs text-emerald-300 font-semibold">Live</span>
+              </div>
+              {wsLatency > 0 && <span className="text-[10px] text-slate-500 font-mono">{wsLatency}ms RTT</span>}
             </div>
-
           </div>
         </div>
 
         {/* Dashboard tab */}
         {tab === "dashboard" && (
           <div className="space-y-6">
-            {/* Stat cards */}
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <StatCard
-                label="Threat Pressure"
-                value={`${threatPressure}/100`}
-                sub={`${criticalCnt} critical events correlated`}
-                tone="rose"
-                icon={<AlertTriangle className="h-4 w-4" />}
-              />
-              <StatCard
-                label="Protected Sessions"
-                value={activeCnt}
-                sub={`${blockedCnt} connections auto-killed`}
-                tone="emerald"
-                icon={<Shield className="h-4 w-4" />}
-              />
-              <StatCard
-                label="Detections Total"
-                value={alerts.length}
-                sub={`${containRate}% auto-contained by inline policy`}
-                tone="sky"
-                icon={<Eye className="h-4 w-4" />}
-              />
-              <StatCard
-                label="Network Throughput"
-                value={`${(totalPps / 1000).toFixed(1)}k pps`}
-                sub={`${(totalBytes / 1_000_000).toFixed(0)} MB aggregate`}
-                tone="amber"
-                icon={<Network className="h-4 w-4" />}
-              />
+            {/* Poincaré Hyperbolic Topology + Stat cards */}
+            <div className="grid gap-6 xl:grid-cols-12 mb-2">
+              <div className="xl:col-span-8 h-[450px]">
+                <HyperbolicTopology
+                  threatLevel={threatLevel}
+                  selectedNodeId={selectedNodeId}
+                  onSelectNode={(nodeId) => setSelectedNodeId(nodeId)}
+                />
+              </div>
+              
+              {/* Stat Cards Grid */}
+              <div className="xl:col-span-4 grid gap-4 grid-cols-2">
+                <StatCard
+                  label="Threat Pressure"
+                  value={`${threatPressure}/100`}
+                  sub={`${criticalCnt} critical events correlated`}
+                  tone="rose"
+                  icon={<AlertTriangle className="h-4 w-4" />}
+                />
+                <StatCard
+                  label="Protected Sessions"
+                  value={activeCnt}
+                  sub={`${blockedCnt} connections auto-killed`}
+                  tone="emerald"
+                  icon={<Shield className="h-4 w-4" />}
+                />
+                <StatCard
+                  label="Detections Total"
+                  value={alerts.length}
+                  sub={`${containRate}% auto-contained by inline policy`}
+                  tone="sky"
+                  icon={<Eye className="h-4 w-4" />}
+                />
+                <StatCard
+                  label="Network Throughput"
+                  value={`${(totalPps / 1000).toFixed(1)}k pps`}
+                  sub={`${(totalBytes / 1_000_000).toFixed(0)} MB aggregate`}
+                  tone="amber"
+                  icon={<Network className="h-4 w-4" />}
+                />
+              </div>
             </div>
 
             {/* Hardware Telemetry Advancement */}
@@ -874,11 +816,17 @@ export default function App() {
                     </div>
                     <div>
                       <p className="text-[10px] uppercase tracking-widest text-slate-500">Telemetry Pulse</p>
-                      <p className="text-lg font-bold text-white">10.0s</p>
+                      <p className="text-lg font-bold text-white">{telemetryPulseLabel}</p>
                     </div>
                   </div>
-                  <div className="flex h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
+                  <div className={`flex h-2 w-2 rounded-full ${wsStatus === "connected" ? "bg-emerald-400 animate-ping" : "bg-amber-400 animate-pulse"}`} />
                 </div>
+                <TelemetryIntegrityPanel
+                  meta={telemetryMeta}
+                  wsStatus={wsStatus}
+                  wsLatency={wsLatency}
+                  now={now}
+                />
               </div>
             </div>
 
@@ -1108,8 +1056,8 @@ export default function App() {
                        {/* 6 Core Segments */}
                        {['identity', 'network', 'system', 'endpoints', 'applications', 'data'].map((segName) => {
                          const metrics = segmentData.metrics[segName] || {};
-                         const hasData = metrics.connections > 0 || metrics.authEvents > 0 || metrics.totalProcesses > 0;
-                         const status = metrics.suspiciousProcesses > 0 ? 'warning' : metrics.highRiskProcesses > 0 ? 'critical' : hasData ? 'healthy' : 'idle';
+                         const hasData = (metrics.connections ?? 0) > 0 || (metrics.authEvents ?? 0) > 0 || (metrics.totalProcesses ?? 0) > 0;
+                         const status = (metrics.suspiciousProcesses ?? 0) > 0 ? 'warning' : (metrics.highRiskProcesses ?? 0) > 0 ? 'critical' : hasData ? 'healthy' : 'idle';
                          
                          return (
                            <div key={segName} className="rounded-xl border border-white/10 bg-black/20 p-3">
@@ -1122,7 +1070,7 @@ export default function App() {
                                  } ${hasData ? 'animate-pulse' : ''}`} />
                                  <span className="text-xs font-semibold text-slate-200 capitalize">{segName}</span>
                                </div>
-                               {metrics.risk > 0 && (
+                               {(metrics.risk ?? 0) > 0 && (
                                  <span className="text-[10px] text-rose-400">Risk: {metrics.risk}</span>
                                )}
                              </div>
@@ -1132,7 +1080,7 @@ export default function App() {
                                {segName === 'identity' && (
                                  <>
                                    <span className="text-slate-400">Auth: {metrics.authEvents || 0}</span>
-                                   <span className={metrics.failedLogons > 0 ? 'text-rose-400' : 'text-slate-400'}>
+                                   <span className={(metrics.failedLogons ?? 0) > 0 ? 'text-rose-400' : 'text-slate-400'}>
                                      Failed: {metrics.failedLogons || 0}
                                    </span>
                                  </>
@@ -1140,7 +1088,7 @@ export default function App() {
                                {segName === 'system' && (
                                  <>
                                    <span className="text-slate-400">Procs: {metrics.totalProcesses || 0}</span>
-                                   {metrics.suspiciousProcesses > 0 && (
+                                   {(metrics.suspiciousProcesses ?? 0) > 0 && (
                                      <span className="text-rose-400">Susp: {metrics.suspiciousProcesses}</span>
                                    )}
                                  </>
@@ -1169,14 +1117,14 @@ export default function App() {
                                  </span>
                                </div>
                              )}
-                             {segmentData.advancedMonitoring.fimChanges?.length > 0 && (
+                             {(segmentData.advancedMonitoring.fimChanges?.length ?? 0) > 0 && (
                                <div className="text-rose-400">
-                                 ⚠️ {segmentData.advancedMonitoring.fimChanges.length} file integrity violations
+                                 ⚠️ {segmentData.advancedMonitoring.fimChanges?.length} file integrity violations
                                </div>
                              )}
-                             {segmentData.advancedMonitoring.usbDevices?.connected?.length > 0 && (
+                             {(segmentData.advancedMonitoring.usbDevices?.connected?.length ?? 0) > 0 && (
                                <div className="text-slate-400">
-                                 USB: {segmentData.advancedMonitoring.usbDevices.connected.length} devices
+                                 USB: {segmentData.advancedMonitoring.usbDevices?.connected?.length} devices
                                </div>
                              )}
                            </div>
@@ -1517,15 +1465,106 @@ export default function App() {
             <SystemScanner />
           </div>
         )}
+
+        {tab === "vm" && (
+          <div className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur-xl">
+            <InteractiveVM />
+          </div>
+        )}
+
+        {/* Slide-over HUD panel */}
+        <AnimatePresence>
+          {selectedNode && (
+            <motion.div
+              initial={{ y: "100%", opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: "100%", opacity: 0 }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              className="fixed bottom-0 left-0 right-0 z-50 h-[80vh] md:h-[65vh] bg-[#030712]/95 border-t border-cyan-500/20 backdrop-blur-3xl p-6 rounded-t-3xl shadow-2xl flex flex-col font-mono"
+            >
+              {/* Header */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4 border-b border-white/10 pb-3">
+                <div className="flex items-center gap-4">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-400">
+                    <Terminal className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                      Forensic HUD Node Monitor: <span className="text-cyan-400 font-mono font-black">{selectedNode.name}</span>
+                    </h3>
+                    <div className="flex items-center gap-1.5 text-xs text-slate-400 mt-0.5">
+                      <span>IP: <span className="text-slate-300 font-mono">{selectedNode.ip}</span></span>
+                      <span className="text-slate-600">•</span>
+                      <span>Type: <span className="text-slate-300 font-mono uppercase">{selectedNode.type}</span></span>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* HUD segment tabs */}
+                <div className="flex flex-wrap items-center gap-2">
+                  {[
+                    { id: "W", label: "Segment W: Chrono" },
+                    { id: "X", label: "Segment X: Lab Engine" },
+                    { id: "Y", label: "Segment Y: Akashic" },
+                    { id: "Z", label: "Segment Z: Ego-Lock" },
+                  ].map((sTab) => (
+                    <button
+                      key={sTab.id}
+                      onClick={() => setActiveSegmentTab(sTab.id)}
+                      className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition-all duration-200 ${
+                        activeSegmentTab === sTab.id
+                          ? "border-cyan-500/50 bg-cyan-500/20 text-cyan-200 shadow-[0_0_10px_rgba(6,182,212,0.15)]"
+                          : "border-white/5 bg-white/5 text-slate-400 hover:text-white hover:border-white/10"
+                      }`}
+                    >
+                      {sTab.label}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => setSelectedNodeId(null)}
+                    className="ml-2 md:ml-4 p-2 rounded-full border border-white/10 bg-white/5 text-slate-400 hover:text-white hover:bg-rose-950/30 hover:border-rose-500/30 transition-all duration-200"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Content box */}
+              <div className="flex-1 min-h-0 overflow-y-auto">
+                {activeSegmentTab === "W" && (
+                  <ChronoMonitor
+                    vmId={selectedNode.id}
+                    vmName={selectedNode.name}
+                    onRollbackSuccess={handleRollbackSuccess}
+                  />
+                )}
+                {activeSegmentTab === "X" && (
+                  <LabEngineInterface
+                    vmId={selectedNode.id}
+                    vmName={selectedNode.name}
+                    onThreatChange={handleThreatLevelChange}
+                  />
+                )}
+                {activeSegmentTab === "Y" && <AkashicHorizon />}
+                {activeSegmentTab === "Z" && <EgoLockStatus />}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
         </motion.main>
       </AnimatePresence>
       </Suspense>
 
       {/* Footer */}
-      <footer className="border-t border-white/8 py-4 px-6 text-center">
-        <p className="text-xs text-slate-600">
-          SentinelGrid SOC Monitor - local host telemetry, reference frameworks, and clearly labeled simulation modules
-        </p>
+      <footer className="border-t border-white/8 py-5 px-6 text-center relative">
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-500/20 to-transparent" />
+        <div className="flex items-center justify-center gap-3">
+          <div className="h-1.5 w-1.5 rounded-full bg-emerald-400 heartbeat" />
+          <p className="text-xs text-slate-500">
+            SentinelGrid SOC v5.0 — Real-time telemetry • AI-powered analysis • Enterprise security
+          </p>
+          <div className="h-1.5 w-1.5 rounded-full bg-cyan-400 heartbeat" style={{ animationDelay: '0.5s' }} />
+        </div>
       </footer>
     </div>
   );

@@ -47,26 +47,27 @@ function MetricCard({ title, value, unit = "", icon: Icon, trend = 0, status = "
   };
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur-sm transition-all hover:bg-white/10">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-medium text-slate-400">{title}</h3>
-        <div className={`p-2 rounded-xl border ${statusColors[status as keyof typeof statusColors]}`}>
+    <div className="relative rounded-[2rem] border border-cyan-500/20 glass-v2 p-6 overflow-hidden group">
+      <div className="absolute inset-0 holographic opacity-10 pointer-events-none group-hover:opacity-20 transition-opacity" />
+      <div className="relative z-10 flex items-center justify-between mb-4">
+        <h3 className="text-[10px] font-bold text-cyan-200/70 tracking-widest uppercase">{title}</h3>
+        <div className={`p-2.5 rounded-xl border backdrop-blur-md shadow-[0_0_15px_rgba(0,0,0,0.2)] ${statusColors[status as keyof typeof statusColors]}`}>
           <Icon className="h-4 w-4" />
         </div>
       </div>
-      <div className="flex items-baseline gap-1">
-        <span className="text-3xl font-bold text-white tracking-tight">{value}</span>
-        {unit && <span className="text-sm text-slate-500">{unit}</span>}
+      <div className="relative z-10 flex items-baseline gap-1.5">
+        <span className="text-4xl font-black text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.4)] tracking-tighter">{value}</span>
+        {unit && <span className="text-sm font-mono text-cyan-400">{unit}</span>}
       </div>
       {trend !== 0 && (
-        <div className="mt-4 flex items-center gap-1.5 text-xs">
+        <div className="relative z-10 mt-5 flex items-center gap-1.5 text-xs font-mono">
           {trend > 0 ? (
-            <TrendingUp className={`h-3.5 w-3.5 ${status === "good" ? "text-emerald-400" : "text-rose-400"}`} />
+            <TrendingUp className={`h-3.5 w-3.5 ${status === "good" ? "text-cyan-400 drop-shadow-[0_0_5px_rgba(34,211,238,0.8)]" : "text-rose-400 drop-shadow-[0_0_5px_rgba(244,63,94,0.8)]"}`} />
           ) : (
-            <TrendingDown className={`h-3.5 w-3.5 ${status === "good" ? "text-emerald-400" : "text-emerald-400"}`} />
+            <TrendingDown className={`h-3.5 w-3.5 ${status === "good" ? "text-cyan-400" : "text-cyan-400"}`} />
           )}
-          <span className={status === "good" ? "text-emerald-400/80" : "text-rose-400/80"}>
-            {Math.abs(trend).toFixed(1)}% vs last period
+          <span className={status === "good" ? "text-cyan-300" : "text-rose-300"}>
+            {Math.abs(trend).toFixed(1)}% VS PREVIOUS
           </span>
         </div>
       )}
@@ -128,20 +129,26 @@ export default function GlobalAnalytics() {
   return (
     <div className="space-y-6 pb-20">
       {/* Header */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-white flex items-center gap-3">
-            <Activity className="h-6 w-6 text-sky-400" />
-            Global Analytics & Performance
-          </h2>
-          <p className="mt-1 text-sm text-slate-400">
-            Real-time telemetry, segment health monitoring, and KPI tracking across all modules.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <button onClick={fetchData} className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/10 transition">
-            Refresh Data
-          </button>
+      <div className="relative glass-v2 rounded-[2rem] p-6 border border-cyan-500/20 shadow-[0_0_30px_rgba(34,211,238,0.1)] overflow-hidden">
+        <div className="absolute inset-0 pointer-events-none holo-threat-field opacity-10" />
+        <div className="relative z-10 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="text-3xl font-black text-white flex items-center gap-4 tracking-tight drop-shadow-md">
+              <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-cyan-500 via-blue-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-cyan-500/30 breathe-glow">
+                <Activity className="h-6 w-6 text-white" />
+              </div>
+              GLOBAL COMMAND ANALYTICS
+            </h2>
+            <p className="mt-2 text-sm text-cyan-200/60 font-mono uppercase tracking-widest">
+              Real-time telemetry, segment health monitoring, and KPI tracking
+            </p>
+          </div>
+          <div className="flex gap-3">
+            <button onClick={fetchData} className="group relative flex items-center gap-2 rounded-xl bg-black/40 border border-cyan-500/40 px-6 py-3 text-xs font-bold text-cyan-300 shadow-lg hover:bg-cyan-500/20 hover:text-white transition-all duration-300 overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-cyan-400/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-in-out" />
+              <Activity className="h-4 w-4" /> RE-SYNC TELEMETRY
+            </button>
+          </div>
         </div>
       </div>
 
@@ -193,27 +200,32 @@ export default function GlobalAnalytics() {
           </div>
 
           {/* Traffic Chart */}
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-            <h3 className="text-base font-semibold text-white mb-6">Traffic & Latency Timeline (Last Hour)</h3>
-            <div className="h-72 w-full">
+          <div className="relative rounded-[2rem] border border-cyan-500/20 glass-v2 p-6 shadow-2xl overflow-hidden">
+            <div className="absolute inset-0 cyber-grid opacity-10 pointer-events-none" />
+            <h3 className="relative z-10 text-sm font-bold text-cyan-300 mb-6 tracking-widest uppercase">Traffic & Latency Timeline (Last Hour)</h3>
+            <div className="relative z-10 h-72 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={globalData.timeline}>
                   <defs>
                     <linearGradient id="colorReq" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="#38bdf8" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="#22d3ee" stopOpacity={0.4}/>
+                      <stop offset="95%" stopColor="#22d3ee" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="colorLat" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#818cf8" stopOpacity={0.4}/>
+                      <stop offset="95%" stopColor="#818cf8" stopOpacity={0}/>
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" vertical={false} />
-                  <XAxis dataKey="bucket" tickFormatter={(v) => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
-                  <YAxis yAxisId="left" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
-                  <YAxis yAxisId="right" orientation="right" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(34,211,238,0.1)" vertical={false} />
+                  <XAxis dataKey="bucket" tickFormatter={(v) => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} stroke="#67e8f9" fontSize={10} tickLine={false} axisLine={false} />
+                  <YAxis yAxisId="left" stroke="#67e8f9" fontSize={10} tickLine={false} axisLine={false} />
+                  <YAxis yAxisId="right" orientation="right" stroke="#818cf8" fontSize={10} tickLine={false} axisLine={false} />
                   <RechartsTooltip 
-                    contentStyle={{ backgroundColor: '#0f172a', borderColor: '#ffffff20', borderRadius: '0.75rem' }}
+                    contentStyle={{ backgroundColor: '#083344', borderColor: 'rgba(34,211,238,0.3)', borderRadius: '1rem', backdropFilter: 'blur(10px)', color: '#cffafe' }}
                     labelFormatter={(v) => new Date(v).toLocaleTimeString()}
                   />
-                  <Area yAxisId="left" type="monotone" dataKey="requests" name="Requests" stroke="#38bdf8" strokeWidth={2} fillOpacity={1} fill="url(#colorReq)" />
-                  <Area yAxisId="right" type="monotone" dataKey="avg_ms" name="Avg Latency (ms)" stroke="#818cf8" strokeWidth={2} fillOpacity={0} />
+                  <Area yAxisId="left" type="monotone" dataKey="requests" name="Requests" stroke="#22d3ee" strokeWidth={3} fillOpacity={1} fill="url(#colorReq)" activeDot={{ r: 6, fill: '#22d3ee', stroke: '#fff', strokeWidth: 2 }} />
+                  <Area yAxisId="right" type="monotone" dataKey="avg_ms" name="Avg Latency (ms)" stroke="#818cf8" strokeWidth={3} fillOpacity={1} fill="url(#colorLat)" activeDot={{ r: 6, fill: '#818cf8', stroke: '#fff', strokeWidth: 2 }} />
                 </AreaChart>
               </ResponsiveContainer>
             </div>

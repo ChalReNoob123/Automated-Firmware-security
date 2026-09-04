@@ -5,9 +5,16 @@ node_modules
 *.sqlite-wal
 *.sqlite-shm
 *.sqlite-journal
+soc.db
+token.txt
 dist
+.next/
+out/
+*.tsbuildinfo
 logs/
 backups/
 *.pem
 *.key
 *.crt
+backend/__pycache__/
+backend/vm_storage/

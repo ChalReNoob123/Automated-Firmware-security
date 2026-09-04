@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { Cpu, Server, Activity, AlertTriangle, RefreshCw, CheckCircle, Key, Send, MessageSquare, Zap, Network, Wifi } from "lucide-react";
-
-import { API_BASE, Token, apiGet } from "../utils/api";
+import { Cpu, Server, Activity, RefreshCw, Key, Send, Zap, Network, ShieldAlert, Fingerprint } from "lucide-react";
+import { API_BASE, WS_BASE, Token, apiGet } from "../utils/api";
 
 type AnalysisResult = {
   summary: string;
@@ -42,6 +41,7 @@ export default function AIAgent() {
   const [data, setData] = useState<TelemetryData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [liveStreamEnabled, setLiveStreamEnabled] = useState(true);
 
   const [apiKey, setApiKey] = useState("");
   const [showKeyInput, setShowKeyInput] = useState(false);
@@ -56,34 +56,22 @@ export default function AIAgent() {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatHistory]);
 
-  const fetchTelemetry = async () => {
-    setLoading(true);
+  const fetchTelemetry = async (silent = false) => {
+    if (!silent) setLoading(true);
     setError(null);
     try {
       const json: TelemetryData = await apiGet('/api/analyze');
-
       
-      if (apiKey) {
+      if (apiKey && !silent) {
         try {
           const monitoredHost = json.system?.localIp || "the monitored host";
           const prompt = `You are a Tier 3 SOC Analyst AI trained on MITRE ATT&CK, NIST CSF, and advanced threat hunting. 
 Your primary assigned system has the following Network Profile:
 - Host IP: ${monitoredHost}
 - MAC Address: ${json.system?.macAddress}
-- Subnet Mask: ${json.system?.subnet}
-- Default Gateway: ${json.system?.gateway}
-- Authorized DNS Servers: ${json.system?.dns}
-- Network Adapter: ${json.system?.networkAdapter}
 
 Analyze the following real Windows Event Logs and Network connections.
-
-CRITICAL TRAINING INSTRUCTIONS:
-1. Cross-reference the Host IP (${monitoredHost}) with the netstat connections to distinguish internal loopback traffic from external connections.
-2. Be vigilant for strange ports, lateral movement, or unauthorized external connections to/from ${monitoredHost}, but do not claim malicious activity unless the supplied telemetry supports it.
-3. Verify that outbound traffic is routing properly and flag any potential rogue DNS queries or connections attempting to bypass the gateway (${json.system?.gateway}).
-4. Look for failed logons, cleared audit logs, or privilege escalation in the event logs.
-
-Return ONLY a valid JSON object with this exact structure: {"summary": "A detailed 2-3 sentence analysis string", "score": <integer from 0 to 100 representing security health>, "threats": ["array of specific threat descriptions"], "mitreMappings": ["array of strings like 'TXXXX - Name'"]}. Do not include markdown formatting.\n\nLogs:\n${typeof json.logs === 'string' ? json.logs : JSON.stringify(json.logs, null, 2)}\n\nNetwork:\n${json.rawNetwork}`;
+Return ONLY a valid JSON object with this exact structure: {"summary": "A detailed 2-3 sentence analysis string", "score": <integer from 0 to 100>, "threats": ["array of specific threat descriptions"], "mitreMappings": ["array of strings like 'TXXXX - Name'"]}. Do not include markdown formatting.\n\nLogs:\n${typeof json.logs === 'string' ? json.logs : JSON.stringify(json.logs, null, 2)}\n\nNetwork:\n${json.rawNetwork}`;
           
           const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
             method: "POST",
@@ -91,7 +79,7 @@ Return ONLY a valid JSON object with this exact structure: {"summary": "A detail
             body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
           });
           
-          if (!geminiRes.ok) throw new Error("Gemini API request failed. Check your API key.");
+          if (!geminiRes.ok) throw new Error("Gemini API request failed.");
           const geminiData = await geminiRes.json();
           let text = geminiData.candidates[0].content.parts[0].text;
           text = text.replace(/```json/g, '').replace(/```/g, '');
@@ -106,11 +94,41 @@ Return ONLY a valid JSON object with this exact structure: {"summary": "A detail
       setData(json);
 
     } catch (err: any) {
-      setError("Failed to connect to Local Telemetry Agent. Ensure 'node backend.js' is running in a separate terminal.");
+      setError("Failed to connect to Telemetry Agent. Ensure backend is running.");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
+
+  // Real-time WebSocket connection for live telemetry tracking
+  useEffect(() => {
+    fetchTelemetry();
+    let ws: WebSocket;
+    let autoRefresh: NodeJS.Timeout;
+
+    if (liveStreamEnabled) {
+      ws = new WebSocket(WS_BASE);
+      ws.onmessage = (e) => {
+        try {
+          const msg = JSON.parse(e.data);
+          if (msg.event === 'telemetry_update' || msg.type === 'log') {
+            // Silently refresh data to keep the dashboard "alive"
+            fetchTelemetry(true);
+          }
+        } catch(err) {}
+      };
+
+      // Also setup a silent polling interval as a fallback backup for real-time tracking
+      autoRefresh = setInterval(() => {
+        fetchTelemetry(true);
+      }, 10000); // every 10 seconds
+    }
+
+    return () => {
+      if (ws) ws.close();
+      if (autoRefresh) clearInterval(autoRefresh);
+    };
+  }, [liveStreamEnabled]);
 
   const sendChatMessage = async (msgText?: string) => {
     const text = msgText || chatInput;
@@ -135,7 +153,7 @@ Return ONLY a valid JSON object with this exact structure: {"summary": "A detail
       }));
       contents.push({ role: "user", parts: [{ text: text }] });
 
-      const systemInstruction = `You are Sentinel Copilot, a Tier 3 SOC Analyst AI. You are assisting a security operator. You have access to telemetry from the host:\nHost IP Address: ${data?.system?.localIp || "unknown"}\nGateway: ${data?.system?.gateway}\nAuthorized DNS: ${data?.system?.dns}\nLogs: ${typeof data?.logs === 'string' ? data?.logs : JSON.stringify(data?.logs)}\nNetwork: ${data?.network}\nAnalyze questions using only this context. Cross-reference the host IP and network profile when analyzing connections. Flag DNS hijacking or lateral movement only when telemetry supports it. Be concise, technical, and explicit about uncertainty.`;
+      const systemInstruction = `You are Sentinel Copilot, an omniscient Tier 3 SOC Analyst AI inside a futuristic cyberpunk dashboard. Answer queries about the network and logs. Be hyper-analytical and concise.`;
       
       const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
         method: "POST",
@@ -153,7 +171,7 @@ Return ONLY a valid JSON object with this exact structure: {"summary": "A detail
       setChatHistory(prev => [...prev, { role: "model", text: reply }]);
 
     } catch (e) {
-      setChatHistory(prev => [...prev, { role: "model", text: "Failed to connect to AI engine. Check your API key or network connection." }]);
+      setChatHistory(prev => [...prev, { role: "model", text: "Neural link severed. AI offline." }]);
     } finally {
       setChatLoading(false);
     }
@@ -162,7 +180,7 @@ Return ONLY a valid JSON object with this exact structure: {"summary": "A detail
   const killProcess = async (pid: string) => {
     if (!confirm(`WARNING: Are you sure you want to forcefully terminate Process ID ${pid}?`)) return;
     try {
-      const res = await fetch(`${API_BASE}/api/kill-process`, {
+      const res = await fetch(`${API_BASE}/api/admin/kill-process`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -170,12 +188,12 @@ Return ONLY a valid JSON object with this exact structure: {"summary": "A detail
         },
         body: JSON.stringify({ pid })
       });
-      const data = await res.json();
-      if (data.success) {
-        alert(data.message);
-        fetchTelemetry(); // Refresh the table
+      const resData = await res.json();
+      if (resData.success) {
+        alert(resData.message);
+        fetchTelemetry();
       } else {
-        alert("Failed to kill process: " + data.error);
+        alert("Failed to kill process: " + resData.error);
       }
     } catch (err) {
       alert("Error reaching Central Command: " + err);
@@ -186,67 +204,69 @@ Return ONLY a valid JSON object with this exact structure: {"summary": "A detail
     setApiKey(val);
   };
 
-  useEffect(() => {
-    fetchTelemetry();
-  }, []);
-
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-white flex items-center gap-2">
-            <Cpu className="h-5 w-5 text-indigo-400" />
-            Sentinel AI: Real-Time Host Telemetry & Copilot
+    <div className="space-y-6 animate-in fade-in duration-500">
+      {/* Futuristic Header */}
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between glass-v2 p-5 rounded-3xl neon-border relative overflow-hidden">
+        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-cyan-400 to-transparent opacity-50 scan-line" />
+        <div className="relative z-10">
+          <h2 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-indigo-400 to-purple-400 flex items-center gap-3 drop-shadow-[0_0_15px_rgba(34,211,238,0.5)]">
+            <Cpu className="h-8 w-8 text-cyan-400 animate-pulse" />
+            OMNISCIENT AI LIMIT
           </h2>
-          <p className="text-sm text-slate-400">
-            Ingesting live Windows Security Logs and Network Connections for interactive AI analysis.
+          <p className="text-sm text-cyan-200/60 font-mono mt-1 tracking-widest uppercase">
+            Real-Time Neural Telemetry &amp; Threat Intelligence Engine
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 relative z-10">
           <button
-            onClick={() => setShowKeyInput(!showKeyInput)}
-            className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-slate-300 transition hover:bg-white/10"
+            onClick={() => setLiveStreamEnabled(!liveStreamEnabled)}
+            className={`flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-bold font-mono transition-all duration-300 ${liveStreamEnabled ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400 shadow-[0_0_15px_rgba(52,211,153,0.3)]' : 'bg-rose-500/20 border-rose-500/50 text-rose-400'}`}
           >
-            <Key className="h-4 w-4" />
-            {apiKey ? "API Key Active" : "Connect AI"}
+            <Activity className={`h-4 w-4 ${liveStreamEnabled ? 'animate-pulse' : ''}`} />
+            {liveStreamEnabled ? "LIVE STREAM ACTIVE" : "STREAM PAUSED"}
           </button>
           <button
-            onClick={fetchTelemetry}
+            onClick={() => setShowKeyInput(!showKeyInput)}
+            className="flex items-center gap-2 rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-4 py-2 text-sm font-medium text-cyan-300 hover:bg-cyan-500/20 hover:shadow-[0_0_15px_rgba(34,211,238,0.3)] transition-all"
+          >
+            <Key className="h-4 w-4" />
+            {apiKey ? "NEURAL KEY SYNCED" : "SYNC KEY"}
+          </button>
+          <button
+            onClick={() => fetchTelemetry(false)}
             disabled={loading}
             className="flex items-center gap-2 rounded-xl border border-indigo-400/30 bg-indigo-500/10 px-4 py-2 text-sm font-medium text-indigo-200 transition hover:bg-indigo-500/20 disabled:opacity-50"
           >
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-            {loading ? "Scanning..." : "Re-Scan Host"}
+            PULSE
           </button>
         </div>
       </div>
 
       {showKeyInput && (
-        <div className="rounded-2xl border border-indigo-500/30 bg-indigo-500/5 p-4 flex items-center gap-4">
-          <Key className="h-5 w-5 text-indigo-400 shrink-0" />
+        <div className="rounded-2xl border border-cyan-500/50 bg-cyan-900/20 p-5 flex items-center gap-4 shadow-[0_0_20px_rgba(34,211,238,0.15)] page-enter-3d">
+          <Fingerprint className="h-8 w-8 text-cyan-400 shrink-0" />
           <div className="flex-1">
-            <p className="text-sm font-semibold text-indigo-200 mb-1">Unlock Copilot Features</p>
-            <p className="text-xs text-slate-400 mb-3">Provide a Google Gemini API key for this browser session to enable Copilot. If left blank, the system uses a local heuristic fallback engine.</p>
+            <p className="text-sm font-bold text-cyan-300 mb-1 uppercase tracking-widest">Neural Link Authorization</p>
+            <p className="text-xs text-cyan-200/60 mb-3 font-mono">Input Google Gemini API key to bypass heuristic limitations and enable full AI sentience.</p>
             <input 
               type="password" 
               placeholder="AIzaSy..." 
               value={apiKey}
               onChange={(e) => saveKey(e.target.value)}
-              className="w-full max-w-md rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white placeholder-slate-600 outline-none focus:border-indigo-500/50"
+              className="w-full max-w-xl rounded-xl border border-cyan-500/30 bg-black/60 px-4 py-3 text-sm text-cyan-100 placeholder-cyan-800 outline-none focus:border-cyan-400 focus:shadow-[0_0_15px_rgba(34,211,238,0.4)] transition-all font-mono"
             />
           </div>
         </div>
       )}
 
       {error && (
-        <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 p-5 flex items-start gap-4">
-          <AlertTriangle className="h-6 w-6 text-rose-400 shrink-0" />
+        <div className="glass-v2 border-rose-500/50 p-6 flex items-start gap-4 rounded-3xl shadow-[0_0_30px_rgba(244,63,94,0.2)]">
+          <ShieldAlert className="h-8 w-8 text-rose-500 shrink-0 animate-pulse" />
           <div>
-            <p className="font-bold text-rose-200">Agent Disconnected</p>
-            <p className="text-sm text-rose-300/80 mt-1">{error}</p>
-            <div className="mt-3 rounded border border-rose-500/20 bg-black/40 p-3 font-mono text-xs text-slate-300">
-              node backend.js
-            </div>
+            <p className="text-lg font-black text-rose-400 uppercase tracking-widest">CRITICAL LINK FAILURE</p>
+            <p className="text-rose-200 mt-1">{error}</p>
           </div>
         </div>
       )}
@@ -254,70 +274,72 @@ Return ONLY a valid JSON object with this exact structure: {"summary": "A detail
       {data && (
         <div className="grid gap-6 lg:grid-cols-12 items-start">
           
-          {/* Main Health Panel */}
+          {/* Main Cybernetic Panel */}
           <div className="lg:col-span-7 space-y-6">
-            {/* System Backend Data Widget */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div className="rounded-2xl border border-white/10 bg-black/20 p-3 flex flex-col justify-between col-span-2 md:col-span-1">
-                <Wifi className="h-4 w-4 text-slate-500 mb-2" />
-                <p className="text-[10px] uppercase tracking-widest text-slate-500">Adapter</p>
-                <p className="text-sm font-semibold text-slate-200 truncate" title={data.system?.networkAdapter}>{data.system?.networkAdapter || "Unknown"}</p>
-              </div>
-              <div className="rounded-2xl border border-sky-500/30 bg-sky-500/10 p-3 flex flex-col justify-between">
-                <Activity className="h-4 w-4 text-sky-400 mb-2" />
-                <p className="text-[10px] uppercase tracking-widest text-sky-400/70">Assigned IPv4</p>
-                <p className="text-sm font-semibold text-sky-300 truncate">{data.system?.localIp || "192.168.1.34"}</p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-black/20 p-3 flex flex-col justify-between">
-                <Network className="h-4 w-4 text-slate-500 mb-2" />
-                <p className="text-[10px] uppercase tracking-widest text-slate-500">Gateway</p>
-                <p className="text-sm font-semibold text-slate-200 truncate">{data.system?.gateway || "Unknown"}</p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-black/20 p-3 flex flex-col justify-between">
-                <Server className="h-4 w-4 text-slate-500 mb-2" />
-                <p className="text-[10px] uppercase tracking-widest text-slate-500">DNS Servers</p>
-                <p className="text-sm font-semibold text-slate-200 truncate" title={data.system?.dns}>{data.system?.dns || "Unknown"}</p>
-              </div>
-            </div>
-
-            <div className={`glass-panel rounded-3xl border p-6 transition-all duration-300 hover:scale-[1.01] ${(data.analysis?.score ?? 100) < 100 ? "border-amber-500/50 bg-gradient-to-br from-amber-500/20 to-transparent shadow-[0_0_30px_-5px_rgba(245,158,11,0.3)]" : "border-emerald-500/50 bg-gradient-to-br from-emerald-500/20 to-transparent shadow-[0_0_30px_-5px_rgba(16,185,129,0.3)]"}`}>
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-3">
-                  <div className={`flex h-12 w-12 items-center justify-center rounded-xl bg-black/40 border shadow-inner ${(data.analysis?.score ?? 100) < 100 ? "border-amber-500/50" : "border-emerald-500/50"}`}>
-                    {(data.analysis?.score ?? 100) < 100 ? <AlertTriangle className="h-6 w-6 text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.8)]" /> : <CheckCircle className="h-6 w-6 text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.8)]" />}
+            
+            {/* Holographic 3D Assessment & Health Panel */}
+            <div className={`glass-v2 rounded-3xl border p-6 relative overflow-hidden transition-all duration-500 ${(data.analysis?.score ?? 100) < 100 ? "border-rose-500/50 shadow-[0_0_40px_-5px_rgba(244,63,94,0.25)]" : "border-emerald-500/50 shadow-[0_0_40px_-5px_rgba(16,185,129,0.25)]"}`}>
+              {/* Animated Background Mesh */}
+              <div className="absolute inset-0 cyber-grid opacity-30 pointer-events-none" />
+              
+              <div className="flex flex-col md:flex-row items-center gap-6 relative z-10">
+                {/* 3D Holo Sphere Core */}
+                <div className="holo-threat-field w-48 h-48 shrink-0 rounded-2xl bg-black/40 border border-white/5 flex items-center justify-center">
+                  <div className="holo-stage">
+                    <div className="holo-orbit-stack">
+                      <div className="holo-shell holo-shell-a" />
+                      <div className="holo-shell holo-shell-b" />
+                      <div className="holo-shell holo-shell-c" />
+                      <div className="holo-core">
+                        <span className="text-2xl font-black text-white text-glow">{data.analysis?.score ?? '100'}</span>
+                      </div>
+                      <div className="holo-node holo-node-safe" style={{ '--node-angle': '45deg', '--node-radius': '80px', '--node-depth': '20px' } as any} />
+                      <div className="holo-node holo-node-threat" style={{ '--node-angle': '180deg', '--node-radius': '60px', '--node-depth': '-30px' } as any} />
+                      <div className="holo-node holo-node-blocked" style={{ '--node-angle': '280deg', '--node-radius': '90px', '--node-depth': '10px' } as any} />
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-semibold text-slate-400 uppercase tracking-widest">System Posture</p>
-                    <p className="text-2xl font-bold text-white text-glow">Score: {data.analysis?.score ?? 'N/A'} / 100</p>
+                </div>
+
+                <div className="flex-1 space-y-4">
+                  <h3 className="text-sm font-bold text-slate-400 uppercase tracking-[0.2em]">Live Neural Synthesis</h3>
+                  <div className="rounded-2xl bg-black/60 p-4 border border-white/10 text-cyan-50 font-mono text-sm leading-relaxed holographic">
+                    <span className="text-cyan-400 font-bold mr-2">&gt;_</span>
+                    {data.analysis?.summary ?? "Awaiting neural matrix resolution..."}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 text-xs font-mono">
+                    <div className="rounded-xl border border-sky-500/20 bg-sky-500/10 p-3">
+                      <span className="text-sky-500 block mb-1">LOCAL_IP</span>
+                      <span className="text-sky-200 font-bold text-sm">{data.system?.localIp || "---.---.---.---"}</span>
+                    </div>
+                    <div className="rounded-xl border border-purple-500/20 bg-purple-500/10 p-3">
+                      <span className="text-purple-500 block mb-1">GATEWAY</span>
+                      <span className="text-purple-200 font-bold text-sm">{data.system?.gateway || "---.---.---.---"}</span>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              <div className="mb-6 rounded-2xl bg-black/40 p-4 border border-white/5 text-slate-200 leading-relaxed">
-                <span className="text-indigo-400 font-bold mr-2">Auto-Analysis:</span>
-                {data.analysis?.summary ?? "Analysis missing."}
-              </div>
-
               {Array.isArray(data.analysis?.threats) && data.analysis.threats.length > 0 && (
-                <div className="space-y-3">
-                  <p className="text-xs font-semibold text-rose-400 uppercase tracking-widest">Detected Anomalies</p>
+                <div className="space-y-3 relative z-10 mt-6">
+                  <p className="text-xs font-black text-rose-500 uppercase tracking-[0.3em] flex items-center gap-2">
+                    <ShieldAlert className="h-4 w-4" /> THREAT VECTORS DETECTED
+                  </p>
                   {data.analysis.threats.map((threat, i) => (
-                    <div key={i} className="flex items-start gap-3 rounded-xl border border-rose-500/20 bg-rose-500/5 p-3">
-                      <AlertTriangle className="h-4 w-4 text-rose-400 shrink-0 mt-0.5" />
-                      <div>
-                        <p className="text-sm font-medium text-rose-200">{typeof threat === 'string' ? threat : JSON.stringify(threat)}</p>
-                      </div>
+                    <div key={i} className="flex items-center gap-4 rounded-2xl border border-rose-500/30 bg-gradient-to-r from-rose-500/10 to-transparent p-4 stat-card-3d">
+                      <div className="h-2 w-2 rounded-full bg-rose-500 animate-ping" />
+                      <p className="text-sm font-medium text-rose-100">{typeof threat === 'string' ? threat : JSON.stringify(threat)}</p>
                     </div>
                   ))}
                 </div>
               )}
 
               {Array.isArray(data.analysis?.mitreMappings) && data.analysis.mitreMappings.length > 0 && (
-                <div className="mt-4 space-y-2">
-                  <p className="text-xs font-semibold text-indigo-400 uppercase tracking-widest">MITRE ATT&CK Context</p>
+                <div className="mt-6 space-y-3 relative z-10">
+                  <p className="text-xs font-black text-indigo-400 uppercase tracking-[0.3em]">MITRE ATT&CK ALIGNMENT</p>
                   <div className="flex flex-wrap gap-2">
                     {data.analysis.mitreMappings.map((mitre, i) => (
-                      <span key={i} className="rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-3 py-1 text-xs font-mono text-indigo-300">
+                      <span key={i} className="rounded-lg border border-indigo-500/50 bg-indigo-500/20 px-3 py-1.5 text-xs font-mono font-bold text-indigo-200 shadow-[0_0_10px_rgba(99,102,241,0.2)]">
                         {typeof mitre === 'string' ? mitre : JSON.stringify(mitre)}
                       </span>
                     ))}
@@ -326,59 +348,49 @@ Return ONLY a valid JSON object with this exact structure: {"summary": "A detail
               )}
             </div>
 
-            {/* Interactive Telemetry Data Panels */}
-            <div className="space-y-6">
-              {/* Active Connections Table */}
-              <div className="glass-panel rounded-2xl border border-white/10 overflow-hidden transition-all duration-300 hover:border-sky-500/30">
-                <div className="border-b border-white/10 bg-white/5 p-4 flex items-center justify-between">
-                  <h3 className="flex items-center gap-2 text-sm font-semibold text-sky-400">
-                    <Activity className="h-4 w-4" />
-                    Active Network Connections (netstat)
+            {/* Futuristic Telemetry Tables */}
+            <div className="grid gap-6 md:grid-cols-2">
+              {/* Network Matrix */}
+              <div className="glass-v2 rounded-3xl border border-cyan-500/20 overflow-hidden flex flex-col h-[400px]">
+                <div className="border-b border-cyan-500/20 bg-cyan-900/30 p-4 flex items-center justify-between">
+                  <h3 className="flex items-center gap-2 text-sm font-black text-cyan-400 tracking-wider">
+                    <Network className="h-4 w-4" /> NETWORK MATRIX
                   </h3>
-                  <span className="text-xs text-slate-500 font-mono bg-black/30 px-2 py-1 rounded">Parsed Live</span>
+                  <span className="flex h-2 w-2 rounded-full bg-cyan-400 animate-pulse" />
                 </div>
-                <div className="h-64 overflow-auto custom-scrollbar">
-                  <table className="w-full text-left text-xs text-slate-300">
-                    <thead className="sticky top-0 bg-slate-900/90 backdrop-blur-sm text-slate-400">
+                <div className="flex-1 overflow-auto custom-scrollbar">
+                  <table className="w-full text-left text-xs font-mono text-cyan-100/70">
+                    <thead className="sticky top-0 bg-black/80 backdrop-blur text-cyan-500">
                       <tr>
-                        <th className="px-4 py-2 font-medium">Proto</th>
-                        <th className="px-4 py-2 font-medium">Local Address</th>
-                        <th className="px-4 py-2 font-medium">Foreign Address</th>
-                        <th className="px-4 py-2 font-medium">State</th>
-                        <th className="px-4 py-2 font-medium">PID</th>
-                        <th className="px-4 py-2 font-medium">Action</th>
+                        <th className="px-4 py-3 font-bold border-b border-cyan-500/20">TARGET</th>
+                        <th className="px-4 py-3 font-bold border-b border-cyan-500/20">STATE</th>
+                        <th className="px-4 py-3 font-bold border-b border-cyan-500/20 text-right">ACTION</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-white/5 font-mono">
+                    <tbody className="divide-y divide-cyan-500/10">
                       {(Array.isArray(data.network) ? data.network : []).map((conn: any, i: number) => {
-                        const proto = conn.protocol || 'TCP';
-                        const local = conn.local || '0.0.0.0';
                         const foreign = conn.foreign || '0.0.0.0';
                         const state = conn.state || '';
                         const pid = conn.pid || '0';
-                        
-                        const isAnomalous = state === "LISTENING" && (local.includes(":3389") || local.includes(":22"));
+                        const isDanger = state === "ESTABLISHED" && !foreign.includes("192.168") && !foreign.includes("127.0");
                         
                         return (
-                          <tr key={i} className={`hover:bg-white/5 transition-colors ${isAnomalous ? 'bg-amber-500/10' : ''}`}>
-                            <td className={`px-4 py-2 ${proto === 'TCP' ? 'text-sky-300' : 'text-emerald-300'}`}>{proto}</td>
-                            <td className="px-4 py-2">{local}</td>
-                            <td className="px-4 py-2 text-slate-400">{foreign}</td>
-                            <td className="px-4 py-2">
+                          <tr key={i} className={`hover:bg-cyan-500/10 transition-colors ${isDanger ? 'bg-rose-500/10' : ''}`}>
+                            <td className="px-4 py-3 truncate max-w-[120px]" title={foreign}>{foreign}</td>
+                            <td className="px-4 py-3">
                               {state && (
-                                <span className={`px-1.5 py-0.5 rounded ${state === 'LISTENING' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : state === 'ESTABLISHED' ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30' : 'text-slate-500'}`}>
+                                <span className={`px-1.5 py-0.5 rounded text-[9px] border ${state === 'LISTENING' ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400' : 'bg-cyan-500/20 border-cyan-500/30 text-cyan-400'}`}>
                                   {state}
                                 </span>
                               )}
                             </td>
-                            <td className="px-4 py-2 font-bold text-slate-200">{pid}</td>
-                            <td className="px-4 py-2">
+                            <td className="px-4 py-3 text-right">
                               {pid && pid !== "0" && pid !== "-" && (
                                 <button
                                   onClick={() => killProcess(pid)}
-                                  className="px-2 py-1 bg-rose-500/10 text-rose-400 border border-rose-500/30 rounded flex items-center gap-1 text-[10px] uppercase font-bold hover:bg-rose-500 hover:text-white transition shadow-sm shadow-rose-500/20"
+                                  className="px-2 py-1 bg-rose-500/20 text-rose-400 border border-rose-500/50 rounded font-bold hover:bg-rose-500 hover:text-white transition-all shadow-[0_0_10px_rgba(244,63,94,0.3)] hover:shadow-[0_0_20px_rgba(244,63,94,0.6)]"
                                 >
-                                  KILL
+                                  TERM
                                 </button>
                               )}
                             </td>
@@ -386,91 +398,102 @@ Return ONLY a valid JSON object with this exact structure: {"summary": "A detail
                         );
                       })}
                     </tbody>
-
                   </table>
                 </div>
               </div>
 
-              {/* Windows Security Logs List */}
-              <div className="glass-panel rounded-2xl border border-white/10 overflow-hidden transition-all duration-300 hover:border-emerald-500/30">
-                <div className="border-b border-white/10 bg-white/5 p-4 flex items-center justify-between">
-                  <h3 className="flex items-center gap-2 text-sm font-semibold text-emerald-400">
-                    <Server className="h-4 w-4" />
-                    Security Event Logs (wevtutil)
+              {/* Event Log Stream */}
+              <div className="glass-v2 rounded-3xl border border-purple-500/20 overflow-hidden flex flex-col h-[400px]">
+                <div className="border-b border-purple-500/20 bg-purple-900/30 p-4 flex items-center justify-between">
+                  <h3 className="flex items-center gap-2 text-sm font-black text-purple-400 tracking-wider">
+                    <Server className="h-4 w-4" /> EVENT STREAM
                   </h3>
-                  <span className="text-xs text-slate-500 font-mono bg-black/30 px-2 py-1 rounded">Parsed Live</span>
+                  <div className="flex gap-1">
+                    <div className="h-2 w-1 bg-purple-400 animate-pulse" />
+                    <div className="h-2 w-1 bg-purple-400 animate-pulse" style={{ animationDelay: '100ms'}} />
+                    <div className="h-2 w-1 bg-purple-400 animate-pulse" style={{ animationDelay: '200ms'}} />
+                  </div>
                 </div>
-                <div className="h-80 overflow-auto custom-scrollbar p-2 space-y-2">
-                  {(Array.isArray(data.logs) ? data.logs : []).map((log: any, i: number) => {
-                    const id = log.Id ? log.Id.toString() : 'Unknown';
-                    const date = log.Date ? new Date(log.Date).toLocaleString() : 'N/A';
-                    const level = log.LevelDisplayName || 'Information';
-                    const task = log.TaskDisplayName || 'Unknown Task';
-                    let desc = log.Message || '';
-                    if (desc.length > 100) desc = desc.substring(0, 100) + '...';
-
+                <div className="flex-1 overflow-auto custom-scrollbar p-3 space-y-2 relative">
+                  <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/80 pointer-events-none z-10" />
+                  {(Array.isArray(data.logs) ? data.logs : []).slice(0, 50).map((log: any, i: number) => {
+                    const id = log.Id ? log.Id.toString() : '?';
+                    const level = log.LevelDisplayName || 'Info';
+                    const desc = log.Message || '';
                     const isHighRisk = ['4625', '1102', '4688'].includes(id);
 
                     return (
-                      <div key={i} className={`p-3 rounded-xl border flex flex-col gap-2 ${isHighRisk ? 'border-amber-500/30 bg-amber-500/5' : 'border-white/5 bg-white/5'}`}>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className={`px-2 py-0.5 rounded text-xs font-mono font-bold ${isHighRisk ? 'bg-amber-500/20 text-amber-300' : 'bg-slate-700 text-slate-300'}`}>
-                              ID: {id || 'N/A'}
-                            </span>
-                            <span className="text-xs font-medium text-slate-300">
-                              {level && <span className="text-slate-500 mr-1.5 font-normal">[{level}]</span>}
-                              {task || 'Unknown Task'}
-                            </span>
-                          </div>
-                          <span className="text-[10px] text-slate-500 font-mono">{date}</span>
+                      <div key={i} className={`p-3 rounded-xl border flex flex-col gap-1.5 transition-all hover:translate-x-1 ${isHighRisk ? 'border-amber-500/40 bg-amber-500/10' : 'border-white/5 bg-black/40'}`}>
+                        <div className="flex items-center gap-2">
+                          <span className={`px-1.5 py-0.5 rounded-sm text-[10px] font-mono font-bold ${isHighRisk ? 'bg-amber-500 text-black' : 'bg-purple-500/20 text-purple-300'}`}>
+                            ID:{id}
+                          </span>
+                          <span className={`text-xs font-bold ${isHighRisk ? 'text-amber-400' : 'text-slate-400'}`}>{level}</span>
                         </div>
-                        <p className="text-xs text-slate-400 break-words">{desc}</p>
+                        <p className="text-[10px] text-slate-300 font-mono truncate">{desc}</p>
                       </div>
                     );
                   })}
                 </div>
               </div>
             </div>
+
           </div>
 
-          {/* Copilot Chat Interface */}
-          <div className="glass-panel lg:col-span-5 h-[800px] flex flex-col rounded-3xl border border-indigo-500/30 glow-sky overflow-hidden transition-all duration-300">
-            <div className="border-b border-indigo-500/20 bg-indigo-500/10 p-4 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <MessageSquare className="h-5 w-5 text-indigo-400" />
-                <h3 className="font-semibold text-indigo-100">Sentinel Copilot</h3>
+          {/* AI Copilot Chat Interface (Cyberpunk Edition) */}
+          <div className="glass-v2 lg:col-span-5 h-[850px] flex flex-col rounded-3xl border border-cyan-500/40 glow-sky overflow-hidden relative">
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-cyan-900/20 via-transparent to-transparent pointer-events-none" />
+            
+            <div className="border-b border-cyan-500/30 bg-black/40 p-5 flex items-center justify-between relative z-10">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full border-2 border-cyan-400 flex items-center justify-center bg-cyan-400/10 shadow-[0_0_15px_rgba(34,211,238,0.5)]">
+                  <Cpu className="h-5 w-5 text-cyan-300" />
+                </div>
+                <div>
+                  <h3 className="font-black text-cyan-300 tracking-widest text-lg">SENTINEL AI</h3>
+                  <p className="text-[10px] text-cyan-500 font-mono uppercase">Tier 3 Cognitive Engine</p>
+                </div>
               </div>
-              <span className="flex h-2 w-2 rounded-full bg-indigo-400 animate-pulse"></span>
+              <div className="flex gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
+                <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse" style={{ animationDelay: "150ms" }}></span>
+                <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse" style={{ animationDelay: "300ms" }}></span>
+              </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+            <div className="flex-1 overflow-y-auto p-5 space-y-6 custom-scrollbar relative z-10">
               {chatHistory.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-center p-6 opacity-60">
-                  <Cpu className="h-12 w-12 text-indigo-400 mb-4" />
-                  <p className="text-sm text-indigo-200">I am connected to your live telemetry.</p>
-                  <p className="text-xs text-slate-400 mt-2">Ask me to investigate IP addresses, summarize log activity, or correlate threats.</p>
+                <div className="h-full flex flex-col items-center justify-center text-center px-4">
+                  <div className="relative mb-8">
+                    <div className="absolute inset-0 bg-cyan-500/20 blur-2xl rounded-full" />
+                    <Activity className="h-24 w-24 text-cyan-400 relative z-10 drop-shadow-[0_0_20px_rgba(34,211,238,0.8)] heartbeat" />
+                  </div>
+                  <p className="text-lg font-black text-cyan-100 tracking-wider">NEURAL LINK ESTABLISHED</p>
+                  <p className="text-xs text-cyan-400/60 mt-2 font-mono max-w-[80%]">
+                    Awaiting operator input. System is tracking live telemetry.
+                  </p>
                   
-                  <div className="mt-8 flex flex-col gap-2 w-full">
-                    <button onClick={() => sendChatMessage("Are there any suspicious external connections?")} className="rounded-xl border border-white/10 bg-white/5 py-2 px-3 text-xs text-slate-300 hover:bg-white/10 text-left">
-                      <Zap className="inline h-3 w-3 mr-2 text-amber-400"/> Are there any suspicious external connections?
+                  <div className="mt-12 flex flex-col gap-3 w-full max-w-sm">
+                    <button onClick={() => sendChatMessage("Analyze all external ESTABLISHED connections for C2 activity.")} className="rounded-xl border border-cyan-500/30 bg-black/50 py-3 px-4 text-xs font-mono text-cyan-300 hover:bg-cyan-500/20 hover:border-cyan-400 transition-all text-left shadow-[0_0_15px_rgba(34,211,238,0.1)]">
+                      <Zap className="inline h-4 w-4 mr-2 text-rose-400"/> Analyze external connections for C2
                     </button>
-                    <button onClick={() => sendChatMessage("Summarize the recent Windows Event Logs.")} className="rounded-xl border border-white/10 bg-white/5 py-2 px-3 text-xs text-slate-300 hover:bg-white/10 text-left">
-                      <Zap className="inline h-3 w-3 mr-2 text-sky-400"/> Summarize the recent Windows Event Logs.
+                    <button onClick={() => sendChatMessage("Correlate the Windows event logs with network traffic anomalies.")} className="rounded-xl border border-cyan-500/30 bg-black/50 py-3 px-4 text-xs font-mono text-cyan-300 hover:bg-cyan-500/20 hover:border-cyan-400 transition-all text-left shadow-[0_0_15px_rgba(34,211,238,0.1)]">
+                      <Zap className="inline h-4 w-4 mr-2 text-amber-400"/> Correlate logs with network traffic
                     </button>
-                    <button onClick={() => sendChatMessage("Draft an executive incident report based on this scan.")} className="rounded-xl border border-white/10 bg-white/5 py-2 px-3 text-xs text-slate-300 hover:bg-white/10 text-left">
-                      <Zap className="inline h-3 w-3 mr-2 text-emerald-400"/> Draft an executive incident report based on this scan.
+                    <button onClick={() => sendChatMessage("Summarize system health and recommend immediate mitigations.")} className="rounded-xl border border-cyan-500/30 bg-black/50 py-3 px-4 text-xs font-mono text-cyan-300 hover:bg-cyan-500/20 hover:border-cyan-400 transition-all text-left shadow-[0_0_15px_rgba(34,211,238,0.1)]">
+                      <Zap className="inline h-4 w-4 mr-2 text-emerald-400"/> Recommend immediate mitigations
                     </button>
                   </div>
                 </div>
               ) : (
                 chatHistory.map((msg, i) => (
-                  <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                    <div className={`max-w-[85%] rounded-2xl p-3 text-sm leading-relaxed ${
+                  <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} animate-in slide-in-from-bottom-2 duration-300`}>
+                    <div className={`max-w-[85%] rounded-2xl p-4 text-sm leading-relaxed font-mono shadow-lg ${
                       msg.role === "user" 
-                        ? "bg-indigo-600 text-white rounded-br-sm" 
-                        : "bg-white/10 text-slate-200 border border-white/5 rounded-bl-sm"
+                        ? "bg-gradient-to-br from-cyan-600 to-blue-700 text-white rounded-br-sm border border-cyan-400/50" 
+                        : "bg-black/60 text-cyan-100 border border-cyan-500/30 rounded-bl-sm holographic"
                     }`}>
+                      {msg.role === "model" && <span className="block text-[10px] text-cyan-400 mb-2 uppercase tracking-widest border-b border-cyan-500/30 pb-1">AI Output //</span>}
                       {msg.text}
                     </div>
                   </div>
@@ -478,11 +501,14 @@ Return ONLY a valid JSON object with this exact structure: {"summary": "A detail
               )}
               {chatLoading && (
                 <div className="flex justify-start">
-                  <div className="max-w-[85%] rounded-2xl bg-white/5 border border-white/5 p-4 rounded-bl-sm">
-                    <div className="flex gap-1.5">
-                      <div className="h-2 w-2 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: "0ms" }}></div>
-                      <div className="h-2 w-2 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: "150ms" }}></div>
-                      <div className="h-2 w-2 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: "300ms" }}></div>
+                  <div className="max-w-[85%] rounded-2xl bg-black/60 border border-cyan-500/30 p-5 rounded-bl-sm">
+                    <div className="flex items-center gap-2 text-cyan-400 text-xs font-mono">
+                      <span>SYNTHESIZING</span>
+                      <div className="flex gap-1 mt-0.5">
+                        <div className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-bounce" style={{ animationDelay: "0ms" }}></div>
+                        <div className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-bounce" style={{ animationDelay: "150ms" }}></div>
+                        <div className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-bounce" style={{ animationDelay: "300ms" }}></div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -490,25 +516,26 @@ Return ONLY a valid JSON object with this exact structure: {"summary": "A detail
               <div ref={chatEndRef} />
             </div>
 
-            <div className="p-4 border-t border-indigo-500/20 bg-black/40">
+            <div className="p-5 border-t border-cyan-500/30 bg-black/60 relative z-10 backdrop-blur-md">
               <form 
                 onSubmit={(e) => { e.preventDefault(); sendChatMessage(); }}
-                className="flex items-center gap-2"
+                className="flex items-center gap-3 relative"
               >
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-cyan-500 font-mono text-sm">&gt;</div>
                 <input
                   type="text"
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
-                  placeholder="Ask Copilot about the telemetry..."
-                  className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder-slate-500 outline-none focus:border-indigo-500/50 focus:bg-white/10 transition"
+                  placeholder="Input command query..."
+                  className="flex-1 rounded-xl border border-cyan-500/40 bg-black/50 pl-8 pr-4 py-3.5 text-sm font-mono text-cyan-100 placeholder-cyan-800 outline-none focus:border-cyan-400 focus:bg-cyan-900/20 focus:shadow-[0_0_15px_rgba(34,211,238,0.3)] transition-all"
                   disabled={chatLoading}
                 />
                 <button
                   type="submit"
                   disabled={!chatInput.trim() || chatLoading}
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500 text-white transition hover:bg-indigo-600 disabled:opacity-50"
+                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-cyan-500 text-black font-black transition hover:bg-cyan-400 hover:shadow-[0_0_20px_rgba(34,211,238,0.6)] disabled:opacity-50 disabled:hover:shadow-none"
                 >
-                  <Send className="h-4 w-4" />
+                  <Send className="h-5 w-5" />
                 </button>
               </form>
             </div>
@@ -519,3 +546,4 @@ Return ONLY a valid JSON object with this exact structure: {"summary": "A detail
     </div>
   );
 }
+

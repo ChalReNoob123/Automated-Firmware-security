@@ -133,6 +133,10 @@ export default function SystemScanner() {
       .catch(() => {});
   }, [authHeaders, filterStatus, sortBy]);
 
+  const startFromHoloUI = async () => {
+    startScan();
+  };
+
   const startScan = async () => {
     setScanning(true); setFindings([]); setProgress(null);
     try {
@@ -172,34 +176,41 @@ export default function SystemScanner() {
   const pct = progress ? (progress.totalFiles > 0 ? Math.round((progress.scannedFiles / progress.totalFiles) * 100) : 0) : 0;
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col lg:flex-row gap-6 lg:items-center lg:justify-between bg-white/3 border border-white/5 rounded-[2rem] p-6 backdrop-blur-md">
-        <div className="flex items-center gap-4">
-          <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-            <Search className="h-7 w-7 text-white" />
+    <div className="space-y-6 animate-in fade-in duration-500">
+      {/* Futuristic Header */}
+      <div className="relative overflow-hidden flex flex-col lg:flex-row gap-6 lg:items-center lg:justify-between glass-v2 rounded-[2rem] p-6 backdrop-blur-xl border border-cyan-500/20 shadow-2xl shadow-cyan-500/10 hover:border-cyan-400/40 transition-all duration-300">
+        <div className="absolute inset-0 pointer-events-none holo-threat-field opacity-20" />
+        <div className="absolute inset-0 pointer-events-none scan-line opacity-30" />
+        
+        <div className="relative z-10 flex items-center gap-4">
+          <div className="relative">
+            <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-cyan-500 via-blue-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-cyan-500/30 breathe-glow">
+              <Search className="h-7 w-7 text-white" />
+            </div>
+            <div className="absolute -inset-1 rounded-2xl border border-cyan-400/30 animate-pulse" />
           </div>
           <div>
             <h2 className="text-2xl font-bold text-white flex items-center gap-3">
               System Scanner
-              <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${scanning ? "bg-amber-500/10 border border-amber-500/20 text-amber-400" : "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"}`}>
-                <div className={`h-1.5 w-1.5 rounded-full ${scanning ? "bg-amber-500 animate-pulse" : "bg-emerald-500"}`} />
-                {scanning ? "Scanning" : "Idle"}
+              <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${scanning ? "bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]" : "bg-indigo-500/10 border border-indigo-500/30 text-indigo-400"}`}>
+                <div className={`h-1.5 w-1.5 rounded-full ${scanning ? "bg-cyan-400 animate-ping" : "bg-indigo-400"}`} />
+                {scanning ? "SCANNING_SECTORS" : "STANDBY"}
               </span>
             </h2>
-            <p className="text-sm text-slate-400 mt-0.5">Multi-threaded OS directory analysis with MITRE ATT&CK mapping</p>
+            <p className="text-sm text-cyan-100/60 mt-0.5 tracking-wide">Multi-threaded OS directory analysis with MITRE ATT&CK mapping</p>
           </div>
         </div>
-        <div className="flex gap-3">
+        <div className="relative z-10 flex gap-3">
           {!scanning ? (
-            <button onClick={startScan} disabled={selectedTargets.size === 0}
-              className="flex items-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-500/20 transition hover:scale-105 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed">
-              <Play className="h-4 w-4" /> Start Scan
+            <button onClick={startFromHoloUI} disabled={selectedTargets.size === 0}
+              className="group relative flex items-center gap-2 rounded-2xl bg-black/40 border border-cyan-500/40 px-6 py-3 text-sm font-bold text-cyan-300 shadow-lg hover:bg-cyan-500/20 hover:text-white transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-cyan-400/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-in-out" />
+              <Play className="h-4 w-4" /> INITIATE SWEEP
             </button>
           ) : (
             <button onClick={stopScan}
-              className="flex items-center gap-2 rounded-2xl bg-rose-500/20 border border-rose-500/30 px-6 py-3 text-sm font-bold text-rose-300 transition hover:bg-rose-500/30">
-              <Square className="h-4 w-4" /> Stop
+              className="flex items-center gap-2 rounded-2xl bg-rose-500/10 border border-rose-500/40 px-6 py-3 text-sm font-bold text-rose-400 transition hover:bg-rose-500/20 shadow-[0_0_15px_rgba(244,63,94,0.3)] animate-pulse">
+              <Square className="h-4 w-4" /> ABORT SCAN
             </button>
           )}
         </div>
@@ -207,30 +218,34 @@ export default function SystemScanner() {
 
       {/* Progress Bar */}
       {scanning && progress && (
-        <div className="rounded-2xl border border-indigo-500/20 bg-indigo-500/5 p-5 space-y-3 animate-in fade-in">
-          <div className="flex justify-between text-sm">
-            <span className="text-indigo-300 font-bold">Scanning: {progress.currentDir?.split("\\").slice(-2).join("\\")}</span>
-            <span className="text-slate-400 font-mono">{progress.scannedFiles}/{progress.totalFiles} files • {Math.round(progress.elapsed / 1000)}s</span>
+        <div className="relative rounded-2xl border border-cyan-500/40 bg-black/40 backdrop-blur-xl p-5 space-y-3 animate-in slide-in-from-top-4 overflow-hidden">
+          <div className="absolute inset-0 cyber-grid opacity-20 pointer-events-none" />
+          <div className="relative z-10 flex justify-between text-sm">
+            <span className="text-cyan-300 font-bold drop-shadow-md">ANALYZING: <span className="font-mono text-cyan-100">{progress.currentDir?.split("\\").slice(-2).join("\\")}</span></span>
+            <span className="text-cyan-200/70 font-mono tracking-widest">{progress.scannedFiles}/{progress.totalFiles} FILES • {Math.round(progress.elapsed / 1000)}s</span>
           </div>
-          <div className="h-2 rounded-full bg-black/40 overflow-hidden">
-            <div className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-300" style={{ width: `${pct}%` }} />
+          <div className="relative z-10 h-2 rounded-full bg-cyan-950/50 overflow-hidden border border-cyan-500/20">
+            <div className="h-full rounded-full bg-gradient-to-r from-blue-500 via-cyan-400 to-indigo-500 transition-all duration-300 shadow-[0_0_10px_rgba(34,211,238,0.8)] relative">
+              <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent_0%,rgba(255,255,255,0.4)_50%,transparent_100%)] animate-pulse" />
+            </div>
           </div>
-          <div className="flex gap-6 text-xs text-slate-400">
-            <span className="flex items-center gap-1.5"><Activity className="h-3 w-3 text-indigo-400" /> {pct}%</span>
-            <span className="flex items-center gap-1.5"><AlertTriangle className="h-3 w-3 text-amber-400" /> {progress.findings} findings</span>
+          <div className="relative z-10 flex gap-6 text-xs text-cyan-200/80 font-mono">
+            <span className="flex items-center gap-1.5"><Activity className="h-3 w-3 text-cyan-400" /> COMPLETION: {pct}%</span>
+            <span className="flex items-center gap-1.5"><AlertTriangle className="h-3 w-3 text-rose-400" /> ANOMALIES: {progress.findings}</span>
           </div>
         </div>
       )}
 
       {/* Config + Targets */}
-      <div className="rounded-[2rem] border border-white/5 bg-white/3 overflow-hidden">
+      <div className="glass-v2 rounded-[2rem] border border-cyan-500/20 shadow-xl overflow-hidden relative">
+        <div className="absolute inset-0 pointer-events-none holographic opacity-10" />
         <button onClick={() => setConfigOpen(!configOpen)}
-          className="w-full flex items-center justify-between p-5 text-left hover:bg-white/3 transition">
-          <span className="text-sm font-bold text-white flex items-center gap-2"><HardDrive className="h-4 w-4 text-indigo-400" /> Scan Configuration</span>
-          {configOpen ? <ChevronDown className="h-4 w-4 text-slate-500" /> : <ChevronRight className="h-4 w-4 text-slate-500" />}
+          className="relative z-10 w-full flex items-center justify-between p-5 text-left hover:bg-cyan-500/10 transition-colors">
+          <span className="text-sm font-bold text-white flex items-center gap-2 tracking-wide"><HardDrive className="h-4 w-4 text-cyan-400" /> SYSTEM TACTICAL PARAMETERS</span>
+          {configOpen ? <ChevronDown className="h-4 w-4 text-cyan-500" /> : <ChevronRight className="h-4 w-4 text-cyan-500" />}
         </button>
         {configOpen && (
-          <div className="border-t border-white/5 p-5 space-y-5">
+          <div className="relative z-10 border-t border-cyan-500/20 p-5 space-y-5 bg-black/20">
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               {targets.map(t => (
                 <label key={t.id} className={`group flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all duration-200 ${selectedTargets.has(t.id) ? "border-indigo-500/30 bg-indigo-500/5" : "border-white/5 bg-black/20 opacity-60"} ${!t.exists ? "opacity-30 cursor-not-allowed" : "hover:border-indigo-500/20"}`}>

@@ -2,6 +2,8 @@
   "name": "sentinelgrid-soc",
   "private": true,
   "version": "1.0.0",
+  "workspaces": ["apps/*", "packages/*"],
+  "engines": { "node": ">=20" },
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -15,9 +17,12 @@
     "audit:check": "npm audit --audit-level=high"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.100.10",
     "@tensorflow/tfjs": "^4.22.0",
     "@types/crypto-js": "^4.2.2",
     "@types/react-window": "^1.8.8",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
     "bcryptjs": "^3.0.3",
     "clsx": "2.1.1",
     "cookie-parser": "^1.4.7",
@@ -43,7 +48,8 @@
     "sqlite3": "^6.0.1",
     "tailwind-merge": "3.4.0",
     "ws": "^8.20.0",
-    "zod": "^4.4.3"
+    "zod": "^4.4.3",
+    "zustand": "^5.0.13"
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.1.17",

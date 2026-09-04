@@ -23,6 +23,11 @@ export class ErrorBoundary extends Component<Props, State> {
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('Uncaught error:', error, errorInfo);
+    fetch('http://localhost:3001/api/log-error', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ stack: error.stack, info: errorInfo.componentStack })
+    }).catch(console.error);
   }
 
   private handleReset = () => {
@@ -49,9 +54,9 @@ export class ErrorBoundary extends Component<Props, State> {
             </p>
 
             {this.state.error && (
-              <div className="w-full bg-black/40 rounded-lg p-4 mb-6 overflow-x-auto border border-gray-800">
-                <code className="text-xs text-red-400 whitespace-pre">
-                  {this.state.error.message}
+              <div className="w-full bg-black/40 rounded-lg p-4 mb-6 overflow-x-auto border border-gray-800 text-left">
+                <code className="text-[10px] text-red-400 whitespace-pre break-all">
+                  {this.state.error.stack || this.state.error.message}
                 </code>
               </div>
             )}

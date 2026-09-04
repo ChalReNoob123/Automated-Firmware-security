@@ -1,17 +1,31 @@
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
+
+const safeIpKey = (req) => ipKeyGenerator(req.ip || 'unknown');
 
 export const apiLimiter = rateLimit({
-  windowMs: 1 * 60 * 1000, // 1 minute
-  max: 1000, // 1000 requests per minute for dev
+  windowMs: 1 * 60 * 1000,
+  max: 300,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Too many requests, please try again later.' }
+  message: { error: 'Too many requests, please try again later.' },
+  keyGenerator: safeIpKey
 });
 
 export const authLimiter = rateLimit({
-  windowMs: 1 * 60 * 1000, // 1 minute
-  max: 100, // 100 attempts per minute for dev
+  windowMs: 5 * 60 * 1000, // 5 minute window
+  max: 15, // 15 attempts per 5 minutes
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Too many auth attempts, please try again later.' }
+  skipSuccessfulRequests: true,
+  message: { error: 'Too many authentication attempts. Please wait 5 minutes before trying again.' },
+  keyGenerator: safeIpKey
+});
+
+export const signupLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5, // 5 signups per hour per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many accounts created from this IP. Try again in an hour.' },
+  keyGenerator: safeIpKey
 });

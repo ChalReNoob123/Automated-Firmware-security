@@ -1,0 +1,31 @@
+{
+  "name": "@sentinelforge/web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "predev": "node scripts/check-deps.js",
+    "dev": "next dev --port 3005",
+    "prebuild": "node scripts/check-deps.js",
+    "build": "next build",
+    "start": "next start --port 3005",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@react-three/drei": "^9.122.0",
+    "@react-three/fiber": "^8.18.0",
+    "framer-motion": "^12.38.0",
+    "next": "14.2.35",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "socket.io-client": "^4.7.5",
+    "three": "^0.185.1",
+    "zustand": "^5.0.13"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.17",
+    "@types/react": "18.3.3",
+    "@types/react-dom": "18.3.0",
+    "@types/three": "^0.185.4",
+    "typescript": "5.9.3"
+  }
+}

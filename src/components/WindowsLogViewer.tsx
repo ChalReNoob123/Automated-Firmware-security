@@ -545,24 +545,29 @@ export default function WindowsLogViewer() {
         </div>
       )}
 
-      {/* Header Section */}
-      <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between bg-white/3 border border-white/5 rounded-[2.5rem] p-6 lg:p-8 backdrop-blur-md">
-        <div className="flex items-center gap-5">
-          <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-sky-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-sky-500/20">
-            <Cpu className="h-8 w-8 text-white" />
+      {/* Futuristic Header Section */}
+      <div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between glass-v2 border border-cyan-500/20 rounded-[2.5rem] p-6 lg:p-8 overflow-hidden group shadow-[0_0_30px_rgba(34,211,238,0.1)]">
+        <div className="absolute inset-0 pointer-events-none holo-threat-field opacity-10 group-hover:opacity-20 transition-opacity duration-700" />
+        <div className="absolute inset-0 pointer-events-none scan-line opacity-20" />
+        <div className="relative z-10 flex items-center gap-5">
+          <div className="relative">
+            <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-cyan-500 via-blue-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-cyan-500/30 breathe-glow">
+              <Cpu className="h-8 w-8 text-white" />
+            </div>
+            <div className="absolute -inset-1 rounded-2xl border border-cyan-400/30 animate-pulse" />
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-white flex items-center gap-3">
-              Multi-OS Telemetry Hub
-              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[10px] text-emerald-400 font-bold uppercase tracking-wider">
-                <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                Cross-Platform Agent Active
+            <h2 className="text-3xl font-black text-white flex items-center gap-4 tracking-tight drop-shadow-md">
+              MULTI-OS TELEMETRY HUB
+              <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-[10px] text-cyan-400 font-bold uppercase tracking-widest drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]">
+                <div className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-ping" />
+                NEURAL AGENT ACTIVE
               </span>
             </h2>
-            <div className="flex items-center gap-4 mt-1 text-slate-400 text-sm">
+            <div className="flex items-center gap-4 mt-2 text-cyan-100/60 text-xs font-mono uppercase tracking-widest">
               <span className="flex items-center gap-1.5"><Monitor className="h-4 w-4" /> {computerInfo}</span>
-              <span className="h-1 w-1 rounded-full bg-slate-700" />
-              <span className="flex items-center gap-1.5"><Shield className="h-4 w-4" /> Windows/Linux/Android</span>
+              <span className="h-1 w-1 rounded-full bg-cyan-800" />
+              <span className="flex items-center gap-1.5"><Shield className="h-4 w-4" /> CROSS-PLATFORM LIVE SYNC</span>
             </div>
           </div>
         </div>
@@ -621,23 +626,24 @@ export default function WindowsLogViewer() {
         </div>
       )}
 
-      {/* Modern Stats Grid — FIXED: static Tailwind classes instead of dynamic */}
+      {/* Futuristic Stats Grid */}
       <div className="grid gap-6 md:grid-cols-4">
         {[
-          { label: "Total Events", value: totalLogs, cls: "text-sky-400", bg: "bg-sky-500/10", border: "border-sky-500/20", icon: FileText, desc: "Cross-OS event stream" },
-          { label: "Vulnerabilities", value: vulnerabilities.length, cls: "text-rose-400", bg: "bg-rose-500/10", border: "border-rose-500/20", icon: AlertOctagon, desc: "Live threat & vuln matches" },
-          { label: "File Changes", value: files.length, cls: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/20", icon: Shield, desc: "Integrity monitoring" },
-          { label: "Agent Pulse", value: wsStatus === 'connected' ? 'Active' : wsStatus === 'connecting' ? 'Retrying' : 'Paused', cls: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20", icon: Activity, desc: "Real-time telemetry heartbeat" },
+          { label: "EVENT STREAMS", value: totalLogs, cls: "text-cyan-400", bg: "bg-cyan-500/10", border: "border-cyan-500/20", icon: FileText, desc: "Global ingestion rate" },
+          { label: "VULN MATRICES", value: vulnerabilities.length, cls: "text-rose-400", bg: "bg-rose-500/10", border: "border-rose-500/20", icon: AlertOctagon, desc: "Active heuristic matches" },
+          { label: "FILE INTEGRITY", value: files.length, cls: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/20", icon: Shield, desc: "Critical path monitoring" },
+          { label: "NEURAL PULSE", value: wsStatus === 'connected' ? 'LIVE' : wsStatus === 'connecting' ? 'SYNC' : 'HALT', cls: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20", icon: Activity, desc: "Real-time socket status" },
         ].map((stat) => (
-          <div key={stat.label} className="relative overflow-hidden group bg-white/3 border border-white/5 rounded-[2rem] p-6 hover:bg-white/5 transition-all duration-500 hover:-translate-y-1">
-            <div className="absolute top-0 right-0 p-8 opacity-[0.03] group-hover:opacity-[0.08] group-hover:scale-150 transition-all duration-700 text-slate-500">
+          <div key={stat.label} className="relative overflow-hidden group glass-v2 border border-cyan-500/20 rounded-[2rem] p-6 hover:bg-cyan-500/5 hover:border-cyan-400/40 transition-all duration-500 hover:-translate-y-2 shadow-xl shadow-cyan-900/10">
+            <div className="absolute inset-0 cyber-grid opacity-10 pointer-events-none group-hover:opacity-20 transition-opacity" />
+            <div className="absolute top-0 right-0 p-8 opacity-[0.05] group-hover:opacity-[0.15] group-hover:scale-125 transition-all duration-700 text-cyan-500">
               <stat.icon size={120} />
             </div>
-            <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-4">{stat.label}</p>
-            <div className="flex items-baseline gap-2">
-              <span className={`text-4xl font-black ${stat.cls}`}>{stat.value}</span>
+            <p className="relative z-10 text-[10px] font-black text-cyan-200/60 uppercase tracking-widest mb-4">{stat.label}</p>
+            <div className="relative z-10 flex items-baseline gap-2">
+              <span className={`text-4xl font-black drop-shadow-[0_0_8px_rgba(255,255,255,0.4)] ${stat.cls}`}>{stat.value}</span>
             </div>
-            <p className="mt-2 text-xs text-slate-500 font-medium">{stat.desc}</p>
+            <p className="relative z-10 mt-3 text-[11px] text-cyan-100/50 font-mono">{stat.desc}</p>
           </div>
         ))}
       </div>
@@ -645,27 +651,27 @@ export default function WindowsLogViewer() {
       {/* Main Navigation Tabs */}
       <div className="flex flex-col gap-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex gap-2 p-1.5 bg-black/40 rounded-[1.5rem] border border-white/5">
+          <div className="flex gap-2 p-1.5 bg-black/60 rounded-[1.5rem] border border-cyan-500/20 backdrop-blur-md">
             <button
               onClick={() => setActiveTab("events")}
-              className={`flex items-center gap-2.5 px-6 py-3 text-xs font-bold rounded-2xl transition-all duration-300 ${activeTab === "events" ? "bg-sky-500/10 text-sky-400 border border-sky-500/20 shadow-lg shadow-sky-500/5" : "text-slate-500 hover:text-slate-300"}`}
+              className={`flex items-center gap-2.5 px-6 py-3 text-[11px] font-black tracking-widest rounded-2xl transition-all duration-300 ${activeTab === "events" ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-[0_0_15px_rgba(34,211,238,0.3)]" : "text-cyan-200/50 hover:text-cyan-200/80"}`}
             >
               <Terminal className="h-4 w-4" />
-              EVENT LOGS
+              NEURAL LOGS
             </button>
             <button
               onClick={() => setActiveTab("vulnerabilities")}
-              className={`flex items-center gap-2.5 px-6 py-3 text-xs font-bold rounded-2xl transition-all duration-300 ${activeTab === "vulnerabilities" ? "bg-rose-500/10 text-rose-400 border border-rose-500/20 shadow-lg shadow-rose-500/5" : "text-slate-500 hover:text-slate-300"}`}
+              className={`flex items-center gap-2.5 px-6 py-3 text-[11px] font-black tracking-widest rounded-2xl transition-all duration-300 ${activeTab === "vulnerabilities" ? "bg-rose-500/20 text-rose-300 border border-rose-500/40 shadow-[0_0_15px_rgba(244,63,94,0.3)]" : "text-cyan-200/50 hover:text-cyan-200/80"}`}
             >
               <AlertTriangle className="h-4 w-4" />
-              VULNERABILITIES
+              THREAT MATRICES
             </button>
             <button
               onClick={() => setActiveTab("files")}
-              className={`flex items-center gap-2.5 px-6 py-3 text-xs font-bold rounded-2xl transition-all duration-300 ${activeTab === "files" ? "bg-amber-500/10 text-amber-400 border border-amber-500/20 shadow-lg shadow-amber-500/5" : "text-slate-500 hover:text-slate-300"}`}
+              className={`flex items-center gap-2.5 px-6 py-3 text-[11px] font-black tracking-widest rounded-2xl transition-all duration-300 ${activeTab === "files" ? "bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-[0_0_15px_rgba(245,158,11,0.3)]" : "text-cyan-200/50 hover:text-cyan-200/80"}`}
             >
               <HardDrive className="h-4 w-4" />
-              FILE INTEGRITY
+              INTEGRITY CORE
             </button>
           </div>
         </div>

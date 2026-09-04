@@ -1,5 +1,9 @@
 import logger from '../utils/logger.js';
-import * as syncManager from '../../services/syncService.js'; // Existing root service
+import db from '../config/db.js';
+import { SyncManager } from '../../services/syncService.js';
+
+// Instantiate the SyncManager
+const syncManager = new SyncManager(db, logger);
 
 export const getChanges = (req, res) => {
   try {

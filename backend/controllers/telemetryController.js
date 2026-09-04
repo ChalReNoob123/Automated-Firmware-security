@@ -1,4 +1,5 @@
 import * as telemetryService from '../services/telemetryService.js';
+import * as aiService from '../services/aiService.js';
 import logger from '../utils/logger.js';
 import os from 'os';
 

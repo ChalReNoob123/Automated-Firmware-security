@@ -8,22 +8,6 @@ export const API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:3001'
 export const WS_BASE  = (import.meta.env.VITE_WS_URL  || 'ws://localhost:3001').replace(/\/$/, '');
 
 /* ── storage fallback for Safari Private / IE ───────────────────── */
-const _memStorage: Record<string, string> = {};
-const SafeStorage = {
-  get: (key: string) => {
-    try { return localStorage.getItem(key); }
-    catch { return _memStorage[key] || null; }
-  },
-  set: (key: string, val: string) => {
-    try { localStorage.setItem(key, val); }
-    catch { _memStorage[key] = val; }
-  },
-  remove: (key: string) => {
-    try { localStorage.removeItem(key); }
-    catch { delete _memStorage[key]; }
-  }
-};
-
 type ApiCacheEntry<T = unknown> = {
   value: T;
   expiresAt: number;
@@ -38,6 +22,14 @@ export function clearApiCache() {
 
 function getApiCacheKey(path: string) {
   return `${API_BASE}${path}`;
+}
+
+function clearLegacyStoredToken() {
+  try {
+    localStorage.removeItem('sg_auth_token');
+  } catch {
+    // Restricted browser modes can deny storage access.
+  }
 }
 
 /* ── token helpers ──────────────────────────────────────────────── */
@@ -58,13 +50,13 @@ export const Token = {
   getUser:     ()    => _user,
   setAccess:   (t: string) => { 
     _accessToken = t;
-    if (t) SafeStorage.set('sg_auth_token', t);
+    clearLegacyStoredToken();
   },
   setUser:     (u: User | null) => { _user = u; },
   clearAll:    ()    => {
     _accessToken = '';
     _user = null;
-    SafeStorage.remove('sg_auth_token');
+    clearLegacyStoredToken();
     clearApiCache();
   },
   isLoggedIn:  ()    => !!_accessToken,

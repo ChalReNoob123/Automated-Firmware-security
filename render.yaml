@@ -1,0 +1,28 @@
+# Render blueprint — SentinelForge API (persistent Node; NOT serverless).
+# Why Render and not Vercel for the API: emulator sessions, pipeline runs and the
+# MCP stdio model are in-memory and long-lived — serverless functions would wipe
+# them between invocations. One instance only (free tier sleeps when idle).
+services:
+  - type: web
+    name: sentinelforge-api
+    runtime: node
+    plan: free
+    healthCheckPath: /health
+    buildCommand: >-
+      npm install --no-audit --no-fund &&
+      npm --prefix packages/graph-service run build &&
+      npm --prefix apps/workers run build &&
+      npm --prefix packages/mcp-servers run build &&
+      npm --prefix apps/api run build
+    startCommand: npm --prefix apps/api run start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false # Supabase SESSION pooler URI (see DEPLOY_LIVE.md)
+      - key: ALLOWED_ORIGINS
+        sync: false # e.g. https://sentinelforge-web.vercel.app
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true

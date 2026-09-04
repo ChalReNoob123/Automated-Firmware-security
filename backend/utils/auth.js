@@ -10,7 +10,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
 const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'dev-refresh-secret-change-me';
 
 export const hashPassword = async (pw) => {
-  return await bcrypt.hash(pw, 12);
+  return await bcrypt.hash(pw, 14);
 };
 
 export const verifyPassword = async (pw, hashed) => {
