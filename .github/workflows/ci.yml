@@ -1,5 +1,13 @@
 # SentinelForge CI — typecheck, test, build the Turborepo packages.
 # (The legacy SentinelGrid Vite app has its own scripts at the repo root.)
+#
+# Install notes (learned the hard way):
+# - Plain `npm install` at the root covers all workspaces; bare
+#   `npm install --workspaces` behaves inconsistently across npm majors.
+# - apps/web keeps a NESTED node_modules (single-React invariant: the repo root
+#   is React 19, the app is React 18 — hoisting styled-jsx breaks SSR).
+#   The nested `npm --prefix apps/web install` below is load-bearing, and
+#   scripts/check-deps.js fails fast if the invariant ever breaks again.
 name: sentinelforge-ci
 on:
   push:
@@ -16,7 +24,9 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm install --workspaces --no-audit --no-fund
+      - run: npm install --no-audit --no-fund
+      - run: npm --prefix apps/web install --no-audit --no-fund
+      - run: node apps/web/scripts/check-deps.js
       - run: npm --prefix apps/api run typecheck
       - run: npm --prefix apps/workers run typecheck
       - run: npm --prefix packages/graph-service run typecheck
