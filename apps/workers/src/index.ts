@@ -14,12 +14,16 @@ export { correlate, confidenceOf, priorityOf, type EngineId, type Confidence, ty
 export { matchSbom, verdictFor, parseNvd, demoAdvisories, type CveAdvisory, type SbomRef, type ComponentMatch, type RadarVerdict } from './stages/nday.js';
 export { verifyPatch, type PatchReport, type PatchVerdict } from './stages/patchVerify.js';
 export { parseElf, carveGzip, detectNativeTools, type ElfInfo, type GzipMember, type NativeCaps } from './stages/binary.js';
+export { strictTarget, buggyGattTarget, fuzzProtocol, BLE_GATT, MQTT, MODBUS, type Machine, type ProtoFinding, type ProtoResult } from './stages/protocol.js';
+export { GenomeIndex, shingles, jaccard, minhash, minhashSimilarity, SHINGLE_N, SHINGLE_STRIDE, MINHASH_K, type GenomeHit } from './stages/genome.js';
 export { publish, subscribe } from './bus.js';
 
 import { runPipeline } from './pipeline.js';
 import { startSession, feedInput, takeSnapshot, replay, recordCrash } from './stages/emulator.js';
 import { verifyPatch } from './stages/patchVerify.js';
 import { matchSbom, verdictFor, demoAdvisories } from './stages/nday.js';
+import { BLE_GATT, MQTT, MODBUS, buggyGattTarget, fuzzProtocol, strictTarget } from './stages/protocol.js';
+import { GenomeIndex } from './stages/genome.js';
 
 // CLI demo: `npm run dev -- demo` runs a synthetic image through stages 1–5 (incl. RoT).
 if (process.argv[2] === 'demo') {
@@ -85,6 +89,26 @@ if (process.argv[2] === 'demo-radar') {
     const matches = matchSbom(sbom, adv);
     console.log(JSON.stringify({ advisory: adv.id, verdict: verdictFor(matches, adv, 'fw-demo') }, null, 2));
   }
+}
+
+// CLI demo: `npm run dev -- demo-proto` differential protocol fuzzing.
+if (process.argv[2] === 'demo-proto') {
+  for (const [name, m] of [['ble-gatt', BLE_GATT], ['mqtt', MQTT], ['modbus', MODBUS]] as const) {
+    const buggy = fuzzProtocol(m, name === 'ble-gatt' ? buggyGattTarget(m) : strictTarget(m), { iterations: 3000 });
+    const clean = fuzzProtocol(m, strictTarget(m), { iterations: 3000 });
+    console.log(JSON.stringify({ machine: name, buggyFindings: buggy.findings.slice(0, 3), cleanFindings: clean.findings.length }, null, 2));
+  }
+}
+
+// CLI demo: `npm run dev -- demo-genome` cross-image similarity search.
+if (process.argv[2] === 'demo-genome') {
+  const idx = new GenomeIndex();
+  const lib = Buffer.from('vulnerable-lib-crypto-routines-v1.2.'); 
+  const libPatch = Buffer.from('vulnerable-lib-crypto-routines-v1.3.');
+  const other = Buffer.from('totally-unrelated-bootloader-blob-xyz');
+  idx.add('fw-a:libcrypto', new Uint8Array(lib));
+  idx.add('fw-b:bootloader', new Uint8Array(other));
+  console.log(JSON.stringify(idx.query(new Uint8Array(libPatch), 0.3), null, 2));
 }
 
 // CLI demo: `npm run dev -- demo-discovery` runs taint + fuzz + consensus end to end.

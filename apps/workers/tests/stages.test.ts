@@ -3,6 +3,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   acquire,
+  BLE_GATT,
+  buggyGattTarget,
   buildSbom,
   callersOf,
   carveGzip,
@@ -14,9 +16,15 @@ import {
   feedInput,
   fuzz,
   demoHarness,
+  fuzzProtocol,
+  GenomeIndex,
   inferComponents,
+  jaccard,
   mapPsa,
   matchSbom,
+  minhash,
+  minhashSimilarity,
+  MQTT,
   parseCallGraph,
   parseElf,
   planUnpack,
@@ -26,7 +34,9 @@ import {
   replay,
   scanSecrets,
   scanSinks,
+  shingles,
   startSession,
+  strictTarget,
   takeSnapshot,
   traceTaint,
   verifyChain,
@@ -246,5 +256,50 @@ describe('emulator', () => {
     expect(crash.snapshotId).not.toBeNull();
     expect(replay(s, snap.id).match).toBe(true);
     expect(s.status).toBe('crashed');
+  });
+});
+
+describe('protocol fuzzing', () => {
+  it('catches the GATT pre-pairing write bypass and stays clean on strict', () => {
+    const buggy = fuzzProtocol(BLE_GATT, buggyGattTarget(BLE_GATT), { iterations: 3000, seed: 11 });
+    expect(buggy.findings.some((f) => f.type === 'auth-bypass')).toBe(true);
+    const bypass = buggy.findings.find((f) => f.type === 'auth-bypass')!;
+    expect(bypass.trace.length).toBeGreaterThan(0);
+    const clean = fuzzProtocol(BLE_GATT, strictTarget(BLE_GATT), { iterations: 3000, seed: 11 });
+    expect(clean.findings.filter((f) => f.type === 'auth-bypass' || f.type === 'illegal-accept')).toEqual([]);
+  });
+  it('is deterministic per seed', () => {
+    const a = fuzzProtocol(MQTT, strictTarget(MQTT), { iterations: 500, seed: 3 });
+    const b = fuzzProtocol(MQTT, strictTarget(MQTT), { iterations: 500, seed: 3 });
+    expect(a.findings).toEqual(b.findings);
+    expect(a.pairsHit).toEqual(b.pairsHit);
+  });
+});
+
+describe('genome', () => {
+  // Realistic sizes: MinHash needs dozens of shingles to estimate well.
+  const base = 'shared-crypto-library-routines-block-'.repeat(24);
+  const lib = new Uint8Array(Buffer.from(base + 'v1-tail'));
+  const libV2 = new Uint8Array(Buffer.from(base + 'v2-tail'));
+  const other = new Uint8Array(Buffer.from('totally-different-bootloader-blob-'.repeat(24)));
+  it('scores identical high, related medium, unrelated low', () => {
+    expect(jaccard(shingles(lib), shingles(lib))).toBe(1);
+    const rel = jaccard(shingles(lib), shingles(libV2));
+    expect(rel).toBeGreaterThan(0.5);
+    expect(rel).toBeGreaterThan(jaccard(shingles(lib), shingles(other)));
+  });
+  it('indexes a fleet and ranks the vulnerable twin first', () => {
+    const idx = new GenomeIndex();
+    idx.add('fw-a:lib', lib);
+    idx.add('fw-b:other', other);
+    const hits = idx.query(libV2, 0.2);
+    expect(hits[0].id).toBe('fw-a:lib');
+    expect(hits.every((h) => h.id !== 'fw-b:other' || h.jaccard < hits[0].jaccard)).toBe(true);
+  });
+  it('minhash tracks jaccard directionally', () => {
+    const s = minhashSimilarity;
+    const a = minhash(lib);
+    expect(s(a, minhash(lib))).toBe(1);
+    expect(s(a, minhash(libV2))).toBeGreaterThan(s(a, minhash(other)));
   });
 });
