@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { audit } from '../db.js';
 import { requireAuth, requirePerm } from '../middleware/rbac.js';
 import { createAttestation, createDevice, findAttestation, listDevices } from '../store.js';
+import { sanitizeText } from '../sanitize.js';
 
 const router = Router();
 
@@ -19,7 +20,7 @@ router.post('/devices', requireAuth, requirePerm('scan:run'), async (req, res) =
     .safeParse(req.body);
   if (!p.success) return res.status(400).json({ error: p.error.issues[0]?.message ?? 'name + transport required' });
   const u = (req as unknown as Authed).user;
-  const d = await createDevice({ orgId: u.org, name: p.data.name, transport: p.data.transport, fingerprint: p.data.fingerprint });
+  const d = await createDevice({ orgId: u.org, name: sanitizeText(p.data.name, 128), transport: p.data.transport, fingerprint: p.data.fingerprint ? sanitizeText(p.data.fingerprint, 256) : undefined });
   await audit('device_registered', { userId: u.sub, orgId: u.org, ip: req.ip });
   res.status(201).json(d);
 });
@@ -37,7 +38,7 @@ router.post('/attestations', requireAuth, requirePerm('attest:sign'), async (req
   if (!p.success) return res.status(400).json({ error: p.error.issues[0]?.message ?? 'deviceId, scope, legalBasis required' });
   const u = (req as unknown as Authed).user;
   try {
-    const a = await createAttestation({ orgId: u.org, deviceId: p.data.deviceId, userId: u.sub, scope: p.data.scope, legalBasis: p.data.legalBasis });
+    const a = await createAttestation({ orgId: u.org, deviceId: p.data.deviceId, userId: u.sub, scope: sanitizeText(p.data.scope, 256), legalBasis: sanitizeText(p.data.legalBasis, 512) });
     await audit('attestation_signed', { userId: u.sub, orgId: u.org, ip: req.ip });
     res.status(201).json(a);
   } catch (e) {

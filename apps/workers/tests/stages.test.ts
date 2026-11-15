@@ -259,6 +259,82 @@ describe('emulator', () => {
   });
 });
 
+describe('accuracy: corroboration and false-positive control', () => {
+  it('requires INDEPENDENT engine families for Confirmed', () => {
+    // two static tools agree → not independent → Likely (not Confirmed)
+    expect(confidenceOf(['static', 'secrets'])).toBe('Likely');
+    // static + symbolic → independent → Confirmed
+    expect(confidenceOf(['static', 'taint'])).toBe('Confirmed');
+    // dynamic + protocol → independent → Confirmed
+    expect(confidenceOf(['fuzz', 'protocol-fuzz'])).toBe('Confirmed');
+    expect(confidenceOf(['static'])).toBe('Unconfirmed');
+  });
+
+  it('ignores placeholders and low-entropy "secrets"', () => {
+    const noise = ['password = "changeme"', 'api_key = "abcdefgh"', 'token = "${SECRET_TOKEN}"', 'pwd: "admin"'].join('\n');
+    expect(scanSecrets(noise)).toEqual([]);
+    const real = 'api_key = "sk_live_9f2A7xKq91LmZ4pQ"\npassword = "Tr0ub4dor&3"';
+    const hits = scanSecrets(real);
+    expect(hits.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('still catches high-signal credentials (AWS keys, private keys)', () => {
+    const hits = scanSecrets('AKIAIOSFODNN7EXAMPLE\n-----BEGIN RSA PRIVATE KEY-----');
+    expect(hits.map((h) => h.ruleId).sort()).toEqual(['aws-access-key', 'private-key']);
+  });
+
+  it('round 14: low-entropy aws_secret values are placeholders, not findings', () => {
+    // 16 a's: charset-valid for the rule, zero entropy — must not report
+    expect(scanSecrets('aws_secret = "aaaaaaaaaaaaaaaa"')).toEqual([]);
+    // real-shaped secret still reports
+    expect(scanSecrets('aws_secret = "wJalrXUtnFEMI/K7MDENG"').map((h) => h.ruleId)).toEqual(['aws-secret-like']);
+  });
+
+  it('round 14: catches modern credential formats (slack, google, jwt)', () => {
+    const hits = scanSecrets(
+      ['xoxb-123456789-abcdefghij', 'AIzaSyD-1234567890abcdefghijklmnopqrstu', 'token = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.abcDEF123ghiJKL"'].join('\n'),
+    );
+    const ids = hits.map((h) => h.ruleId).sort();
+    expect(ids).toContain('slack-token');
+    expect(ids).toContain('google-api-key');
+    expect(ids).toContain('jwt-hardcoded');
+  });
+
+  it('round 14: sanitized taint paths NEVER corroborate toward Confirmed', () => {
+    const out = correlate({
+      taintPaths: [{ sink: 'strcpy', path: ['recv', 'snprintf', 'strcpy'], sanitized: true }],
+      fuzzCrashes: [],
+      sinks: [{ sink: 'strcpy', count: 2 }],
+      secrets: [],
+    });
+    const f = out.find((x) => x.key === 'sink:strcpy')!;
+    expect(f.engines).toEqual(['static']); // taint engine NOT added
+    expect(f.confidence).toBe('Unconfirmed'); // the false-Confirmed class is gone
+    expect(f.why.some((w) => w.includes('PASSES SANITIZER'))).toBe(true); // trace kept for the analyst
+  });
+
+  it('round 14: unsanitized taint still corroborates to Confirmed', () => {
+    const out = correlate({
+      taintPaths: [{ sink: 'strcpy', path: ['recv', 'strcpy'], sanitized: false }],
+      fuzzCrashes: [],
+      sinks: [{ sink: 'strcpy', count: 1 }],
+      secrets: [],
+    });
+    expect(out[0].confidence).toBe('Confirmed');
+    expect(out[0].families).toEqual(expect.arrayContaining(['symbolic', 'static-analysis']));
+  });
+
+  it('round 14: sanitized-only flow (no other evidence) produces no finding at all', () => {
+    const out = correlate({
+      taintPaths: [{ sink: 'memcpy', path: ['recv', 'snprintf', 'memcpy'], sanitized: true }],
+      fuzzCrashes: [],
+      sinks: [],
+      secrets: [],
+    });
+    expect(out).toEqual([]);
+  });
+});
+
 describe('protocol fuzzing', () => {
   it('catches the GATT pre-pairing write bypass and stays clean on strict', () => {
     const buggy = fuzzProtocol(BLE_GATT, buggyGattTarget(BLE_GATT), { iterations: 3000, seed: 11 });

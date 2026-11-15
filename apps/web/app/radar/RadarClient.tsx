@@ -1,10 +1,10 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Card, Badge, Empty } from '../components/ui';
-import { apiFetch, getAccess } from '../lib/auth';
+import { Card, Badge, Empty, glassGlow } from '../components/ui';
+import { apiFetch, getAccess, API_URL } from '../lib/auth';
+import { AttestField, SessionChip } from '../components/Gate';
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 const URGENCY: Record<string, 'rose' | 'amber' | 'green'> = { 'act-now': 'rose', triage: 'amber', clear: 'green' };
 
 type Verdict = { advisoryId: string; exposed: boolean; urgency: string; detail: string; twinReRun: { firmwareRef: string; focus: string } | null };
@@ -34,7 +34,7 @@ export default function RadarClient() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    fetch(`${API}/v1/radar/demo`, { signal: AbortSignal.timeout(12000) })
+    fetch(`${API_URL}/v1/radar/demo`, { signal: AbortSignal.timeout(12000) })
       .then(async (r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();
@@ -87,9 +87,9 @@ export default function RadarClient() {
             Production polls NVD 2.0 continuously and re-queues the twin per verdict.
           </p>
           {!feed && !feedErr && <Empty title="Contacting radar…" hint="Start the API: npm run dev in apps/api." />}
-          {feedErr && <p style={{ color: '#f87171', fontSize: 13 }}>{feedErr}</p>}
+          {feedErr && <p role="alert" style={{ color: '#f87171', fontSize: 13 }}>{feedErr}</p>}
           {feed?.results.map(({ verdict, matches }) => (
-            <div key={verdict.advisoryId} className="sf-glass" style={{ borderRadius: 12, padding: '12px 16px', marginBottom: 10, borderColor: verdict.exposed ? 'rgba(244,63,94,0.35)' : undefined }}>
+            <div key={verdict.advisoryId} className="sf-glass" onPointerMove={glassGlow} style={{ borderRadius: 12, padding: '12px 16px', marginBottom: 10, borderColor: verdict.exposed ? 'rgba(244,63,94,0.35)' : undefined }}>
               <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                 <code style={{ color: '#fff' }}>{verdict.advisoryId}</code>
                 <Badge tone={URGENCY[verdict.urgency] ?? 'gray'}>{verdict.urgency.toUpperCase()}</Badge>
@@ -116,21 +116,29 @@ export default function RadarClient() {
             Diff a rebuild against its prior image: is the vulnerable path gone, or did only the
             version string change? Try a real fix — then a fake one.
           </p>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12, alignItems: 'center' }}>
-            {signedIn === false ? (
-              <a className="sf-btn sf-btn-accent" href="/login">Sign in to verify</a>
-            ) : (
-              <span style={{ fontSize: 12, letterSpacing: 2, color: signedIn ? '#6ee7b7' : '#64748b' }}>
-                {signedIn ? '● SIGNED IN' : '○ CHECKING SESSION…'}
-              </span>
-            )}
-            <input className="sf-input" placeholder="attestation id" value={att} onChange={(e) => setAtt(e.target.value)} style={{ flex: '1 1 160px' }} />
-            <button className="sf-btn sf-btn-accent" onClick={() => void verify(false)} disabled={busy}>Verify real fix</button>
-            <button className="sf-btn" onClick={() => void verify(true)} disabled={busy}>Catch a fake patch</button>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12, alignItems: 'center' }}>
+            <SessionChip signedIn={signedIn} cta="Sign in to verify" />
+            <AttestField att={att} onChange={setAtt} />
+            <button
+              className="sf-btn sf-btn-accent"
+              onClick={() => void verify(false)}
+              disabled={busy || signedIn !== true}
+              title={signedIn !== true && !busy ? 'Verification runs against your account — sign in first' : undefined}
+            >
+              Verify real fix
+            </button>
+            <button
+              className="sf-btn"
+              onClick={() => void verify(true)}
+              disabled={busy || signedIn !== true}
+              title={signedIn !== true && !busy ? 'Verification runs against your account — sign in first' : undefined}
+            >
+              Catch a fake patch
+            </button>
           </div>
-          {patchErr && <p style={{ color: '#f87171', fontSize: 13 }}>{patchErr}</p>}
+          {patchErr && <p role="alert" style={{ color: '#f87171', fontSize: 13 }}>{patchErr}</p>}
           {patch && (
-            <div className="sf-glass" style={{ borderRadius: 12, padding: '12px 16px', borderColor: patch.verdict === 'patched' ? 'rgba(52,211,153,0.4)' : 'rgba(244,63,94,0.4)' }}>
+            <div className="sf-glass" onPointerMove={glassGlow} style={{ borderRadius: 12, padding: '12px 16px', borderColor: patch.verdict === 'patched' ? 'rgba(52,211,153,0.4)' : 'rgba(244,63,94,0.4)' }}>
               <Badge tone={patch.verdict === 'patched' ? 'green' : 'rose'}>{String(patch.verdict).toUpperCase()}</Badge>
               <span style={{ marginLeft: 10, fontSize: 13, color: '#94a3b8' }}>similarity {patch.similarity}</span>
               <ul style={{ fontSize: 13.5, margin: '8px 0 0', paddingLeft: 18 }}>

@@ -47,4 +47,25 @@ describe('runPipeline', () => {
     expect(s.stages.discovery).toBe('pending');
     expect(s.consensus).toEqual([]);
   });
+
+  it('round 15: records real engine metrics for the run', async () => {
+    const s = await runPipeline(elfImage(), { version: 'm' }, {
+      textForStatic: 'strcpy(d,s);\n',
+      discovery: { callGraphText: 'recv -> strcpy', fuzzHarness: 'demo', fuzzIterations: 500, protocol: { machine: 'ble-gatt', target: 'demo-buggy', iterations: 200 } },
+    });
+    expect(s.metrics.wallMs).toBeGreaterThan(0);
+    expect(s.metrics.stageMs.discovery).toBeGreaterThan(0);
+    expect(s.metrics.stageMs.sbom).toBeDefined();
+    expect(s.metrics.jobsDispatched).toBe(3); // static + fuzz + protocol
+    expect(s.metrics.fuzzExecsPerSec).toBeGreaterThan(0);
+    expect(s.metrics.protocolExecs).toBe(200);
+    expect(s.metrics.findingsCount).toBe(s.consensus.length);
+    expect(['inline', 'threads', 'uninitialized']).toContain(s.metrics.poolMode);
+  });
+
+  it('round 15: resume from sbom skips earlier stages and still builds the sbom', async () => {
+    const s = await runPipeline(elfImage(), { version: '9.9' }, { resumeFrom: 'sbom', textForStatic: 'x' });
+    expect(s.stages).toMatchObject({ acquisition: 'pending', unpack: 'pending', static: 'pending', sbom: 'done' });
+    expect(s.artifacts.sbom).toBeDefined();
+  });
 });

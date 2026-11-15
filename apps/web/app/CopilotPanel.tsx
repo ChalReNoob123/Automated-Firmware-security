@@ -2,10 +2,11 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { apiFetch, getAccess } from './lib/auth';
+import { SessionChip } from './components/Gate';
+import { glassGlow } from './components/ui';
 
 // Security Copilot chat (spec §8): every answer cites the MCP tool that produced
 // it. Identity comes from the memory token (silent refresh) — no paste needed.
-const LOGIN_HREF = '/login';
 
 type Msg = { role: 'you' | 'copilot'; text: string; cites?: { server: string; tool: string }[]; options?: { label: string; message: string }[] };
 
@@ -55,16 +56,11 @@ export default function CopilotPanel() {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
       className="sf-glass"
+      onPointerMove={glassGlow}
       style={{ borderRadius: 20, padding: 22, marginTop: 28, maxWidth: 840 }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-        {signedIn === false ? (
-          <a className="sf-btn sf-btn-accent" href={LOGIN_HREF}>Sign in to chat</a>
-        ) : (
-          <span style={{ fontSize: 12, letterSpacing: 2, color: signedIn ? '#6ee7b7' : '#64748b' }}>
-            {signedIn ? '● SIGNED IN' : '○ CHECKING SESSION…'}
-          </span>
-        )}
+        <SessionChip signedIn={signedIn} cta="Sign in to chat" />
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minHeight: 220, maxHeight: 440, overflowY: 'auto', marginBottom: 14 }}>
         {msgs.map((m, i) => (
@@ -110,12 +106,14 @@ export default function CopilotPanel() {
       {err && <p style={{ color: '#f87171', fontSize: 13 }}>{err}</p>}
       <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
         {['show attack paths', 'trace taint to sinks', 'run a fuzz campaign'].map((s) => (
-          <button key={s} className="sf-btn" style={{ fontSize: 12, padding: '6px 12px' }} onClick={() => void sendText(s)} disabled={busy}>{s}</button>
+          <button key={s} className="sf-btn" style={{ fontSize: 12, padding: '6px 12px' }} onClick={() => void sendText(s)} disabled={busy || signedIn !== true}>{s}</button>
         ))}
       </div>
       <div style={{ display: 'flex', gap: 8 }}>
-        <input className="sf-input" placeholder="e.g. show attack paths" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void send()} style={{ flex: 1 }} />
-        <button className="sf-btn sf-btn-accent" onClick={send} disabled={busy}>Send</button>
+        <input className="sf-input" placeholder={signedIn === true ? 'e.g. show attack paths' : 'sign in to ask the copilot'} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void send()} style={{ flex: 1 }} />
+        <button className="sf-btn sf-btn-accent" onClick={send} disabled={busy || signedIn !== true} title={signedIn === false ? 'Sign in to chat — the copilot answers from live tool output' : undefined}>
+          Send
+        </button>
       </div>
     </motion.section>
   );

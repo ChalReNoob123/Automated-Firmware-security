@@ -11,11 +11,12 @@ import { buildSbom, buildVex, inferComponents, type Stage4Result } from './stage
 import { verifyRootOfTrust, type RoTEvidence, type RoTReport } from './stages/rootOfTrust.js';
 import { startSession, type BootSession, type EmulatorConfig } from './stages/emulator.js';
 import { parseCallGraph, traceTaint, type TaintPath } from './stages/taint.js';
-import { fuzz, demoHarness, type FuzzResult } from './stages/fuzz.js';
+import { type FuzzResult } from './stages/fuzz.js';
 import { correlate, type ScoredFinding } from './stages/consensus.js';
 import { verifyPatch, type PatchReport } from './stages/patchVerify.js';
 import { parseElf, carveGzip, type ElfInfo, type GzipMember } from './stages/binary.js';
-import { BLE_GATT, MQTT, MODBUS, buggyGattTarget, fuzzProtocol, strictTarget, type ProtoFinding } from './stages/protocol.js';
+import { type ProtoFinding } from './stages/protocol.js';
+import { offload, getPoolInfo } from './pool.js';
 
 export type PipelineStage = 'acquisition' | 'unpack' | 'static' | 'sbom' | 'root-of-trust' | 'discovery' | 'network' | 'report';
 
@@ -31,10 +32,26 @@ export const PIPELINE_ORDER: PipelineStage[] = [
 ];
 
 export type StageStatus = 'pending' | 'running' | 'done' | 'failed' | 'skipped';
+
+// Round 15 — real throughput observability: every run records its wall time,
+// per-stage durations, and engine throughput (fuzz execs/sec), plus how the
+// CPU-bound jobs actually executed (worker threads vs inline fallback).
+export type RunMetrics = {
+  wallMs: number;
+  stageMs: Partial<Record<PipelineStage, number>>;
+  jobsDispatched: number; // CPU jobs sent through the pool (any mode)
+  poolMode: string; // 'threads' | 'inline' | 'uninitialized' — real mode used
+  staticTextBytes: number;
+  fuzzExecsPerSec: number | null; // fuzz throughput when the fuzz job ran
+  protocolExecs: number | null;
+  findingsCount: number;
+};
+
 export type RunState = {
   runId: string;
   firmware: FirmwareRecord;
   stages: Record<PipelineStage, StageStatus>;
+  metrics: RunMetrics;
   artifacts: { sbom?: Stage4Result['sbom']; vex?: Stage4Result['vex']; binary?: { elf?: ElfInfo | { valid: false; reason: string }; gzipMembers?: GzipMember[] } };
   findings: { secrets: ReturnType<typeof scanSecrets>; sinks: ReturnType<typeof scanSinks> };
   taintPaths: TaintPath[];
@@ -86,10 +103,22 @@ export async function runPipeline(
 ): Promise<RunState> {
   const runId = randomUUID();
   const firmware = acquire(raw, meta);
+  const startedAt = performance.now();
+  const metrics: RunMetrics = {
+    wallMs: 0,
+    stageMs: {},
+    jobsDispatched: 0,
+    poolMode: 'unknown',
+    staticTextBytes: 0,
+    fuzzExecsPerSec: null,
+    protocolExecs: null,
+    findingsCount: 0,
+  };
   const state: RunState = {
     runId,
     firmware,
     stages: Object.fromEntries(PIPELINE_ORDER.map((s) => [s, 'pending'])) as Record<PipelineStage, StageStatus>,
+    metrics,
     artifacts: {},
     findings: { secrets: [], sinks: [] },
     taintPaths: [],
@@ -104,14 +133,31 @@ export async function runPipeline(
   };
   runs.set(runId, state);
 
-  const done = (s: PipelineStage, status: StageStatus = 'done') => {
+  const done = (s: PipelineStage, status: StageStatus = 'done', data?: unknown) => {
     state.stages[s] = status;
     state.updatedAt = new Date().toISOString();
-    publish({ type: status === 'done' ? 'stage.done' : 'stage.failed', firmwareId: firmware.id, runId, stage: s });
+    publish({ type: status === 'done' ? 'stage.done' : 'stage.failed', firmwareId: firmware.id, runId, stage: s, ...(data !== undefined ? { data } : {}) });
+  };
+
+  // Stage wrapper: status transitions + per-stage duration + optional payload
+  // on the done event. Stage bodies write to DISJOINT parts of the run state,
+  // so tiers below can safely run concurrently.
+  const runStage = async (s: PipelineStage, fn: () => Promise<unknown> | unknown): Promise<void> => {
+    state.stages[s] = 'running';
+    publish({ type: 'stage.started', firmwareId: firmware.id, runId, stage: s });
+    const t0 = performance.now();
+    const data = await fn();
+    metrics.stageMs[s] = Math.round((performance.now() - t0) * 1000) / 1000; // µs-resolution
+    done(s, 'done', data);
   };
 
   const order: PipelineStage[] = ['acquisition', 'unpack', 'static', 'sbom'];
   const startAt = opts.resumeFrom ? order.indexOf(opts.resumeFrom) : 0;
+
+  // unpack computes the layout once; sbom reuses it instead of re-planning the
+  // same bytes (the duplicate planUnpack call was pure wasted work). Resume
+  // runs that skip unpack recompute it exactly as before.
+  let plan: ReturnType<typeof planUnpack> | null = null;
 
   try {
     // acquisition
@@ -122,43 +168,75 @@ export async function runPipeline(
     }
     // unpack
     if (startAt <= 1) {
-      state.stages.unpack = 'running';
-      publish({ type: 'stage.started', firmwareId: firmware.id, runId, stage: 'unpack' });
-      const plan = planUnpack(raw); // plan recorded; containerized worker executes extraction
-      // Real parsing where the pure-TS decoders reach: ELF headers + gzip members.
-      const kinds = new Set(plan.hits.map((h) => h.kind));
-      const binary: NonNullable<typeof state.artifacts.binary> = {};
-      if (kinds.has('elf')) binary.elf = parseElf(raw);
-      if (kinds.has('gzip')) binary.gzipMembers = carveGzip(raw);
-      if (Object.keys(binary).length) state.artifacts.binary = binary;
-      done('unpack');
+      await runStage('unpack', () => {
+        plan = planUnpack(raw); // plan recorded; containerized worker executes extraction
+        // Real parsing where the pure-TS decoders reach: ELF headers + gzip members.
+        const kinds = new Set(plan.hits.map((h) => h.kind));
+        const binary: NonNullable<typeof state.artifacts.binary> = {};
+        if (kinds.has('elf')) binary.elf = parseElf(raw);
+        if (kinds.has('gzip')) binary.gzipMembers = carveGzip(raw);
+        if (Object.keys(binary).length) state.artifacts.binary = binary;
+        return { planHits: plan.hits.length };
+      });
     }
-    // static + secrets
     if (startAt <= 2) {
-      state.stages.static = 'running';
-      publish({ type: 'stage.started', firmwareId: firmware.id, runId, stage: 'static' });
-      const text = opts.textForStatic ?? '';
-      state.findings.secrets = text ? scanSecrets(text) : [];
-      state.findings.sinks = text ? scanSinks(text) : [];
-      done('static');
-    }
-    // sbom/vex
-    state.stages.sbom = 'running';
-    publish({ type: 'stage.started', firmwareId: firmware.id, runId, stage: 'sbom' });
-    const hits = planUnpack(raw).hits;
-    const sbom = buildSbom(firmware, inferComponents(hits));
-    const vex = buildVex([]);
-    state.artifacts.sbom = sbom;
-    state.artifacts.vex = vex;
-    publish({ type: 'sbom.ready', firmwareId: firmware.id, runId, stage: 'sbom', data: { components: sbom.components.length } });
-    done('sbom');
-
-    // root-of-trust (Module 3) — runs when boot evidence supplied, else stays pending
-    if (opts.rotEvidence) {
-      state.stages['root-of-trust'] = 'running';
-      publish({ type: 'stage.started', firmwareId: firmware.id, runId, stage: 'root-of-trust' });
-      state.rotReport = verifyRootOfTrust(opts.rotEvidence);
-      done('root-of-trust');
+      // TIER 1 — independent analyses run concurrently (worker threads in the
+      // compiled package; inline interleaving otherwise): static/secrets scan,
+      // sbom/vex build, root-of-trust verification, patch comparison.
+      const tier1: Promise<void>[] = [];
+      tier1.push(
+        runStage('static', async () => {
+          const text = opts.textForStatic ?? '';
+          metrics.staticTextBytes = text.length;
+          if (text) {
+            metrics.jobsDispatched++;
+            const r = await offload({ kind: 'static', text });
+            if (r.kind === 'static') {
+              state.findings.secrets = r.secrets;
+              state.findings.sinks = r.sinks;
+            }
+          } else {
+            state.findings.secrets = [];
+            state.findings.sinks = [];
+          }
+          return { secrets: state.findings.secrets.length, sinks: state.findings.sinks.length };
+        }),
+      );
+      tier1.push(
+        runStage('sbom', () => {
+          const hits = (plan ?? planUnpack(raw)).hits;
+          const sbom = buildSbom(firmware, inferComponents(hits));
+          const vex = buildVex([]);
+          state.artifacts.sbom = sbom;
+          state.artifacts.vex = vex;
+          return { components: sbom.components.length };
+        }),
+      );
+      if (opts.rotEvidence)
+        tier1.push(
+          runStage('root-of-trust', () => {
+            state.rotReport = verifyRootOfTrust(opts.rotEvidence!);
+            return { passed: state.rotReport.passed };
+          }),
+        );
+      if (opts.patchCompare)
+        tier1.push(
+          runStage('report', () => {
+            state.patchVerdict = verifyPatch(opts.patchCompare!);
+            return { patch: state.patchVerdict.verdict };
+          }),
+        );
+      await Promise.all(tier1);
+    } else {
+      // resume directly into sbom (resumeFrom = 'sbom' re-runs it)
+      await runStage('sbom', () => {
+        const hits = (plan ?? planUnpack(raw)).hits;
+        const sbom = buildSbom(firmware, inferComponents(hits));
+        const vex = buildVex([]);
+        state.artifacts.sbom = sbom;
+        state.artifacts.vex = vex;
+        return { components: sbom.components.length };
+      });
     }
 
     // live twin (Module 4) — boot the emulator when a config is supplied so the
@@ -168,43 +246,59 @@ export async function runPipeline(
       publish({ type: 'stage.started', firmwareId: firmware.id, runId, stage: 'discovery', data: { emulator: state.emulator.id } });
     }
 
-    // discovery (Modules 5–6) — taint + fuzz + consensus; runs on supplied evidence only
+    // discovery (Modules 5–6) — taint first (its sinks steer the fuzzer), then
+    // fuzz and protocol fuzz CONCURRENTLY (both CPU jobs go through the pool),
+    // then consensus over everything.
     if (opts.discovery) {
-      state.stages.discovery = 'running';
-      publish({ type: 'stage.started', firmwareId: firmware.id, runId, stage: 'discovery' });
-      if (opts.discovery.callGraphText) {
-        state.taintPaths = traceTaint(parseCallGraph(opts.discovery.callGraphText));
-      }
-      if (opts.discovery.fuzzHarness === 'demo') {
-        const seeds = (opts.discovery.fuzzSeeds ?? ['GET /', 'GET /admin']).map((s) => Buffer.from(s, 'latin1'));
-        state.fuzz = fuzz(demoHarness, {
-          seeds,
-          iterations: opts.discovery.fuzzIterations ?? 2000,
-          sinkHints: state.taintPaths.map((t) => t.sink),
+      const d = opts.discovery;
+      await runStage('discovery', async () => {
+        if (d.callGraphText) state.taintPaths = traceTaint(parseCallGraph(d.callGraphText));
+        const sub: Promise<void>[] = [];
+        if (d.fuzzHarness === 'demo') {
+          sub.push(
+            (async () => {
+              metrics.jobsDispatched++;
+              const r = await offload({
+                kind: 'fuzz',
+                seeds: d.fuzzSeeds ?? ['GET /', 'GET /admin'],
+                iterations: d.fuzzIterations ?? 2000,
+                sinkHints: state.taintPaths.map((t) => t.sink),
+              });
+              if (r.kind === 'fuzz') {
+                state.fuzz = r.result;
+                metrics.fuzzExecsPerSec = r.ms > 0 ? Math.round((r.result.execs / r.ms) * 1000) : null;
+              }
+            })(),
+          );
+        }
+        if (d.protocol) {
+          const proto = d.protocol;
+          sub.push(
+            (async () => {
+              metrics.jobsDispatched++;
+              const r = await offload({ kind: 'protocol-fuzz', machine: proto.machine, target: proto.target ?? 'reference', iterations: proto.iterations ?? 2000 });
+              if (r.kind === 'protocol-fuzz') {
+                state.protocolFindings = r.findings;
+                metrics.protocolExecs = r.execs;
+              }
+            })(),
+          );
+        }
+        await Promise.all(sub);
+        state.consensus = correlate({
+          taintPaths: state.taintPaths,
+          fuzzCrashes: (state.fuzz?.crashes ?? []).map((c) => ({ reason: c.reason, inputHex: c.inputHex })),
+          sinks: state.findings.sinks,
+          secrets: state.findings.secrets,
+          snapshotRef: state.emulator?.snapshots.at(-1)?.id ?? null,
         });
-      }
-      if (opts.discovery.protocol) {
-        const machines = { 'ble-gatt': BLE_GATT, mqtt: MQTT, modbus: MODBUS } as const;
-        const machine = machines[opts.discovery.protocol.machine];
-        const target = opts.discovery.protocol.target === 'demo-buggy' ? buggyGattTarget(machine) : strictTarget(machine);
-        const pr = fuzzProtocol(machine, target, { iterations: opts.discovery.protocol.iterations ?? 2000 });
-        state.protocolFindings = pr.findings;
-        publish({ type: 'stage.done', firmwareId: firmware.id, runId, stage: 'discovery', data: { protocolFindings: pr.findings.length } });
-      }
-      state.consensus = correlate({
-        taintPaths: state.taintPaths,
-        fuzzCrashes: (state.fuzz?.crashes ?? []).map((c) => ({ reason: c.reason, inputHex: c.inputHex })),
-        sinks: state.findings.sinks,
-        secrets: state.findings.secrets,
-        snapshotRef: state.emulator?.snapshots.at(-1)?.id ?? null,
+        return {
+          taintPaths: state.taintPaths.length,
+          fuzzExecs: state.fuzz?.execs ?? 0,
+          protocolFindings: state.protocolFindings.length,
+          consensus: state.consensus.length,
+        };
       });
-      done('discovery');
-    }
-
-    // patch verification — compares against the prior build when supplied
-    if (opts.patchCompare) {
-      state.patchVerdict = verifyPatch(opts.patchCompare);
-      publish({ type: 'stage.done', firmwareId: firmware.id, runId, stage: 'report', data: { patch: state.patchVerdict.verdict } });
     }
 
     // hand-off (Module 7+ owns graph/report — pipeline just sequences them per spec §5)
@@ -217,6 +311,13 @@ export async function runPipeline(
     const cur = (Object.entries(state.stages).find(([, v]) => v === 'running')?.[0] ?? 'acquisition') as PipelineStage;
     done(cur, 'failed');
     throw e;
+  } finally {
+    metrics.wallMs = Math.round((performance.now() - startedAt) * 10) / 10;
+    metrics.poolMode = getPoolInfo().mode;
+    metrics.findingsCount = state.consensus.length;
+    state.metrics = metrics;
+    state.updatedAt = new Date().toISOString();
+    publish({ type: 'pipeline.metrics', firmwareId: firmware.id, runId, data: metrics });
   }
   return state;
 }

@@ -1,5 +1,6 @@
 'use client';
 import { useMemo } from 'react';
+import FluidScene from './FluidScene';
 
 // Ambient backdrop for inner pages: pure-CSS starfield (seeded, SSR-safe) +
 // nebula gradients. Replaces the earlier three.js scene — identical vibe at ~0
@@ -45,6 +46,8 @@ export default function AmbientScene() {
             'radial-gradient(ellipse 50% 38% at 12% 82%, rgba(34,211,238,0.08), transparent 70%)',
         }}
       />
+      {/* living aurora beneath the stars — native-res canvas, pointer-reactive */}
+      <FluidScene opacity={0.4} />
       <div className="sf-stars sf-stars-far" style={{ boxShadow: far }} />
       <div className="sf-stars sf-stars-mid" style={{ boxShadow: mid }} />
       <div className="sf-stars sf-stars-near" style={{ boxShadow: near }} />

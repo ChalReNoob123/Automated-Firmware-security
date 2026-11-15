@@ -1,13 +1,12 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Card, Badge, Empty } from '../components/ui';
+import { Card, Badge, Empty, glassGlow } from '../components/ui';
 import { apiFetch, getAccess } from '../lib/auth';
 
 // Android-Studio-style device lab: virtual profiles, animated boot, interactive
 // home screen, streaming logcat, working ADB shell, local snapshots, and a
 // one-click bridge that boots a backend twin for the profile's architecture.
-const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 type Profile = { id: string; name: string; arch: 'arm' | 'aarch64' | 'mipsel'; soc: string; android: string; ram: string };
 const PROFILES: Profile[] = [
@@ -320,15 +319,20 @@ export default function AndroidLab() {
             <button className="sf-btn" onClick={() => setLogRun((v) => !v)}>{logRun ? 'Pause' : 'Resume'}</button>
             <button className="sf-btn" onClick={() => setLogs([])}>Clear</button>
           </div>
-          <div ref={logRef} className="sf-console" style={{ height: 380 }}>
+          <div className="uv-term">
+            <div className="uv-term-bar">
+              <span className="uv-dot uv-dot-r" /><span className="uv-dot uv-dot-y" /><span className="uv-dot uv-dot-g" />
+              <span style={{ marginLeft: 6 }}>LOGCAT — {profile.id}</span>
+            </div>
+            <div ref={logRef} className="sf-console" style={{ height: 380 }}>
             {power !== 'on' ? (
-              <span style={{ color: '#475569' }}>— device offline, power it on from the Screen tab —</span>
+              <span style={{ color: '#64748b' }}>— device offline, power it on from the Screen tab —</span>
             ) : (
               shownLogs.map((l, i) => {
                 const lv = l.slice(9, 10);
                 return (
                   <div key={i}>
-                    <span style={{ color: '#475569' }}>{l.slice(0, 8)} </span>
+                    <span style={{ color: '#64748b' }}>{l.slice(0, 8)} </span>
                     <b style={{ color: LV_COLOR[lv] ?? '#94a3b8' }}>{lv}</b>
                     <span style={{ color: '#cbd5e1' }}>{l.slice(10)}</span>
                   </div>
@@ -336,15 +340,22 @@ export default function AndroidLab() {
               })
             )}
           </div>
+          </div>
         </div>
       )}
 
       {tab === 'adb' && (
         <div>
-          <div ref={shellRef} className="sf-console" style={{ height: 380, color: '#e2e8f0' }}>
-            {shellHist.map((l, i) => (
-              <div key={i} style={{ color: l.startsWith('shell@') ? '#22d3ee' : undefined }}>{l}</div>
-            ))}
+          <div className="uv-term">
+            <div className="uv-term-bar">
+              <span className="uv-dot uv-dot-r" /><span className="uv-dot uv-dot-y" /><span className="uv-dot uv-dot-g" />
+              <span style={{ marginLeft: 6 }}>ADB SHELL — {profile.id}</span>
+            </div>
+            <div ref={shellRef} className="sf-console" style={{ height: 380, color: '#e2e8f0' }}>
+              {shellHist.map((l, i) => (
+                <div key={i} style={{ color: l.startsWith('shell@') ? '#22d3ee' : undefined }}>{l}</div>
+              ))}
+            </div>
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
             <input
@@ -370,7 +381,7 @@ export default function AndroidLab() {
           <button className="sf-btn sf-btn-accent" onClick={snapshot}>Capture snapshot</button>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
             {snaps.map((s) => (
-              <div key={s.id} className="sf-glass" style={{ borderRadius: 10, padding: '10px 14px', fontSize: 13, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+              <div key={s.id} className="sf-glass" onPointerMove={glassGlow} style={{ borderRadius: 10, padding: '10px 14px', fontSize: 13, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
                 <code style={{ color: '#a5f3fc' }}>{s.id}</code>
                 <span style={{ color: '#64748b' }}>{new Date(s.at).toLocaleTimeString()}</span>
                 <code>state:{s.hash}</code>

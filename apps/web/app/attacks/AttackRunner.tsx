@@ -1,8 +1,9 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Card, Badge, Empty } from '../components/ui';
+import { Card, Badge, Empty, glassGlow } from '../components/ui';
 import { apiFetch, getAccess } from '../lib/auth';
+import { AttestField, SessionChip } from '../components/Gate';
 import { SCENARIOS, type Scenario } from './scenarios';
 
 // Attack runner: executes a scenario's steps as REAL backend operations
@@ -95,37 +96,60 @@ export default function AttackRunner() {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 340px) 1fr', gap: 16, alignItems: 'start' }}>
       <Card style={{ marginTop: 0 }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <motion.div
+          initial="hidden"
+          animate="show"
+          variants={{ hidden: {}, show: { transition: { staggerChildren: 0.06 } } }}
+          style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
+        >
           {SCENARIOS.map((s) => (
-            <button
+            <motion.div
               key={s.id}
-              onClick={() => { setSel(s); setLog([]); setVerdict(null); }}
-              className={s.id === sel.id ? 'sf-btn sf-btn-accent' : 'sf-btn'}
-              style={{ textAlign: 'left', display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between' }}
+              variants={{
+                hidden: { opacity: 0, x: -14 },
+                show: { opacity: 1, x: 0, transition: { duration: 0.4, ease: [0.22, 1, 0.36, 1] } },
+              }}
             >
-              <span>{s.name}</span>
-              <Badge tone={SEV[s.severity]}>{s.severity.toUpperCase()}</Badge>
-            </button>
+              <button
+                onClick={() => { setSel(s); setLog([]); setVerdict(null); }}
+                className={s.id === sel.id ? 'sf-btn sf-btn-accent' : 'sf-btn'}
+                style={{ width: '100%', textAlign: 'left', display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between' }}
+              >
+                <span>{s.name}</span>
+                <Badge tone={SEV[s.severity]}>{s.severity.toUpperCase()}</Badge>
+              </button>
+            </motion.div>
           ))}
-        </div>
+        </motion.div>
         <p style={{ color: '#64748b', fontSize: 12, marginTop: 12, lineHeight: 1.6 }}>{sel.emb3d}</p>
       </Card>
 
       <Card style={{ marginTop: 0 }}>
+        {running && <div aria-hidden className="sf-run-scan" />}
         <h2 style={{ margin: '0 0 4px' }}>{sel.name}</h2>
         <p style={{ color: '#94a3b8', fontSize: 14, lineHeight: 1.6 }}>{sel.description}</p>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '12px 0', alignItems: 'center' }}>
-          {signedIn === false ? (
-            <a className="sf-btn sf-btn-accent" href="/login">Sign in to execute</a>
-          ) : (
-            <span style={{ fontSize: 12, letterSpacing: 2, color: signedIn ? '#6ee7b7' : '#64748b' }}>
-              {signedIn ? '● SIGNED IN' : '○ CHECKING SESSION…'}
-            </span>
-          )}
-          <input className="sf-input" placeholder="attestation id" value={att} onChange={(e) => setAtt(e.target.value)} style={{ flex: '1 1 160px' }} />
-          <button className="sf-btn sf-btn-accent" onClick={run} disabled={running}>{running ? 'Running…' : 'Execute scenario'}</button>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', margin: '12px 0', alignItems: 'center' }}>
+          <SessionChip signedIn={signedIn} cta="Sign in to execute" />
+          <AttestField att={att} onChange={setAtt} />
+          <button
+            className="sf-btn sf-btn-accent"
+            onClick={run}
+            disabled={running || signedIn !== true}
+            title={signedIn !== true && !running ? 'Sign in first — each run is attributed to your account and its attestation' : undefined}
+          >
+            {running ? 'Running…' : 'Execute scenario'}
+          </button>
         </div>
-        {log.length === 0 && !running && <Empty title="Armed, not fired" hint={`${sel.steps.length} steps will execute against a fresh ${sel.arch} twin.`} />}
+        {log.length === 0 && !running && (
+          <Empty
+            title={signedIn === false ? 'Locked until you sign in' : 'Armed, not fired'}
+            hint={
+              signedIn === false
+                ? 'Sign in at /login and mint an attestation id at /devices, then the full sequence runs against a real twin.'
+                : `${sel.steps.length} steps will execute against a fresh ${sel.arch} twin.`
+            }
+          />
+        )}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontFamily: 'monospace', fontSize: 13 }}>
           {log.map((l, i) => (
             <motion.div key={i} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} style={{ color: l.ok ? '#6ee7b7' : '#fca5a5' }}>
@@ -134,12 +158,19 @@ export default function AttackRunner() {
           ))}
         </div>
         {verdict && (
-          <div className="sf-glass" style={{ borderRadius: 12, padding: 14, marginTop: 14, fontSize: 14, borderColor: verdict.startsWith('VULNERABLE') ? 'rgba(244,63,94,0.4)' : 'rgba(245,158,11,0.4)' }}>
+          <motion.div
+            initial={{ opacity: 0, y: 16, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ type: 'spring', stiffness: 210, damping: 20 }}
+            className="sf-glass"
+            onPointerMove={glassGlow}
+            style={{ borderRadius: 12, padding: 14, marginTop: 14, fontSize: 14, borderColor: verdict.startsWith('VULNERABLE') ? 'rgba(244,63,94,0.4)' : 'rgba(245,158,11,0.4)' }}
+          >
             {verdict}
             {sessionId && verdict.startsWith('VULNERABLE') && (
               <div style={{ marginTop: 8 }}><a className="sf-btn" href="/emulator">Open in emulator →</a></div>
             )}
-          </div>
+          </motion.div>
         )}
       </Card>
     </div>

@@ -28,16 +28,17 @@ type Session = {
 };
 
 const sessions = {
-  async get(id: string) {
-    return getSessionDoc<Session>(id);
+  async get(orgId: string, id: string) {
+    return getSessionDoc<Session>(orgId, id);
   },
-  async set(s: Session) {
-    await putSession(s.id, s);
+  async set(orgId: string, s: Session) {
+    await putSession(orgId, s.id, s);
   },
 };
 // Prototype store cap: eviction lives in the store layer (pg: unbounded table,
 // memory: oldest-first past 200 — see store.ts). Listing is intentionally absent:
 // sessions are addressed by id from pipeline runs, never enumerated.
+const orgOf = (req: Request) => (req as unknown as { user?: { org?: string } }).user?.org ?? '';
 const paramId = (req: Request) => {
   const id = req.params.id as string | string[] | undefined;
   return Array.isArray(id) ? id[0] : (id ?? '');
@@ -65,20 +66,20 @@ router.post('/sessions', requireAuth, requireAttestation, async (req, res) => {
     snapshots: [],
     crashes: [],
   };
-  await sessions.set(s);
+  await sessions.set(orgOf(req), s);
   await audit('emulator_boot', { ip: req.ip });
   res.status(201).json(s);
 });
 
 router.get('/sessions/:id', requireAuth, async (req, res) => {
-  const s = await sessions.get(paramId(req));
+  const s = await sessions.get(orgOf(req), paramId(req));
   if (!s) return res.status(404).json({ error: 'session not found' });
   res.json(s);
 });
 
 // POST …/input — feed console input (a test action → attestation required)
 router.post('/sessions/:id/input', requireAuth, requireAttestation, async (req, res) => {
-  const s = await sessions.get(paramId(req));
+  const s = await sessions.get(orgOf(req), paramId(req));
   if (!s) return res.status(404).json({ error: 'session not found' });
   if (s.status === 'stopped') return res.status(409).json({ error: 'session stopped' });
   const p = z.object({ input: z.string().min(1).max(4096) }).safeParse(req.body);
@@ -86,13 +87,13 @@ router.post('/sessions/:id/input', requireAuth, requireAttestation, async (req, 
   s.inputTrace.push(p.data.input);
   s.bootLog.push(`> ${p.data.input}`);
   if (s.status === 'crashed') s.status = 'ready';
-  await sessions.set(s);
+  await sessions.set(orgOf(req), s);
   res.json(s);
 });
 
 // POST …/snapshots — capture reproducible state
 router.post('/sessions/:id/snapshots', requireAuth, async (req, res) => {
-  const s = await sessions.get(paramId(req));
+  const s = await sessions.get(orgOf(req), paramId(req));
   if (!s) return res.status(404).json({ error: 'session not found' });
   if (s.status === 'stopped') return res.status(409).json({ error: 'session stopped' });
   const note = typeof req.body?.note === 'string' ? req.body.note.slice(0, 200) : undefined;
@@ -104,13 +105,13 @@ router.post('/sessions/:id/snapshots', requireAuth, async (req, res) => {
     ...(note ? { note } : {}),
   };
   s.snapshots.push(snap);
-  await sessions.set(s);
+  await sessions.set(orgOf(req), s);
   res.status(201).json(snap);
 });
 
 // POST …/replay — step-by-step replay of a snapshot's input trace
 router.post('/sessions/:id/replay', requireAuth, async (req, res) => {
-  const s = await sessions.get(paramId(req));
+  const s = await sessions.get(orgOf(req), paramId(req));
   if (!s) return res.status(404).json({ error: 'session not found' });
   const p = z.object({ snapshotId: z.string().min(1) }).safeParse(req.body);
   if (!p.success) return res.status(400).json({ error: 'snapshotId required' });
@@ -126,7 +127,7 @@ router.post('/sessions/:id/replay', requireAuth, async (req, res) => {
 
 // POST …/crash — record anomaly with auto-snapshot repro bundle
 router.post('/sessions/:id/crash', requireAuth, requireAttestation, async (req, res) => {
-  const s = await sessions.get(paramId(req));
+  const s = await sessions.get(orgOf(req), paramId(req));
   if (!s) return res.status(404).json({ error: 'session not found' });
   const p = z.object({ reason: z.string().min(1).max(512) }).safeParse(req.body);
   if (!p.success) return res.status(400).json({ error: 'reason required' });
@@ -141,7 +142,7 @@ router.post('/sessions/:id/crash', requireAuth, requireAttestation, async (req, 
   s.status = 'crashed';
   const crash: Crash = { id: `crash_${randomUUID().slice(0, 8)}`, reason: p.data.reason, snapshotId: snap.id, inputTrace: [...s.inputTrace], at: new Date().toISOString() };
   s.crashes.push(crash);
-  await sessions.set(s);
+  await sessions.set(orgOf(req), s);
   res.status(201).json(crash);
 });
 

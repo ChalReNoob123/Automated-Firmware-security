@@ -1,4 +1,5 @@
 import AmbientScene from '../AmbientScene';
+import { PageHeader } from '../motionKit';
 import UsbConnector from '../UsbConnector';
 
 export default function DevicesPage() {
@@ -6,12 +7,11 @@ export default function DevicesPage() {
     <>
       <AmbientScene />
       <main className="sf-page">
-        <p className="sf-eyebrow">SENTINELFORGE v3 · ONBOARDING</p>
-        <h1 className="sf-h1 sf-gradient-text">Plug in. Pair. Prove ownership.</h1>
-        <p className="sf-sub">
-          The cable is the onboarding: pair over USB, confirm you are authorized to test the
-          hardware, and the attestation unlocks the twin, the lab and attack simulation.
-        </p>
+        <PageHeader
+          eyebrow="SENTINELFORGE v3 · ONBOARDING"
+          title="Plug in. Pair. Prove ownership."
+          sub="Detection is automatic: SentinelForge reads the real Windows device tree through the local API, so what you plug in appears without a picker. Select a device, confirm you are authorized to test it, and the attestation unlocks the twin, the lab and attack simulation."
+        />
         <div style={{ marginTop: 8 }}>
           <UsbConnector />
         </div>

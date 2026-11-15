@@ -1,6 +1,6 @@
 'use client';
 import { useMemo, useRef } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 
 // Cinematic hero scene: device core + exploded shards + threat-radar rings + sweep + starfield.
@@ -166,6 +166,21 @@ function Rig() {
   return null;
 }
 
+// Viewport-aware placement: the copy owns the left ~62% of any width, so the
+// ensemble hugs the right edge and shrinks on narrow viewports — at 1280px it
+// no longer slides under the headline (the old fixed [4.2, -0.35, 0] reached
+// ~64% of the frame at that width and clipped the text).
+function Ensemble() {
+  const vp = useThree((s) => s.viewport);
+  return (
+    <group position={[vp.width * 0.5, -0.55, 0]} scale={Math.min(0.75, vp.width / 22.4)}>
+      <Core />
+      <Shards />
+      <Radar />
+    </group>
+  );
+}
+
 export default function HeroScene() {
   return (
     <Canvas
@@ -179,10 +194,10 @@ export default function HeroScene() {
       <ambientLight intensity={0.55} />
       <pointLight position={[8, 6, 8]} intensity={60} color="#22d3ee" />
       <pointLight position={[-8, -4, 6]} intensity={50} color="#a855f7" />
-      <Starfield />
-      <Core />
-      <Shards />
-      <Radar />
+        <Starfield />
+      {/* The hero copy owns the left half — the viewport-aware Ensemble keeps the
+          device core right of that zone at any window size. */}
+      <Ensemble />
       <Rig />
     </Canvas>
   );

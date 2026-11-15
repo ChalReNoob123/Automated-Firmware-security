@@ -2,7 +2,7 @@
 // Ships with an in-process bus; swap `publish` for a NATS/Kafka publisher in prod without
 // touching stage code (same event envelope).
 export type BusEvent = {
-  type: 'stage.started' | 'stage.done' | 'stage.failed' | 'sbom.ready' | 'handoff.discovery';
+  type: 'stage.started' | 'stage.done' | 'stage.failed' | 'sbom.ready' | 'handoff.discovery' | 'pipeline.metrics';
   firmwareId: string;
   runId: string;
   stage?: string;

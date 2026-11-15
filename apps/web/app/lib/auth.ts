@@ -4,10 +4,14 @@
 // cookie (same-site across localhost ports, Secure in prod) silently mints new
 // access tokens on boot and on 401-retry. Attestation ids stay in localStorage:
 // they authorize test scope, not identity, and must survive reloads for UX.
-const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+// One API base URL for the whole app — import { API_URL } everywhere instead of
+// re-reading process.env in each component.
+export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+const API = API_URL;
 
 let access: string | null = null;
 let refreshInflight: Promise<string | null> | null = null;
+let refreshFailedUntil = 0; // dedupes the browser's unavoidable 401 net-logs
 
 export function setAccess(token: string | null) {
   access = token;
@@ -15,13 +19,18 @@ export function setAccess(token: string | null) {
 
 async function silentRefresh(): Promise<string | null> {
   if (!refreshInflight) {
+    if (Date.now() < refreshFailedUntil) return null; // just failed — don't re-ping
     refreshInflight = (async () => {
       try {
         const r = await fetch(`${API}/v1/auth/refresh`, { method: 'POST', credentials: 'include' });
-        if (!r.ok) return null;
+        if (!r.ok) {
+          refreshFailedUntil = Date.now() + 10_000;
+          return null;
+        }
         const j = await r.json();
         return (j.accessToken as string) ?? null;
       } catch {
+        refreshFailedUntil = Date.now() + 10_000;
         return null;
       } finally {
         refreshInflight = null;
@@ -64,5 +73,21 @@ export async function logoutEverywhere(): Promise<void> {
     /* already gone */
   } finally {
     access = null;
+  }
+}
+
+// Who is signed in? Resolves null when there is no live session (or the
+// account vanished server-side). Used by the nav session chip and any UI that
+// needs the user's name/role without re-asking the API in every panel.
+export async function getMe(): Promise<{ username: string; email: string; role: string; orgId: string } | null> {
+  const tok = await getAccess();
+  if (!tok) return null;
+  try {
+    const r = await apiFetch('/v1/auth/me');
+    if (!r.ok) return null;
+    const j = (await r.json()) as { user?: { username: string; email: string; role: string; orgId: string } };
+    return j.user ?? null;
+  } catch {
+    return null;
   }
 }

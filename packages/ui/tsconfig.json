@@ -1,0 +1,18 @@
+{
+  // Scoped to this package only — without it, `tsc --noEmit` walks up to the root
+  // tsconfig (a legacy Vite-starter config that includes the stale `src/` folder)
+  // and reports pre-existing errors from the retired LoginScreen component.
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "skipLibCheck": true,
+    "types": [],
+    "strict": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx"
+  },
+  "include": ["src"]
+}

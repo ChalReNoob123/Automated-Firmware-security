@@ -1,7 +1,7 @@
 // SentinelForge workers entry — Modules 2+3: acquisition → unpack → static+secrets → SBOM/VEX → RoT.
 // Later stages (discovery/fuzz, network, report) are sequenced here but
 // owned by Modules 5–7; see pipeline.ts handoff.
-export { PIPELINE_ORDER, runPipeline, getRun, type RunState, type PipelineStage, type StageStatus } from './pipeline.js';
+export { PIPELINE_ORDER, runPipeline, getRun, type RunState, type RunMetrics, type PipelineStage, type StageStatus } from './pipeline.js';
 export { acquire, type FirmwareRecord } from './stages/acquisition.js';
 export { detectContainers, planUnpack, type ContainerHit, type UnpackPlan } from './stages/unpack.js';
 export { scanSecrets, scanSinks, DANGEROUS_SINKS, YARA_PACKS } from './stages/static.js';
@@ -10,13 +10,15 @@ export { verifyRootOfTrust, verifyChain, checkRollback, probeDebugInterfaces, cl
 export { startSession, getSession, feedInput, takeSnapshot, replay, recordCrash, stopSession, qemuAvailable, type BootSession, type EmulatorConfig, type Snapshot, type CrashRecord } from './stages/emulator.js';
 export { parseCallGraph, traceTaint, callersOf, TAINT_SOURCES, TAINT_SINKS, SANITIZERS, type TaintPath, type CallGraph } from './stages/taint.js';
 export { fuzz, demoHarness, noveltyGuidance, DEFAULT_DICT, type Harness, type GuidanceModel, type FuzzResult, type FuzzCrash } from './stages/fuzz.js';
-export { correlate, confidenceOf, priorityOf, type EngineId, type Confidence, type Candidate, type ScoredFinding, type SsvcDecision } from './stages/consensus.js';
+export { correlate, confidenceOf, priorityOf, familiesOf, ENGINE_FAMILY, type EngineId, type Confidence, type Candidate, type ScoredFinding, type SsvcDecision } from './stages/consensus.js';
 export { matchSbom, verdictFor, parseNvd, demoAdvisories, type CveAdvisory, type SbomRef, type ComponentMatch, type RadarVerdict } from './stages/nday.js';
 export { verifyPatch, type PatchReport, type PatchVerdict } from './stages/patchVerify.js';
 export { parseElf, carveGzip, detectNativeTools, type ElfInfo, type GzipMember, type NativeCaps } from './stages/binary.js';
 export { strictTarget, buggyGattTarget, fuzzProtocol, BLE_GATT, MQTT, MODBUS, type Machine, type ProtoFinding, type ProtoResult } from './stages/protocol.js';
 export { GenomeIndex, shingles, jaccard, minhash, minhashSimilarity, SHINGLE_N, SHINGLE_STRIDE, MINHASH_K, type GenomeHit } from './stages/genome.js';
 export { publish, subscribe } from './bus.js';
+export { offload, getPoolInfo, setPoolMode, createLimiter, type PoolMode } from './pool.js';
+export { runJob, type PoolJob, type PoolResult } from './pool/jobs.js';
 
 import { runPipeline } from './pipeline.js';
 import { startSession, feedInput, takeSnapshot, replay, recordCrash } from './stages/emulator.js';

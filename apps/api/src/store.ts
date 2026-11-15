@@ -124,6 +124,15 @@ export async function revokeRefresh(jti: string): Promise<void> {
   if (r) r.revoked = true;
 }
 
+// Kill every live refresh token for a user (refresh-reuse / theft response).
+export async function revokeAllRefreshForUser(userId: string): Promise<void> {
+  if (pool) {
+    await pool.query(`UPDATE refresh_tokens SET revoked=TRUE WHERE user_id=$1 AND revoked=FALSE`, [userId]);
+    return;
+  }
+  for (const r of mem.refresh.values()) if (r.user_id === userId) r.revoked = true;
+}
+
 export async function revokeAccess(jti: string, expiresAtMs: number): Promise<void> {
   if (pool) {
     await pool.query(`INSERT INTO revoked_access_tokens (jti, expires_at) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [jti, expiresAtMs]);
@@ -202,26 +211,32 @@ export async function findAttestation(id: string, orgId: string): Promise<Attest
 }
 
 // ── JSONB document stores: emulator sessions + pipeline runs ──
-async function docPut(table: 'emulator_sessions' | 'pipeline_runs', map: Map<string, { data: unknown; updated: number }>, id: string, data: unknown): Promise<void> {
+// TENANT-SCOPED: every read/write filters by org_id. A session/run id alone is
+// NOT an authorization proof — without this, any signed-in org could read
+// another tenant's twin (cross-tenant IDOR, now regression-tested).
+async function docPut(table: 'emulator_sessions' | 'pipeline_runs', map: Map<string, { data: unknown; updated: number }>, orgId: string, id: string, data: unknown): Promise<void> {
   if (pool) {
     await pool.query(
-      `INSERT INTO ${table} (id, data, updated_at) VALUES ($1,$2,now()) ON CONFLICT (id) DO UPDATE SET data=$2, updated_at=now()`,
-      [id, JSON.stringify(data)]
+      `INSERT INTO ${table} (id, org_id, data, updated_at) VALUES ($1,$2,$3,now())
+       ON CONFLICT (id) DO UPDATE SET data=$3, org_id=$2, updated_at=now()`,
+      [id, orgId, JSON.stringify(data)]
     );
     return;
   }
-  map.set(id, { data, updated: Date.now() });
+  map.set(id, { data: { ...(data as Record<string, unknown>), org_id: orgId }, updated: Date.now() });
 }
 
-async function docGet<T>(table: 'emulator_sessions' | 'pipeline_runs', map: Map<string, { data: unknown; updated: number }>, id: string): Promise<T | undefined> {
+async function docGet<T>(table: 'emulator_sessions' | 'pipeline_runs', map: Map<string, { data: unknown; updated: number }>, orgId: string, id: string): Promise<T | undefined> {
   if (pool) {
-    const r = await pool.query(`SELECT data FROM ${table} WHERE id=$1`, [id]);
+    const r = await pool.query(`SELECT data FROM ${table} WHERE id=$1 AND org_id=$2`, [id, orgId]);
     return r.rows[0]?.data as T | undefined;
   }
-  return map.get(id)?.data as T | undefined;
+  const row = map.get(id)?.data as (T & { org_id?: string }) | undefined;
+  if (!row || row.org_id !== orgId) return undefined;
+  return row;
 }
 
-export const putSession = async (id: string, data: unknown) => {
+export const putSession = async (orgId: string, id: string, data: unknown) => {
   // Memory fallback is bounded: oldest session evicted past 200 (pg side is
   // unbounded by design — retention policy owns cleanup there).
   if (!pool && !mem.sessions.has(id)) {
@@ -231,8 +246,88 @@ export const putSession = async (id: string, data: unknown) => {
       mem.sessions.delete(oldest);
     }
   }
-  return docPut('emulator_sessions', mem.sessions, id, data);
+  return docPut('emulator_sessions', mem.sessions, orgId, id, data);
 };
-export const getSessionDoc = <T>(id: string) => docGet<T>('emulator_sessions', mem.sessions, id);
-export const putRun = (id: string, data: unknown) => docPut('pipeline_runs', mem.runs, id, data);
-export const getRunDoc = <T>(id: string) => docGet<T>('pipeline_runs', mem.runs, id);
+
+// ── Findings (analyst queue persistence; mirrors packages/db findings table) ──
+export type FindingRow = {
+  id: string;
+  org_id: string;
+  firmware_id: string | null;
+  title: string;
+  emb3d: string | null;
+  cvss_v4: number | null;
+  epss: number | null;
+  ssvc: string | null;
+  confidence: 'Confirmed' | 'Likely' | 'Unconfirmed';
+  corroborating_engines: string[];
+  why_flagged: string | null;
+  snapshot_ref: string | null;
+  created_at: string;
+};
+
+export type NewFinding = {
+  orgId: string;
+  firmwareId?: string;
+  title: string;
+  emb3d?: string;
+  cvss?: number;
+  epss?: number;
+  ssvc?: string;
+  confidence: FindingRow['confidence'];
+  engines: string[];
+  why?: string;
+  snapshotRef?: string;
+};
+
+const findingMem = new Map<string, FindingRow[]>();
+
+export async function createFinding(f: NewFinding): Promise<FindingRow> {
+  if (pool) {
+    const r = await pool.query(
+      `INSERT INTO findings (org_id, firmware_id, title, emb3d, cvss_v4, epss, ssvc, confidence, corroborating_engines, why_flagged, snapshot_ref)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+       RETURNING id, org_id, firmware_id, title, emb3d, cvss_v4, epss, ssvc, confidence, corroborating_engines, why_flagged, snapshot_ref, created_at`,
+      [f.orgId, f.firmwareId ?? null, f.title, f.emb3d ?? null, f.cvss ?? null, f.epss ?? null, f.ssvc ?? null, f.confidence, f.engines, f.why ?? null, f.snapshotRef ?? null]
+    );
+    return r.rows[0];
+  }
+  const row: FindingRow = {
+    id: randomUUID(), org_id: f.orgId, firmware_id: f.firmwareId ?? null, title: f.title,
+    emb3d: f.emb3d ?? null, cvss_v4: f.cvss ?? null, epss: f.epss ?? null, ssvc: f.ssvc ?? null,
+    confidence: f.confidence, corroborating_engines: f.engines, why_flagged: f.why ?? null,
+    snapshot_ref: f.snapshotRef ?? null, created_at: new Date().toISOString(),
+  };
+  const list = findingMem.get(f.orgId) ?? [];
+  list.unshift(row);
+  findingMem.set(f.orgId, list.slice(0, 1000));
+  return row;
+}
+
+export async function listFindings(orgId: string, opts: { confidence?: string; limit?: number } = {}): Promise<FindingRow[]> {
+  const limit = Math.min(Math.max(opts.limit ?? 100, 1), 500);
+  if (pool) {
+    const r = await pool.query(
+      `SELECT id, org_id, firmware_id, title, emb3d, cvss_v4, epss, ssvc, confidence, corroborating_engines, why_flagged, snapshot_ref, created_at
+       FROM findings WHERE org_id=$1 ${opts.confidence ? 'AND confidence=$2' : ''} ORDER BY created_at DESC LIMIT $${opts.confidence ? 3 : 2}`,
+      opts.confidence ? [orgId, opts.confidence, limit] : [orgId, limit]
+    );
+    return r.rows;
+  }
+  const list = findingMem.get(orgId) ?? [];
+  return (opts.confidence ? list.filter((f) => f.confidence === opts.confidence) : list).slice(0, limit);
+}
+
+export async function deleteFinding(id: string, orgId: string): Promise<boolean> {
+  if (pool) {
+    const r = await pool.query(`DELETE FROM findings WHERE id=$1 AND org_id=$2`, [id, orgId]);
+    return (r.rowCount ?? 0) > 0;
+  }
+  const list = findingMem.get(orgId) ?? [];
+  const next = list.filter((f) => f.id !== id);
+  findingMem.set(orgId, next);
+  return next.length !== list.length;
+}
+export const getSessionDoc = <T>(orgId: string, id: string) => docGet<T>('emulator_sessions', mem.sessions, orgId, id);
+export const putRun = (orgId: string, id: string, data: unknown) => docPut('pipeline_runs', mem.runs, orgId, id, data);
+export const getRunDoc = <T>(orgId: string, id: string) => docGet<T>('pipeline_runs', mem.runs, orgId, id);

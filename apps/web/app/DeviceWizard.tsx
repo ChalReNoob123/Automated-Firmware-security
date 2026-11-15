@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
+import { glassGlow } from './components/ui';
 
 // Module 1 (spec §3): transport picker + attestation explainer. Real pairing and
 // logged attestation happen in /devices (WebUSB) — this wizard routes there with
@@ -29,6 +30,7 @@ export default function DeviceWizard() {
       viewport={{ once: true, margin: '-60px' }}
       transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
       className="sf-glass"
+      onPointerMove={glassGlow}
       style={{ borderRadius: 20, padding: 24, marginTop: 28 }}
     >
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 18 }}>

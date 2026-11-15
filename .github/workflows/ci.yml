@@ -38,3 +38,13 @@ jobs:
       - run: npm --prefix apps/api run test
       - run: npm --prefix apps/api run build
       - run: npm --prefix apps/web run build
+      # Dependency hygiene gate — production dependencies must be free of
+      # high/critical advisories. Dev-only tooling is reported separately
+      # (see SECURITY.md: Vite 7 advisory belongs to the legacy SentinelGrid
+      # dev server, which is not shipped).
+      - name: audit (production deps, blocking)
+        run: npm audit --workspaces --omit=dev --audit-level=high
+      - name: secret scan (no committed credentials)
+        run: |
+          ! git grep -nIE "(ghp_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----)" \
+            -- . ':!*.lock' ':!SECURITY.md' ':!apps/workers/tests/*' ':!apps/api/tests/*'

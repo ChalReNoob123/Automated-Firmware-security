@@ -6,6 +6,10 @@ import speakeasy from 'speakeasy';
 import jwt from 'jsonwebtoken';
 import { app } from '../src/app.js';
 
+// The app loads .env (dotenv) at import time - read the LIVE secret so the suite is
+// independent of the working directory and never asserts the wrong reason.
+const SECRET = process.env.JWT_SECRET ?? 'dev-secret-change-me';
+
 const api = request(app);
 let token = '';
 let attId = '';
@@ -74,7 +78,7 @@ describe('auth', () => {
     await agent.get('/v1/auth/me').set('Authorization', `Bearer ${r.body.accessToken}`).expect(401);
   });
   it('enforces RBAC on the audit trail', async () => {
-    const analyst = jwt.sign({ sub: 'x', org: 'y', role: 'Analyst', jti: 't-analyst' }, 'dev-secret-change-me', { expiresIn: '15m', issuer: 'sentinelforge' });
+    const analyst = jwt.sign({ sub: 'x', org: 'y', role: 'Analyst', jti: 't-analyst' }, SECRET, { expiresIn: '15m', issuer: 'sentinelforge', audience: 'sentinelforge-api' });
     await api.get('/v1/auth/audit').expect(401);
     await api.get('/v1/auth/audit').set('Authorization', `Bearer ${analyst}`).expect(403);
     const ok = await api.get('/v1/auth/audit').set('Authorization', `Bearer ${token}`).expect(200);
@@ -111,11 +115,37 @@ describe('analysis APIs', () => {
     expect(rep.body.match).toBe(true);
     await api.post(`/v1/emulator/sessions/${s.body.id}/crash`).set(H()).send({ reason: 't' }).expect(201);
   });
-  it('queues pipeline runs', async () => {
+  it('queues pipeline runs — and demo profiles execute with real pooled-engine metrics', async () => {
     const r = await api.post('/v1/pipeline/runs').set(H()).send({ firmwareId: 'fw', version: '1' }).expect(202);
     await api.get(`/v1/pipeline/runs/${r.body.runId}`).set('Authorization', `Bearer ${token}`).expect(200);
     await api.get('/v1/pipeline/runs/nope').set('Authorization', `Bearer ${token}`).expect(404);
-  });
+    // legacy alias runs the same gate chain (regression: missing requireAuth dead-locked it)
+    await api.post('/v1/pipeline/run').set(H()).expect(202);
+    await api.post('/v1/pipeline/run').set('Authorization', `Bearer ${token}`).expect(403);
+
+    // round 15: demo profile → the queued run is EXECUTED by the pooled engine
+    const d = await api.post('/v1/pipeline/runs').set(H()).send({ firmwareId: 'fw-demo', version: '2', profile: 'demo' }).expect(202);
+    let doc: { status: string; metrics?: { wallMs: number; jobsDispatched: number; fuzzExecsPerSec: number | null; protocolExecs: number | null; poolMode: string }; findingsCount?: number; profile?: string } | undefined;
+    for (let i = 0; i < 40; i++) {
+      await new Promise((res) => setTimeout(res, 250));
+      const g = await api.get(`/v1/pipeline/runs/${d.body.runId}`).set('Authorization', `Bearer ${token}`).expect(200);
+      doc = g.body;
+      if (doc.status === 'done' || doc.status === 'failed') break;
+    }
+    expect(doc?.status).toBe('done');
+    expect(doc?.profile).toBe('demo');
+    expect(doc?.metrics?.wallMs).toBeGreaterThan(0);
+    expect(doc?.metrics?.jobsDispatched).toBeGreaterThan(0);
+    expect(doc?.metrics?.fuzzExecsPerSec ?? 0).toBeGreaterThan(0);
+    expect(doc?.metrics?.protocolExecs).toBe(4000);
+    expect(doc?.findingsCount ?? 0).toBeGreaterThan(0);
+
+    const m = await api.get('/v1/pipeline/metrics').set('Authorization', `Bearer ${token}`).expect(200);
+    expect(m.body.runs).toBeGreaterThan(0);
+    expect(m.body.avgWallMs).toBeGreaterThan(0);
+    expect(m.body.poolMode).toBeTruthy();
+    expect(m.body.recent.length).toBeGreaterThan(0);
+  }, 20000);
   it('builds graphs and answers copilot', async () => {
     const g = await api.post('/v1/graph/build').set('Authorization', `Bearer ${token}`).send({ taintPaths: [{ source: 'recv', sink: 'system', path: ['recv', 'system'] }] }).expect(201);
     expect(g.body.paths[0].nodes).toContain('asset:root-shell');
@@ -146,5 +176,58 @@ describe('analysis APIs', () => {
     const r = await api.get('/v1/capabilities').expect(200);
     expect(r.body.engines).toContain('consensus');
     expect(r.body.persistence).toBe('memory (dev fallback)');
+  });
+  it('persists findings with RBAC and filters', async () => {
+    const H = { Authorization: `Bearer ${token}` };
+    await api.post('/v1/findings').set(H).send({ title: 'x' }).expect(400);
+    await api.post('/v1/findings').send({ title: 'Tainted strcpy sink', confidence: 'Confirmed' }).expect(401);
+    const analyst = (await import('jsonwebtoken')).default.sign(
+      { sub: 'x', org: 'y', role: 'Analyst', jti: 't-writer' }, SECRET, { expiresIn: '15m', issuer: 'sentinelforge', audience: 'sentinelforge-api' }
+    );
+    // Analyst holds triage:write → allowed; Viewer does not → 403
+    await api.post('/v1/findings').set('Authorization', `Bearer ${analyst}`).send({ title: 'Analyst triage note', confidence: 'Likely' }).expect(201);
+    const viewer = (await import('jsonwebtoken')).default.sign(
+      { sub: 'x', org: 'y', role: 'Viewer', jti: 't-viewer' }, SECRET, { expiresIn: '15m', issuer: 'sentinelforge', audience: 'sentinelforge-api' }
+    );
+    await api.post('/v1/findings').set('Authorization', `Bearer ${viewer}`).send({ title: 'Viewer attempt', confidence: 'Likely' }).expect(403);
+    const created = await api.post('/v1/findings').set(H).send({
+      title: 'Tainted strcpy sink', emb3d: 'EMB3D: test', cvss: 9.0, confidence: 'Confirmed',
+      engines: ['taint', 'fuzz'], why: 'test trace', snapshotRef: 'snap_1',
+    }).expect(201);
+    expect(created.body.id.length).toBeGreaterThan(10);
+    const all = await api.get('/v1/findings').set(H).expect(200);
+    expect(all.body.findings.length).toBeGreaterThanOrEqual(1);
+    const filtered = await api.get('/v1/findings?confidence=Likely').set(H).expect(200);
+    expect(filtered.body.findings.every((f: { confidence: string }) => f.confidence === 'Likely')).toBe(true);
+    await api.get('/v1/findings?confidence=bogus').set(H).expect(400);
+    await api.delete(`/v1/findings/${created.body.id}`).set(H).expect(200);
+    await api.delete(`/v1/findings/${created.body.id}`).set(H).expect(404);
+    const seeded = await api.post('/v1/findings/demo').set(H).expect(201);
+    expect(seeded.body.seeded).toBe(5);
+  });
+});
+
+// Security headers
+describe('security headers', () => {
+  it('sets CSP header', async () => {
+    const r = await api.get('/health').expect(200);
+    expect(r.headers['content-security-policy']).toContain("default-src 'self'");
+  });
+  it('sets X-Content-Type-Options', async () => {
+    const r = await api.get('/health').expect(200);
+    expect(r.headers['x-content-type-options']).toBe('nosniff');
+  });
+  it('sets X-Request-ID', async () => {
+    const r = await api.get('/health').expect(200);
+    expect(r.headers['x-request-id']).toBeTruthy();
+    expect(r.headers['x-request-id'].length).toBeGreaterThan(0);
+  });
+  it('sets referrer-policy', async () => {
+    const r = await api.get('/health').expect(200);
+    expect(r.headers['referrer-policy']).toBe('strict-origin-when-cross-origin');
+  });
+  it('sets permissions-policy', async () => {
+    const r = await api.get('/health').expect(200);
+    expect(r.headers['permissions-policy']).toBeTruthy();
   });
 });

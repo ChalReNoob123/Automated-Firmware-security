@@ -4,6 +4,20 @@
   "version": "1.0.0",
   "workspaces": ["apps/*", "packages/*"],
   "engines": { "node": ">=20" },
+  "overrides": {
+    "proxy-addr": "^2.0.8",
+    "body-parser": "^2.3.0",
+    "qs": "^6.16.1",
+    "ip-address": "^10.7.4",
+    "form-data": "^4.0.6",
+    "postcss": "^8.5.31",
+    "source-map-js": "^1.2.2",
+    "baseline-browser-mapping": "^2.11.0",
+    "vitest": {
+      "vite": "^8.3.5",
+      "esbuild": "^0.28.2"
+    }
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",
