@@ -20,6 +20,7 @@ const ITEMS: Item[] = [
   { eyebrow: 'PAGES', label: 'Copilot', hint: 'Ask the engines', href: '/copilot' },
   { eyebrow: 'ACCOUNT', label: 'Login', hint: 'Back to the bench', href: '/login' },
   { eyebrow: 'ACCOUNT', label: 'Sign up', hint: 'Claim a workspace', href: '/signup' },
+  { eyebrow: 'ACCOUNT', label: 'Security center', hint: 'Sessions, password, authenticator', href: '/account' },
 ];
 
 export default function Palette() {

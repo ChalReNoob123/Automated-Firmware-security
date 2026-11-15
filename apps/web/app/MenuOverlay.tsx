@@ -16,6 +16,7 @@ const LINKS: [string, string, string][] = [
   ['Radar', '/radar', 'CVE → verdict in minutes'],
   ['Reports', '/reports', 'Evidence, exported'],
   ['Copilot', '/copilot', 'Ask the engines'],
+  ['Account', '/account', 'Sessions · keys · posture'],
 ];
 
 export default function MenuOverlay({ open, onClose }: { open: boolean; onClose: () => void }) {

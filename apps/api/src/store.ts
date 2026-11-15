@@ -24,7 +24,7 @@ export type UserRow = {
 const mem = {
   orgs: new Map<string, { id: string; name: string }>(),
   users: new Map<string, UserRow>(),
-  refresh: new Map<string, { user_id: string; expires_at: number; revoked: boolean }>(),
+  refresh: new Map<string, RefreshRecord>(),
   revokedAccess: new Map<string, number>(),
   devices: new Map<string, DeviceRow>(),
   attestations: new Map<string, AttestationRow>(),
@@ -104,33 +104,100 @@ export async function storeRefresh(jti: string, userId: string, expiresAt: numbe
     await pool.query(`INSERT INTO refresh_tokens (jti, user_id, expires_at) VALUES ($1,$2,$3)`, [jti, userId, expiresAt]);
     return;
   }
-  mem.refresh.set(jti, { user_id: userId, expires_at: expiresAt, revoked: false });
+  mem.refresh.set(jti, { user_id: userId, expires_at: expiresAt, revoked: false, created_at: Date.now() });
 }
 
-export async function findRefresh(jti: string): Promise<{ user_id: string; expires_at: number; revoked: boolean } | undefined> {
+// Why a token is dead — the refresh route treats the two VERY differently:
+//   'rotated' → normal rotation; replaying it is the THEFT signal (family kill)
+//   'revoked' → owner action (device revoke / logout / password rotation);
+//               replaying it is expected from a revoked device → quiet 401
+export type RefreshReason = 'rotated' | 'revoked';
+export type RefreshRecord = { user_id: string; expires_at: number; revoked: boolean; created_at: number; reason?: RefreshReason };
+
+export async function findRefresh(jti: string): Promise<RefreshRecord | undefined> {
   if (pool) {
-    const r = await pool.query(`SELECT user_id, expires_at, revoked FROM refresh_tokens WHERE jti=$1`, [jti]);
-    return r.rows[0];
+    const r = await pool.query(`SELECT user_id, expires_at, revoked, created_at, reason FROM refresh_tokens WHERE jti=$1`, [jti]);
+    if (!r.rows[0]) return undefined;
+    const row = r.rows[0];
+    return {
+      user_id: row.user_id,
+      expires_at: Number(row.expires_at),
+      revoked: row.revoked,
+      created_at: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+      reason: row.reason ?? undefined,
+    };
   }
   return mem.refresh.get(jti);
 }
 
-export async function revokeRefresh(jti: string): Promise<void> {
+export async function revokeRefresh(jti: string, reason: RefreshReason = 'rotated'): Promise<void> {
   if (pool) {
-    await pool.query(`UPDATE refresh_tokens SET revoked=TRUE WHERE jti=$1`, [jti]);
+    await pool.query(`UPDATE refresh_tokens SET revoked=TRUE, reason=$2 WHERE jti=$1`, [jti, reason]);
     return;
   }
   const r = mem.refresh.get(jti);
-  if (r) r.revoked = true;
+  if (r) {
+    r.revoked = true;
+    r.reason = reason;
+  }
 }
 
-// Kill every live refresh token for a user (refresh-reuse / theft response).
-export async function revokeAllRefreshForUser(userId: string): Promise<void> {
+// Kill every live refresh token for a user (owner action: password rotation,
+// revoke-all, re-enrollment). `exceptJti` keeps one session alive (password
+// rotation keeps the caller signed in). Returns how many sessions were killed.
+export async function revokeAllRefreshForUser(userId: string, exceptJti?: string): Promise<number> {
   if (pool) {
-    await pool.query(`UPDATE refresh_tokens SET revoked=TRUE WHERE user_id=$1 AND revoked=FALSE`, [userId]);
-    return;
+    const r = await pool.query(`UPDATE refresh_tokens SET revoked=TRUE, reason='revoked' WHERE user_id=$1 AND revoked=FALSE AND jti <> COALESCE($2,'')`, [userId, exceptJti ?? '']);
+    return r.rowCount ?? 0;
   }
-  for (const r of mem.refresh.values()) if (r.user_id === userId) r.revoked = true;
+  let n = 0;
+  for (const [jti, r] of mem.refresh.entries()) {
+    if (r.user_id === userId && !r.revoked && jti !== exceptJti) {
+      r.revoked = true;
+      r.reason = 'revoked';
+      n++;
+    }
+  }
+  return n;
+}
+
+// ── Session inventory (Account Security Center) ──
+// One row per live refresh token for a user. The jti alone authorizes nothing
+// (tokens are signed server-side), so exposing it to the authenticated owner
+// is safe and is what makes per-device revocation possible.
+export type ActiveRefresh = { jti: string; expires_at: number; created_at: number };
+
+export async function listActiveRefreshForUser(userId: string): Promise<ActiveRefresh[]> {
+  if (pool) {
+    const r = await pool.query(
+      `SELECT jti, expires_at, created_at FROM refresh_tokens WHERE user_id=$1 AND revoked=FALSE AND expires_at > $2 ORDER BY created_at DESC`,
+      [userId, Date.now()]
+    );
+    return r.rows.map((row: { jti: string; expires_at: string | number; created_at: string | Date }) => ({
+      jti: row.jti,
+      expires_at: Number(row.expires_at),
+      created_at: new Date(row.created_at).getTime(),
+    }));
+  }
+  const now = Date.now();
+  return [...mem.refresh.entries()]
+    .filter(([, r]) => r.user_id === userId && !r.revoked && r.expires_at > now)
+    .map(([jti, r]) => ({ jti, expires_at: r.expires_at, created_at: r.created_at }))
+    .sort((a, b) => b.created_at - a.created_at);
+}
+
+// Revoke exactly one session, only if it belongs to this user (self-scoped —
+// the route never accepts a jti across tenants). Owner action → 'revoked'.
+export async function revokeRefreshForUser(userId: string, jti: string): Promise<boolean> {
+  if (pool) {
+    const r = await pool.query(`UPDATE refresh_tokens SET revoked=TRUE, reason='revoked' WHERE jti=$1 AND user_id=$2 AND revoked=FALSE`, [jti, userId]);
+    return (r.rowCount ?? 0) > 0;
+  }
+  const rec = mem.refresh.get(jti);
+  if (!rec || rec.user_id !== userId || rec.revoked) return false;
+  rec.revoked = true;
+  rec.reason = 'revoked';
+  return true;
 }
 
 export async function revokeAccess(jti: string, expiresAtMs: number): Promise<void> {

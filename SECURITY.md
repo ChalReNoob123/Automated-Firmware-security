@@ -1014,6 +1014,111 @@ anti-pattern sweep (`dangerouslySetInnerHTML`, tokens in web storage).
   wiped by the API restarts this round, which is exactly the documented
   behavior.
 
+## Account Security Center Round 20 — session inventory, device revocation, password rotation, authenticator re-enrollment (2026-11-15)
+
+Round 19 hardened the auth surface; round 20 hands users control over their own
+security posture. Until now there was **no way to see which devices held a live
+session, no way to revoke one, no password change flow, and no way to re-enroll
+a lost authenticator** — all standard capabilities a security product should
+model for its own operators.
+
+### API (`/v1/auth/*`, all under requireAuth + the IP limiter)
+
+- **`GET /sessions`** — the caller's live refresh sessions (jti, created,
+  expires-in-days, `current` marker from the request's own cookie). The jti
+  authorizes nothing on its own (tokens are signed server-side); exposing it
+  to its owner is exactly what makes per-device kill possible.
+- **`POST /sessions/revoke`** — kill ONE session, self-scoped (a jti that
+  doesn't belong to the caller 404s, never a cross-user error). Revoking the
+  session your own browser holds acts as a **logout**: the presented access
+  token is denied and the cookie is cleared (`selfRevoked: true`).
+- **`POST /sessions/revoke-all`** — every device out, including the caller.
+- **`POST /password`** — rotate with re-auth (current password verified against
+  bcrypt(12)); enforces the exact signup policy (shared `passwordSchema` +
+  reject-unchanged); **other sessions die, the caller's own survives**; returns
+  the count for the UI ("N other session(s) signed out").
+- **`POST /totp/re-enroll`** — password re-auth → fresh secret + temp token,
+  completed through the **existing** `/verify-2fa` (no new verify machinery).
+  Revokes all other sessions. Safety property: if the flow is abandoned, the
+  next login re-enrolls from scratch (login regenerates the secret whenever
+  `totp_enrolled` is false) — **password knowledge can always recover the
+  account**, so no permanent lockout path exists.
+- **`REAUTH_FAILS` cap** (5 wrong-password / 5 min per user, shared `failCap`
+  factory with the TOTP grind cap from round 19) on password rotation and
+  re-enroll: someone holding a stolen *access* token must not be able to
+  brute-force the password factor through these endpoints.
+- `verify-2fa` and `/refresh` now return `sessionId` so each device can
+  recognize itself in the list.
+
+### Design flaw found and fixed during this round's own tests
+
+The first per-device revocation tests **exposed a live design bug**: a revoked
+device naturally replays its cookie on its next background refresh, and the
+refresh-reuse detector treated that as **theft → family kill → the whole
+account signed out** (including the device that did the revoking). Voluntary
+revocation would have been indistinguishable from token theft. Fixed by
+recording WHY a token is dead:
+
+- `reason='rotated'` — normal rotation; **replay is still the theft signal**
+  (family kill unchanged, original behavior preserved).
+- `reason='revoked'` — owner action (device revoke / logout / password
+  rotation / revoke-all); **replay is expected → quiet 401 "Session was
+  revoked"**, no family kill. New `refresh_revoked_replay` audit event.
+- Migration `packages/db/migrate-005.sql` (idempotent `reason` column); memory
+  store mirrors it. Verified live: revoked device replays → quiet 401 while
+  the surviving device keeps rotating.
+
+### Web
+
+- New **`/account` — Security Center** page (PageHeader + AmbientScene, three
+  glass consoles): PASSWORD (re-auth + live shared-policy checklist + confirm),
+  AUTHENTICATOR (enrolled status from `/me`, re-enroll stepper with manual-key
+  display + copy + auto-verify on the 6th digit, reusing the login form's
+  proven pattern), SESSIONS (live device list with THIS DEVICE badge, per-row
+  REVOKE, SIGN OUT EVERYWHERE). Self-revoke and revoke-all return to /login.
+- Shared **`lib/pwRules.ts`** — the signup checklist and the password card now
+  read one source of truth that mirrors the API's zod schema.
+- `lib/auth.ts` tracks the refresh `sessionId` in memory (updated by verify +
+  silent refresh) and `getMe()` now surfaces `totpEnrolled`.
+- Route registration across all five surfaces: Nav links, MenuOverlay
+  ("Sessions · keys · posture"), command palette (ACCOUNT group), footer, and
+  the direction-aware route curtain (`ROUTE_ORDER` + SF://ACCOUNT).
+- Deployed and verified on prod `:3006`: SSR markers for the header, nav link,
+  and the gated "CHECKING SESSION → No live session" client flow.
+
+### Verification
+
+- Full battery **135/135 across 12 files** (6 new tests in
+  `apps/api/tests/account.test.ts`: auth gates on every endpoint, current-device
+  marking, exact-one-revocation, cross-user/unknown jti 404s, revoke-all count,
+  self-revoke-as-logout, password rotation incl. policy + old-password-dead +
+  new-password-logs-in + other-sessions-die + own-session-survives,
+  re-enroll incl. old-code-dies + new-code-verifies). Both typechecks clean;
+  `next build` clean.
+- **25/25 live protocol checks** against the running API (`:4000`) with real
+  speakeasy-computed TOTP codes and three independent per-device cookie jars:
+  the complete flow above including the survival checks (A keeps rotating
+  after B is revoked; A keeps rotating after password rotation kills C) and
+  revoked-cookie replay → quiet 401.
+- Honest notes: the first live-script run used ONE cookie jar for three
+  devices and produced a cascade of "failures" that were actually correct API
+  behavior (B's verify overwrote A's cookie in the jar; revoking the session
+  your own cookie holds correctly returned `selfRevoked: true`) — the script
+  was rewritten per-device, and the accidental insight became a real test
+  (self-revoke = logout). The embedded browser window stayed occluded/starved
+  this session (same documented artifact since round 16), so the /account
+  client-side render loop is verified at SSR + DOM-state level and through the
+  protocol transcript, not visually. The API also died once mid-round (tsx
+  watch crash after the store edits — the known in-memory/dev-watch fragility)
+  and was relaunched; the duplicate second API dev tree from round 19 is still
+  present and untouched. AI image quota untouched (none requested).
+- Known limitations (documented, deliberate): revoking a device does not
+  instantly kill its short-lived access token (it dies naturally within
+  minutes — stated in the UI copy); re-enrollment revokes the caller's session
+  too (the verify step issues a fresh one); TOTP recovery codes remain
+  deferred — password knowledge is the recovery factor via login re-enrollment,
+  which covers the lockout risk without a second credential store.
+
 ## Dependency Hygiene
 
 - `npm audit --workspaces --audit-level=high` runs in CI

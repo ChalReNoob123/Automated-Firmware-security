@@ -19,7 +19,7 @@ const SAFETY_MS = 1600; // never trap the user behind a stalled push
 
 // canonical nav order — the wipe direction follows it: moving "forward" in
 // the nav sweeps left→right, moving "back" sweeps right→left (round-18).
-const ROUTE_ORDER = ['/', '/dashboard', '/devices', '/lab', '/emulator', '/attacks', '/radar', '/reports', '/copilot'];
+const ROUTE_ORDER = ['/', '/dashboard', '/devices', '/lab', '/emulator', '/attacks', '/radar', '/reports', '/copilot', '/account'];
 
 export default function RouteCurtain() {
   const router = useRouter();

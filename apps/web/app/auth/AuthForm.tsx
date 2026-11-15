@@ -3,7 +3,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Card, glassGlow } from '../components/ui';
-import { setAccess, API_URL } from '../lib/auth';
+import { setAccess, setSessionId, API_URL } from '../lib/auth';
+import { PW_RULES, pwChecks, pwStrong } from '../lib/pwRules';
 
 // Shared auth card: signup creates the org + owner, login runs password → TOTP.
 // On success the access token lands in MEMORY (lib/auth) and silent refresh via
@@ -15,14 +16,6 @@ import { setAccess, API_URL } from '../lib/auth';
 // the API (both login and verify steps — it used to be dead code), auto-verify
 // when the 6th TOTP digit lands, a copy button for the enrollment key, and a
 // caps-lock warning on the password fields.
-
-const PW_RULES: [string, RegExp][] = [
-  ['10+ characters', /^.{10,}$/],
-  ['an uppercase letter', /[A-Z]/],
-  ['a lowercase letter', /[a-z]/],
-  ['a digit', /\d/],
-  ['a special character', /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/],
-];
 
 function CapsLockHint({ on }: { on: boolean }) {
   if (!on) return null;
@@ -113,8 +106,9 @@ export default function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
     setBusy(true);
     setErr('');
     try {
-      const j = (await post('/v1/auth/verify-2fa', { tempToken, code: c.trim(), rememberMe: remember })) as { accessToken: string };
+      const j = (await post('/v1/auth/verify-2fa', { tempToken, code: c.trim(), rememberMe: remember })) as { accessToken: string; sessionId?: string };
       setAccess(j.accessToken);
+      setSessionId(j.sessionId ?? null);
       router.push('/');
     } catch (e) {
       setErr((e as Error).message);
@@ -135,8 +129,8 @@ export default function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
     }
   };
 
-  const pwChecks = PW_RULES.map(([, re]) => re.test(password));
-  const pwStrong = pwChecks.every(Boolean);
+  const checks = pwChecks(password);
+  const strong = pwStrong(password);
 
   return (
     <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}>
@@ -150,7 +144,7 @@ export default function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
             style={{ display: 'flex', flexDirection: 'column', gap: 10 }}
             onSubmit={(e) => {
               e.preventDefault();
-              if (!busy && pwStrong) void signup();
+              if (!busy && strong) void signup();
             }}
           >
             <input className="sf-input" name="orgName" aria-label="Organization name" placeholder="Organization name" value={orgName} onChange={(e) => setOrgName(e.target.value)} />
@@ -171,12 +165,12 @@ export default function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
             {/* live requirements checklist — every rule lights up as it's met */}
             <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexWrap: 'wrap', gap: '4px 12px' }}>
               {PW_RULES.map(([label], i) => (
-                <li key={label} style={{ fontSize: 11.5, letterSpacing: 0.4, color: pwChecks[i] ? '#6ee7b7' : '#64748b' }}>
-                  {pwChecks[i] ? '✓' : '○'} {label}
+                <li key={label} style={{ fontSize: 11.5, letterSpacing: 0.4, color: checks[i] ? '#6ee7b7' : '#64748b' }}>
+                  {checks[i] ? '✓' : '○'} {label}
                 </li>
               ))}
             </ul>
-            <button className="sf-btn sf-btn-accent" type="submit" disabled={busy || !pwStrong}>
+            <button className="sf-btn sf-btn-accent" type="submit" disabled={busy || !strong}>
               {busy ? 'Creating workspace…' : 'Create workspace'}
             </button>
             {done && (

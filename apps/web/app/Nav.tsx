@@ -21,6 +21,7 @@ const LINKS: [string, string][] = [
   ['Radar', '/radar'],
   ['Reports', '/reports'],
   ['Copilot', '/copilot'],
+  ['Account', '/account'],
 ];
 
 function ApiDot() {

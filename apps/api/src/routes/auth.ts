@@ -11,9 +11,11 @@ import {
   findUserById,
   findUserByIdentifier,
   hashPassword,
+  listActiveRefreshForUser,
   revokeAccess,
   revokeRefresh,
   revokeAllRefreshForUser,
+  revokeRefreshForUser,
   storeRefresh,
   updateUser,
   verifyPassword,
@@ -33,31 +35,35 @@ const LOGIN_RATE_LIMIT = new Map<string, { count: number; resetAt: number }>();
 const LOGIN_LIMIT = 10;
 const LOGIN_WINDOW_MS = 60 * 1000;
 
-// Failed TOTP attempts per user during the temp-token window. The temp token
-// is valid 5 minutes; without a cap an attacker holding one could grind the
-// 6-digit space at the IP limiter's pace. 5 misses → start over from the
-// password step (also resets on successful verify or fresh login).
-const TOTP_FAILS = new Map<string, { count: number; resetAt: number }>();
-const TOTP_MAX_FAILS = 5;
-const TOTP_WINDOW_MS = 5 * 60 * 1000;
-
-function totpFailuresExceeded(userId: string): boolean {
-  const now = Date.now();
-  const rec = TOTP_FAILS.get(userId);
-  if (!rec || now > rec.resetAt) return false;
-  return rec.count >= TOTP_MAX_FAILS;
+// Sliding per-user failure caps. TOTP: misses inside the 5-minute temp-token
+// window (an attacker holding one token must not grind the 6-digit space at
+// the IP limiter's pace; 5 misses → start over from the password step, reset
+// on success or fresh login). Reauth: wrong-password attempts on the account
+// security endpoints — someone holding a stolen ACCESS token must not be able
+// to brute-force the password factor through password-change or re-enroll.
+function failCap(maxFails: number, windowMs: number) {
+  const hits = new Map<string, { count: number; resetAt: number }>();
+  return {
+    exceeded(id: string): boolean {
+      const now = Date.now();
+      const rec = hits.get(id);
+      if (!rec || now > rec.resetAt) return false;
+      return rec.count >= maxFails;
+    },
+    record(id: string): void {
+      const now = Date.now();
+      const rec = hits.get(id);
+      if (!rec || now > rec.resetAt) hits.set(id, { count: 1, resetAt: now + windowMs });
+      else rec.count++;
+    },
+    clear(id: string): void {
+      hits.delete(id);
+    },
+  };
 }
 
-function recordTotpFail(userId: string): void {
-  const now = Date.now();
-  const rec = TOTP_FAILS.get(userId);
-  if (!rec || now > rec.resetAt) TOTP_FAILS.set(userId, { count: 1, resetAt: now + TOTP_WINDOW_MS });
-  else rec.count++;
-}
-
-function clearTotpFails(userId: string): void {
-  TOTP_FAILS.delete(userId);
-}
+const TOTP_FAILS = failCap(5, 5 * 60 * 1000);
+const REAUTH_FAILS = failCap(5, 5 * 60 * 1000);
 
 function loginRateLimit(identifier: string): boolean {
   const now = Date.now();
@@ -178,17 +184,17 @@ router.post('/verify-2fa', async (req, res) => {
     if (!user?.totp_secret) throw new Error('no-totp');
     // TOTP grind cap: too many misses inside the temp-token window → refuse
     // until the user restarts from the password step (fresh temp token).
-    if (totpFailuresExceeded(user.id)) {
+    if (TOTP_FAILS.exceeded(user.id)) {
       await audit('2fa_grind_blocked', { userId: user.id, orgId: user.org_id, ip: req.ip });
       return res.status(403).json({ error: 'Too many verification attempts — start again from the password step.' });
     }
     const valid = speakeasy.totp.verify({ secret: user.totp_secret, encoding: 'base32', token: p.data.code, window: 1 });
     if (!valid) {
-      recordTotpFail(user.id);
+      TOTP_FAILS.record(user.id);
       await audit('2fa_failed', { userId: user.id, orgId: user.org_id, ip: req.ip });
       return res.status(401).json({ error: 'Invalid 2FA code' });
     }
-    clearTotpFails(user.id);
+    TOTP_FAILS.clear(user.id);
     if (!user.totp_enrolled) await updateUser(user.id, { totp_enrolled: true });
     const access = signAccess({ id: user.id, orgId: user.org_id, role: user.role });
     const days = p.data.rememberMe ? 30 : 7;
@@ -199,6 +205,8 @@ router.post('/verify-2fa', async (req, res) => {
     res.json({
       success: true,
       accessToken: access.token,
+      // The refresh jti lets this device recognize itself in /sessions.
+      sessionId: refresh.jti,
       user: { id: user.id, username: user.username, email: user.email, role: user.role, orgId: user.org_id },
     });
   } catch {
@@ -214,16 +222,23 @@ router.post('/refresh', async (req, res) => {
     const rec = await findRefresh(payload.jti);
     if (!rec) return res.status(401).json({ error: 'Invalid refresh token' });
     if (rec.revoked) {
-      // REUSE DETECTED: a rotated-out token was replayed → assume theft, kill the
-      // whole family for this user and log it loudly.
-      await revokeAllRefreshForUser(rec.user_id);
-      await audit('refresh_reuse_detected', { userId: rec.user_id, ip: req.ip });
-      return res.status(401).json({ error: 'Refresh token reuse detected — all sessions revoked' });
+      if (rec.reason === 'rotated') {
+        // THEFT SIGNAL: a rotated-out token was replayed → assume theft, kill
+        // the whole family for this user and log it loudly.
+        await revokeAllRefreshForUser(rec.user_id);
+        await audit('refresh_reuse_detected', { userId: rec.user_id, ip: req.ip });
+        return res.status(401).json({ error: 'Refresh token reuse detected — all sessions revoked' });
+      }
+      // Owner-revoked (device revoked / logged out / password rotation): the
+      // legitimate holder replaying it is EXPECTED — quiet death, no family
+      // kill, otherwise revoking one device would sign out the whole account.
+      await audit('refresh_revoked_replay', { userId: rec.user_id, ip: req.ip });
+      return res.status(401).json({ error: 'Session was revoked' });
     }
     if (rec.expires_at < Date.now()) return res.status(401).json({ error: 'Invalid refresh token' });
     const user = await findUserById(payload.sub);
     if (!user) return res.status(401).json({ error: 'User not found' });
-    await revokeRefresh(payload.jti);
+    await revokeRefresh(payload.jti, 'rotated');
     const access = signAccess({ id: user.id, orgId: user.org_id, role: user.role });
     // Sliding session: re-issue for the presented token's remaining lifetime
     // (rounded up, 1..30 days). A "remember me for 30 days" login used to
@@ -234,7 +249,7 @@ router.post('/refresh', async (req, res) => {
     const refresh = signRefresh({ id: user.id }, days);
     await storeRefresh(refresh.jti, user.id, refresh.expiresAt);
     refreshCookie(res, refresh.token, days);
-    res.json({ accessToken: access.token });
+    res.json({ accessToken: access.token, sessionId: refresh.jti });
   } catch {
     res.status(401).json({ error: 'Refresh failed' });
   }
@@ -245,7 +260,7 @@ router.post('/logout', requireAuth, async (req, res) => {
   const refreshTok = (req as unknown as { cookies?: Record<string, string> }).cookies?.[COOKIE_NAME];
   if (refreshTok) {
     try {
-      await revokeRefresh(verifyRefresh(refreshTok).jti);
+      await revokeRefresh(verifyRefresh(refreshTok).jti, 'revoked');
     } catch {
       /* already invalid */
     }
@@ -264,6 +279,127 @@ router.get('/me', requireAuth, async (req, res) => {
     authenticated: true,
     user: { id: full.id, username: full.username, email: full.email, role: full.role, orgId: full.org_id, totpEnrolled: full.totp_enrolled },
   });
+});
+
+// ── Account Security Center (round 20) ──────────────────────────────────────
+// Self-scoped session inventory + per-device revocation, password rotation
+// with re-auth, and authenticator re-enrollment. Everything below runs under
+// requireAuth and the /v1/auth IP limiter; the reauth endpoints additionally
+// carry the per-user REAUTH_FAILS cap (a stolen access token must not enable
+// brute-forcing the password factor).
+const authed = (req: unknown) => (req as unknown as { user: { sub: string; org: string; jti: string; exp?: number } }).user;
+
+async function currentCookieJti(req: unknown): Promise<string> {
+  const tok = (req as unknown as { cookies?: Record<string, string> }).cookies?.[COOKIE_NAME];
+  if (!tok) return '';
+  try {
+    return verifyRefresh(tok).jti;
+  } catch {
+    return ''; // stale/garbage cookie — simply not "current"
+  }
+}
+
+// GET /v1/auth/sessions — the caller's live sessions. The jti authorizes
+// nothing on its own (refresh tokens are signed; revocation is the only thing
+// a bare jti can do), so listing it for its owner is safe and is exactly what
+// makes per-device kill possible.
+router.get('/sessions', requireAuth, async (req, res) => {
+  const u = authed(req);
+  const currentJti = await currentCookieJti(req);
+  const now = Date.now();
+  const sessions = (await listActiveRefreshForUser(u.sub)).map((r) => ({
+    id: r.jti,
+    current: r.jti === currentJti,
+    createdAt: r.created_at,
+    expiresAt: r.expires_at,
+    expiresDays: Math.max(0, Math.ceil((r.expires_at - now) / 86_400_000)),
+  }));
+  res.json({ sessions });
+});
+
+// POST /v1/auth/sessions/revoke — kill ONE of the caller's sessions. Revoking
+// the session this browser holds also acts as a logout (access token denied).
+router.post('/sessions/revoke', requireAuth, async (req, res) => {
+  const p = z.object({ jti: z.string().min(8).max(128) }).safeParse(req.body);
+  if (!p.success) return res.status(400).json({ error: 'jti required' });
+  const u = authed(req);
+  const ok = await revokeRefreshForUser(u.sub, p.data.jti);
+  if (!ok) return res.status(404).json({ error: 'Session not found' });
+  const selfRevoked = (await currentCookieJti(req)) === p.data.jti;
+  if (selfRevoked) {
+    await revokeAccess(u.jti, (u.exp ?? Math.floor(Date.now() / 1000) + 900) * 1000);
+    res.clearCookie(COOKIE_NAME);
+  }
+  await audit('session_revoked', { userId: u.sub, orgId: u.org, ip: req.ip });
+  res.json({ success: true, selfRevoked });
+});
+
+// POST /v1/auth/sessions/revoke-all — every device out, including this one.
+router.post('/sessions/revoke-all', requireAuth, async (req, res) => {
+  const u = authed(req);
+  const revoked = await revokeAllRefreshForUser(u.sub);
+  await revokeAccess(u.jti, (u.exp ?? Math.floor(Date.now() / 1000) + 900) * 1000);
+  await audit('sessions_revoked_all', { userId: u.sub, orgId: u.org, ip: req.ip });
+  res.clearCookie(COOKIE_NAME);
+  res.json({ success: true, revoked });
+});
+
+// POST /v1/auth/password — rotate the password. Re-auth with the current
+// password first, then every OTHER session dies while the caller's own
+// session survives rotation (their cookie keeps working).
+router.post('/password', requireAuth, async (req, res) => {
+  const p = z.object({ currentPassword: z.string().min(1).max(256), newPassword: passwordSchema }).safeParse(req.body);
+  if (!p.success) return res.status(400).json({ error: p.error.issues[0]?.message ?? 'currentPassword + newPassword required' });
+  const u = authed(req);
+  if (REAUTH_FAILS.exceeded(u.sub)) {
+    await audit('password_change_blocked', { userId: u.sub, ip: req.ip });
+    return res.status(429).json({ error: 'Too many attempts — try again in a few minutes.' });
+  }
+  const user = await findUserById(u.sub);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  if (!(await verifyPassword(p.data.currentPassword, user.password_hash))) {
+    REAUTH_FAILS.record(u.sub);
+    await audit('password_change_failed', { userId: user.id, orgId: user.org_id, ip: req.ip });
+    return res.status(401).json({ error: 'Current password is incorrect' });
+  }
+  if (await verifyPassword(p.data.newPassword, user.password_hash)) {
+    return res.status(400).json({ error: 'New password must differ from the current password' });
+  }
+  const revokedOtherSessions = await revokeAllRefreshForUser(user.id, await currentCookieJti(req));
+  await updateUser(user.id, { password_hash: await hashPassword(p.data.newPassword), failed_attempts: 0 });
+  REAUTH_FAILS.clear(u.sub);
+  await audit('password_changed', { userId: user.id, orgId: user.org_id, ip: req.ip });
+  res.json({ success: true, revokedOtherSessions });
+});
+
+// POST /v1/auth/totp/re-enroll — lost/replaced authenticator. Password re-auth
+// (the password is the recovery factor), then a fresh secret + temp token that
+// the client completes through the standard /verify-2fa. All other sessions
+// are revoked here — a rotated authenticator should not leave old devices
+// alive; if the flow is abandoned the next login re-enrolls from scratch
+// (login regenerates the secret whenever totp_enrolled is false, so password
+// knowledge can always recover the account).
+router.post('/totp/re-enroll', requireAuth, async (req, res) => {
+  const p = z.object({ password: z.string().min(1).max(256) }).safeParse(req.body);
+  if (!p.success) return res.status(400).json({ error: 'password required' });
+  const u = authed(req);
+  if (REAUTH_FAILS.exceeded(u.sub)) {
+    await audit('2fa_reenroll_blocked', { userId: u.sub, ip: req.ip });
+    return res.status(429).json({ error: 'Too many attempts — try again in a few minutes.' });
+  }
+  const user = await findUserById(u.sub);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  if (!(await verifyPassword(p.data.password, user.password_hash))) {
+    REAUTH_FAILS.record(u.sub);
+    await audit('2fa_reenroll_failed', { userId: user.id, orgId: user.org_id, ip: req.ip });
+    return res.status(401).json({ error: 'Current password is incorrect' });
+  }
+  const secret = speakeasy.generateSecret({ name: `SentinelForge (${user.username})`, length: 20 });
+  const revokedOtherSessions = await revokeAllRefreshForUser(user.id);
+  await updateUser(user.id, { totp_secret: secret.base32, totp_enrolled: false });
+  REAUTH_FAILS.clear(u.sub);
+  await audit('2fa_reenrolled', { userId: user.id, orgId: user.org_id, ip: req.ip });
+  res.json({ tempToken: signTemp(user.id), otpauthUrl: secret.otpauth_url, manualKey: secret.base32, revokedOtherSessions });
 });
 
 // SAML SSO hook (spec §2 optional SSO) — stub handshake; real passport-saml wiring is a follow-up.

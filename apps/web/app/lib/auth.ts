@@ -10,11 +10,22 @@ export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000
 const API = API_URL;
 
 let access: string | null = null;
+// Which refresh session this browser holds (from verify-2fa / refresh
+// responses). Lets the Account Security Center mark the current device.
+let sessionId: string | null = null;
 let refreshInflight: Promise<string | null> | null = null;
 let refreshFailedUntil = 0; // dedupes the browser's unavoidable 401 net-logs
 
 export function setAccess(token: string | null) {
   access = token;
+}
+
+export function setSessionId(id: string | null) {
+  sessionId = id;
+}
+
+export function getSessionId(): string | null {
+  return sessionId;
 }
 
 async function silentRefresh(): Promise<string | null> {
@@ -27,7 +38,8 @@ async function silentRefresh(): Promise<string | null> {
           refreshFailedUntil = Date.now() + 10_000;
           return null;
         }
-        const j = await r.json();
+        const j = (await r.json()) as { accessToken?: string; sessionId?: string };
+        if (j.sessionId) sessionId = j.sessionId;
         return (j.accessToken as string) ?? null;
       } catch {
         refreshFailedUntil = Date.now() + 10_000;
@@ -79,13 +91,13 @@ export async function logoutEverywhere(): Promise<void> {
 // Who is signed in? Resolves null when there is no live session (or the
 // account vanished server-side). Used by the nav session chip and any UI that
 // needs the user's name/role without re-asking the API in every panel.
-export async function getMe(): Promise<{ username: string; email: string; role: string; orgId: string } | null> {
+export async function getMe(): Promise<{ username: string; email: string; role: string; orgId: string; totpEnrolled?: boolean } | null> {
   const tok = await getAccess();
   if (!tok) return null;
   try {
     const r = await apiFetch('/v1/auth/me');
     if (!r.ok) return null;
-    const j = (await r.json()) as { user?: { username: string; email: string; role: string; orgId: string } };
+    const j = (await r.json()) as { user?: { username: string; email: string; role: string; orgId: string; totpEnrolled?: boolean } };
     return j.user ?? null;
   } catch {
     return null;
