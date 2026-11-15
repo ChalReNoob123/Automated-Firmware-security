@@ -4,6 +4,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useStory, seg } from './storyStore';
 import { sfxBlip } from './audio/sfx';
+import PostFX, { usePostOK } from './post/PostFX';
 
 // Lusion-style scroll story scene: one full-viewport WebGL canvas pinned
 // behind the copy, whose ensemble MORPHS as the page scrolls through four
@@ -793,6 +794,7 @@ function Ensemble() {
 }
 
 export default function StoryScene() {
+  const fx = usePostOK();
   return (
     <div style={{ position: 'absolute', inset: 0 }} data-cursor="drag">
       <Canvas
@@ -810,6 +812,8 @@ export default function StoryScene() {
         <Ensemble />
         <Rig />
         <DragOrbit />
+        {/* round 21: grain + bloom + velocity chromatic aberration (gated) */}
+        {fx && <PostFX />}
       </Canvas>
     </div>
   );

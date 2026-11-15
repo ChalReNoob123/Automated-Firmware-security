@@ -1119,6 +1119,69 @@ recording WHY a token is dead:
   deferred — password knowledge is the recovery factor via login re-enrollment,
   which covers the lockout risk without a second credential store.
 
+## Sensory Round 21 — cinematic post layer, horizon depth, preloader audio (2026-11-15)
+
+Rounds 19–20 were both security rounds; the visual layer was due. This round
+adds the award-site "post" look the WebGL scenes were missing — deliberately,
+with ZERO new dependencies (no `postprocessing` package: one custom shader
+pass, ~200 lines).
+
+### PostFX — a single fullscreen grading pass on the pinned story scene
+
+`apps/web/app/post/PostFX.tsx`, wired into `StoryScene` (the landing's
+480vh centerpiece canvas):
+
+- **chromatic aberration** that scales with scene motion energy (pointer
+  speed + scroll + story-scrub delta, fast-attack/slow-settle) — the image
+  splits when the ensemble is in motion and settles when it rests;
+- **cheap HDR bloom** — bright-pass (threshold 0.55 on the linear HDR target)
+  + two 8-tap rings, boosted by motion energy;
+- **animated film grain** + **corner vignette**.
+
+Correctness notes verified against the installed sources before writing it:
+three r185 applies tone mapping ONLY when rendering to the default
+framebuffer (`WebGLPrograms.js`: `currentRenderTarget === null`), so the
+scene renders to a 4×MSAA HalfFloat render target as linear HDR and the post
+pass itself applies the renderer's own ACES tone mapping
+(`#include <tonemapping_fragment>`) + linear→sRGB
+(`#include <colorspace_fragment>`) — the identical look the direct render
+produced, plus effects. R3F's positive-priority `useFrame` subscriber takes
+over rendering (confirmed in the fiber loop source), which is what makes the
+two-pass chain possible with no new packages.
+
+**Capability gate** (`usePostOK`): reduced-motion users, viewports < 900px,
+and low-core/low-memory devices skip the pass entirely and render exactly as
+before — the effect layer is an enhancement, never a requirement.
+
+### Inner pages — perspective horizon grid
+
+`AmbientScene` gained `.sf-horizon`: a pure-CSS depth floor (two repeating
+gradients under a `perspective + rotateX` transform; the horizontal lines
+flow toward the viewer in a seamless loop) beneath the starfield. Static
+frame for reduced-motion users. Zero JS.
+
+### Sound
+
+Preloader reveal now lands with a soft rising sweep (`sfxBlip(340, 980, …)`)
+— SF://AUDIO opt-in shell only; the sfx layer self-guards on the engine
+existing, so silent by default as always.
+
+### Verification
+
+- Web typecheck clean, `next build` clean, full battery **135/135 across 12
+  files** (no API changes this round).
+- Deployed to prod `:3006`: SSR markers for the story fallback
+  ("Every device hides a story." / ACT 01 / scroll cue) and the horizon grid
+  div on inner pages; the PostFX shader is confirmed shipped in the client
+  chunk (unique `tDiffuse` uniform string found in `.next/static/chunks`).
+- Honest limits: the embedded browser stayed occluded/starved (documented
+  artifact since round 16), so the post layer's VISUAL result is verified at
+  SSR + bundle level and by source-level correctness checks, not by eye.
+  The capability gate makes the worst case (gate misfires on) identical to
+  the previous rendering. Legacy note: `CinematicHero`/`HeroScene` have been
+  unmounted since the round-5 landing redesign — PostFX is wired there too
+  (dormant) so a future remount inherits the look.
+
 ## Dependency Hygiene
 
 - `npm audit --workspaces --audit-level=high` runs in CI

@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { sfxBlip } from './audio/sfx';
 
 // Lusion-style preloader: fullscreen calibration overlay with a live counter,
 // cycling boot status and a scan sweep, shown ONCE per browser session (full
@@ -47,6 +48,9 @@ export default function Preloader() {
       } else if (document.readyState === 'complete' || t - t0 > 3500) {
         setN(100);
         setS(STATUS.length - 1);
+        // round 21: the reveal lands with a soft rising sweep (SF://AUDIO only —
+        // the sfx layer self-guards on the engine existing)
+        sfxBlip(340, 980, 0.2, 0.024);
         setTimeout(() => setShow(false), 320);
       } else {
         setN(99);

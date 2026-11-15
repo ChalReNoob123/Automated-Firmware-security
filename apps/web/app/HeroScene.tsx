@@ -2,6 +2,7 @@
 import { useMemo, useRef } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
+import PostFX, { usePostOK } from './post/PostFX';
 
 // Cinematic hero scene: device core + exploded shards + threat-radar rings + sweep + starfield.
 // Deterministic (seeded) layout, capped pixel ratio, pointer parallax. No postprocessing
@@ -182,6 +183,7 @@ function Ensemble() {
 }
 
 export default function HeroScene() {
+  const fx = usePostOK();
   return (
     <Canvas
       dpr={[1, 2]}
@@ -199,6 +201,8 @@ export default function HeroScene() {
           device core right of that zone at any window size. */}
       <Ensemble />
       <Rig />
+      {/* round 21: grain + bloom + velocity chromatic aberration (gated) */}
+      {fx && <PostFX />}
     </Canvas>
   );
 }

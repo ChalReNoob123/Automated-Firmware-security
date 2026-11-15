@@ -48,6 +48,8 @@ export default function AmbientScene() {
       />
       {/* living aurora beneath the stars — native-res canvas, pointer-reactive */}
       <FluidScene opacity={0.4} />
+      {/* round 21: perspective horizon grid — depth floor under the starfield */}
+      <div className="sf-horizon" />
       <div className="sf-stars sf-stars-far" style={{ boxShadow: far }} />
       <div className="sf-stars sf-stars-mid" style={{ boxShadow: mid }} />
       <div className="sf-stars sf-stars-near" style={{ boxShadow: near }} />
