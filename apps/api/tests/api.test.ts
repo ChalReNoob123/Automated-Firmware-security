@@ -110,8 +110,8 @@ describe('analysis APIs', () => {
   it('runs the emulator lifecycle', async () => {
     const s = await api.post('/v1/emulator/sessions').set(H()).send({ arch: 'arm' }).expect(201);
     await api.post(`/v1/emulator/sessions/${s.body.id}/input`).set(H()).send({ input: 'root' }).expect(200);
-    const snap = await api.post(`/v1/emulator/sessions/${s.body.id}/snapshots`).set('Authorization', `Bearer ${token}`).send({}).expect(201);
-    const rep = await api.post(`/v1/emulator/sessions/${s.body.id}/replay`).set('Authorization', `Bearer ${token}`).send({ snapshotId: snap.body.id }).expect(200);
+    const snap = await api.post(`/v1/emulator/sessions/${s.body.id}/snapshots`).set(H()).send({}).expect(201);
+    const rep = await api.post(`/v1/emulator/sessions/${s.body.id}/replay`).set(H()).send({ snapshotId: snap.body.id }).expect(200);
     expect(rep.body.match).toBe(true);
     await api.post(`/v1/emulator/sessions/${s.body.id}/crash`).set(H()).send({ reason: 't' }).expect(201);
   });

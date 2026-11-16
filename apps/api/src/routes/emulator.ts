@@ -39,11 +39,16 @@ const sessions = {
 // memory: oldest-first past 200 — see store.ts). Listing is intentionally absent:
 // sessions are addressed by id from pipeline runs, never enumerated.
 const orgOf = (req: Request) => (req as unknown as { user?: { org?: string } }).user?.org ?? '';
+const subOf = (req: Request) => (req as unknown as { user?: { sub?: string } }).user?.sub ?? '';
 const paramId = (req: Request) => {
   const id = req.params.id as string | string[] | undefined;
   return Array.isArray(id) ? id[0] : (id ?? '');
 };
 const hashState = (s: Session) => createHash('sha256').update(JSON.stringify({ bootLog: s.bootLog, inputTrace: s.inputTrace })).digest('hex');
+// Round-24 audit: attestation-gated actions are now audited with actor + org
+// (boot previously logged neither; input/snapshot/replay/crash logged nothing).
+const auditEmu = (req: Request, event: string) =>
+  audit(event, { userId: subOf(req), orgId: orgOf(req), ip: req.ip });
 
 const createSchema = z.object({
   arch: z.enum(['arm', 'aarch64', 'mips', 'mipsel', 'x86', 'x86_64', 'riscv64']),
@@ -67,7 +72,7 @@ router.post('/sessions', requireAuth, requireAttestation, async (req, res) => {
     crashes: [],
   };
   await sessions.set(orgOf(req), s);
-  await audit('emulator_boot', { ip: req.ip });
+  await auditEmu(req, 'emulator_boot');
   res.status(201).json(s);
 });
 
@@ -88,11 +93,14 @@ router.post('/sessions/:id/input', requireAuth, requireAttestation, async (req, 
   s.bootLog.push(`> ${p.data.input}`);
   if (s.status === 'crashed') s.status = 'ready';
   await sessions.set(orgOf(req), s);
+  await auditEmu(req, 'emulator_input');
   res.json(s);
 });
 
-// POST …/snapshots — capture reproducible state
-router.post('/sessions/:id/snapshots', requireAuth, async (req, res) => {
+// POST …/snapshots — capture reproducible state.
+// Round-24 audit: this drove the twin mid-testing but skipped the attestation
+// gate that /input and /crash carried — same gate now, same audit row.
+router.post('/sessions/:id/snapshots', requireAuth, requireAttestation, async (req, res) => {
   const s = await sessions.get(orgOf(req), paramId(req));
   if (!s) return res.status(404).json({ error: 'session not found' });
   if (s.status === 'stopped') return res.status(409).json({ error: 'session stopped' });
@@ -106,11 +114,15 @@ router.post('/sessions/:id/snapshots', requireAuth, async (req, res) => {
   };
   s.snapshots.push(snap);
   await sessions.set(orgOf(req), s);
+  await auditEmu(req, 'emulator_snapshot');
   res.status(201).json(snap);
 });
 
-// POST …/replay — step-by-step replay of a snapshot's input trace
-router.post('/sessions/:id/replay', requireAuth, async (req, res) => {
+// POST …/replay — step-by-step replay of a snapshot's input trace.
+// Round-24 audit: replay REPRODUCES the test actions against the twin — the
+// same authorization doctrine as /input and /crash now applies (attestation
+// header naming a real row in the caller's org).
+router.post('/sessions/:id/replay', requireAuth, requireAttestation, async (req, res) => {
   const s = await sessions.get(orgOf(req), paramId(req));
   if (!s) return res.status(404).json({ error: 'session not found' });
   const p = z.object({ snapshotId: z.string().min(1) }).safeParse(req.body);
@@ -122,6 +134,7 @@ router.post('/sessions/:id/replay', requireAuth, async (req, res) => {
     .update(JSON.stringify({ bootLog: s.bootLog.slice(0, s.bootLog.length - postSnap), inputTrace: snap.inputTrace }))
     .digest('hex');
   const match = JSON.stringify(s.inputTrace.slice(0, snap.inputTrace.length)) === JSON.stringify(snap.inputTrace) && recomputed === snap.stateHash;
+  await auditEmu(req, 'emulator_replay');
   res.json({ match, steps: snap.inputTrace.length, detail: match ? `reproduced ${snap.inputTrace.length} steps → ${snap.stateHash.slice(0, 12)}…` : 'diverged since snapshot' });
 });
 
@@ -143,6 +156,7 @@ router.post('/sessions/:id/crash', requireAuth, requireAttestation, async (req, 
   const crash: Crash = { id: `crash_${randomUUID().slice(0, 8)}`, reason: p.data.reason, snapshotId: snap.id, inputTrace: [...s.inputTrace], at: new Date().toISOString() };
   s.crashes.push(crash);
   await sessions.set(orgOf(req), s);
+  await auditEmu(req, 'emulator_crash');
   res.status(201).json(crash);
 });
 

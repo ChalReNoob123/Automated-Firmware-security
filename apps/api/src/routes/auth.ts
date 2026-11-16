@@ -129,6 +129,11 @@ const signupSchema = z.object({
   password: passwordSchema,
 });
 const loginSchema = z.object({ identifier: z.string().min(3).max(128), password: z.string().max(256), rememberMe: z.boolean().optional() });
+const inviteSchema = z.object({
+  email: z.string().email().max(256),
+  username: z.string().min(3).max(32).regex(/^[a-zA-Z0-9_.-]+$/, 'Letters, numbers, _ . - only'),
+  role: z.enum(['Admin', 'Analyst', 'Viewer', 'Auditor']), // Owner is signup-only — an Admin must never mint a superior
+});
 
 const COOKIE_NAME = process.env.NODE_ENV === 'production' ? '__Host-sf_refresh' : 'sf_refresh';
 
@@ -517,11 +522,78 @@ router.post('/recovery-codes', requireAuth, async (req, res) => {
 // SAML SSO hook (spec §2 optional SSO) — stub handshake; real passport-saml wiring is a follow-up.
 router.get('/sso/saml', (_req, res) => res.json({ sso: 'saml-stub', next: 'redirect-to-idp' }));
 
+// Temp password for invited users: 20 chars, one symbol guaranteed from each
+// required class (upper/lower/digit/special), the rest drawn from a mixed set.
+// Every index is rejection-sampled (b < 256 - (256 % len)) — zero modulo bias,
+// same construction discipline as the round-22 recovery alphabet.
+const rejectionIndex = (len: number): number => {
+  for (;;) {
+    const b = randomBytes(1)[0];
+    if (b < 256 - (256 % len)) return b % len;
+  }
+};
+function generateTempPassword(): string {
+  const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const lower = 'abcdefghijkmnpqrstuvwxyz';
+  const digits = '23456789';
+  const specials = '!@#$%^&*_-';
+  const mixed = upper + lower + digits;
+  const chars = [upper, lower, digits, specials].map((set) => set[rejectionIndex(set.length)]);
+  while (chars.length < 20) chars.push(mixed[rejectionIndex(mixed.length)]);
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = rejectionIndex(i + 1);
+    [chars[i], chars[j]] = [chars[j], chars[i]];
+  }
+  return chars.join('');
+}
+
+// POST /v1/auth/invite — Owner/Admin add a teammate to THEIR org with an
+// explicit role. Round-24 audit finding: the RBAC matrix was dead code —
+// signup hardcodes Owner and no route could mint Admin/Analyst/Viewer/Auditor,
+// so `manage:users` was checked by nothing and the 5-role matrix was
+// unenforceable and untestable. Owner remains signup-only. The generated temp
+// password is returned exactly ONCE; there is no mail transport in this
+// prototype (production invites email a one-time link instead — the honest
+// gap is documented in SECURITY.md). The invitee enrolls their own TOTP on
+// first login like any other account.
+router.post('/invite', requireAuth, requirePerm('manage:users'), async (req, res) => {
+  const p = inviteSchema.safeParse(req.body);
+  if (!p.success) return res.status(400).json({ error: p.error.issues[0]?.message });
+  const u = authed(req);
+  const email = p.data.email.toLowerCase();
+  const dupe = await findUserByIdentifier(p.data.username).catch(() => undefined);
+  const dupeEmail = await findUserByIdentifier(email).catch(() => undefined);
+  // Same message as signup — existence in ANY org is disclosed only as the
+  // combined username-or-email ambiguity, never which.
+  if (dupe || dupeEmail) return res.status(409).json({ error: 'Username or email already registered' });
+  const tempPassword = generateTempPassword();
+  const user = await createUser({
+    orgId: u.org,
+    email,
+    username: p.data.username,
+    passwordHash: await hashPassword(tempPassword),
+    role: p.data.role,
+  });
+  await audit('user_invited', { orgId: u.org, userId: u.sub, ip: req.ip });
+  res.status(201).json({ userId: user.id, orgId: user.org_id, role: user.role, username: user.username, email: user.email, tempPassword });
+});
+
 // Audit trail — restricted to roles holding read:audit (Auditor, Admin, Owner).
+// Round-24 audit fix: rows are filtered by the CALLER's org IN JS, not just in
+// SQL — the memory fallback behind query() cannot parse WHERE clauses and was
+// returning the newest audit rows across ALL orgs in dev (cross-tenant leak on
+// the readout). `org_id IS NULL` rows stay visible by design: they are
+// anonymous host telemetry (e.g. failed logins for unknown identifiers), not
+// tenant data.
 router.get('/audit', requireAuth, requirePerm('read:audit'), async (req, res) => {
   const u = (req as unknown as { user: { org: string } }).user;
-  const r = await query(`SELECT event, ip, created_at FROM auth_audit WHERE org_id=$1 OR org_id IS NULL ORDER BY created_at DESC LIMIT 100`, [u.org]);
-  res.json({ events: r.rows });
+  // pg: WHERE + LIMIT filter before the JS layer; the memory stub ignores SQL
+  // clauses, which is exactly why the JS filter below is the real gate in dev.
+  const r = await query(`SELECT event, ip, created_at, org_id FROM auth_audit WHERE org_id=$1 OR org_id IS NULL ORDER BY created_at DESC LIMIT 100`, [u.org]);
+  const events = r.rows
+    .filter((row) => row.org_id === u.org || row.org_id == null)
+    .map(({ event, ip, created_at }) => ({ event, ip, created_at }));
+  res.json({ events });
 });
 
 export default router;

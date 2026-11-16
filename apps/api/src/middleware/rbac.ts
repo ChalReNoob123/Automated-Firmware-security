@@ -3,9 +3,12 @@ import { verifyAccess, type Role } from '../auth.js';
 
 // RBAC matrix — spec §2: Owner/Admin/Analyst/Viewer/Auditor. Mirrors SentinelGrid's
 // authorize() middleware but extended to 5 IoT-platform roles.
+// Round-24 audit: Admin was missing `triage:write` — despite write:all, POST
+// /v1/findings (triage) returned 403 for Admins. Admin holds every named perm;
+// Owner's '*' remains the only catch-all so later perms don't silently accrue.
 const PERMS: Record<Role, string[]> = {
   Owner: ['*'],
-  Admin: ['read:all', 'write:all', 'manage:users', 'attest:sign', 'scan:run', 'read:audit'],
+  Admin: ['read:all', 'write:all', 'manage:users', 'attest:sign', 'scan:run', 'read:audit', 'triage:write'],
   Analyst: ['read:all', 'scan:run', 'attest:sign', 'triage:write'],
   Viewer: ['read:telemetry', 'read:findings'],
   Auditor: ['read:all', 'read:audit'],

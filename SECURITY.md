@@ -1312,6 +1312,95 @@ Reduced-motion users never mount the canvas at all (unchanged round-5 guard).
   capability-gated paths are unchanged by construction (canvas never mounts /
   PostFX gate), so the worst case for any user is yesterday's rendering.
 
+## Authorization-Matrix Audit Round 24 — the RBAC matrix becomes real (2026-11-16)
+
+Rounds 20–22 added account surfaces; round 24 went back over the WHOLE route
+surface (41 handlers in 12 route files) asking one question per handler: who
+may call this, what org's data does it touch, and does it enforce that with
+code or with comments? The survey itself surfaced the biggest finding — and
+four more real bugs behind it.
+
+### F1 (high): the RBAC matrix was dead code
+
+`signup` hardcodes `role: 'Owner'` and **no route could mint any other role**.
+The five-role matrix in `middleware/rbac.ts` (Owner/Admin/Analyst/Viewer/
+Auditor) was enforced by `requirePerm` on exactly five endpoints — but with
+every user an Owner, `Analyst`/`Viewer`/`Auditor` were unreachable states and
+`manage:users` was checked by nothing. The matrix was documentation, not
+security.
+
+**Fix:** `POST /v1/auth/invite` (`manage:users` — Owner/Admin only) adds a
+teammate to the CALLER's org with an explicit role ∈ {Admin, Analyst, Viewer,
+Auditor}. **Owner is signup-only by construction** — an Admin can never mint a
+superior. The 20-char temp password (rejection-sampled from four character
+classes, zero modulo bias — same construction discipline as round 22) is
+returned exactly once. Honest gap, documented: this prototype has no mail
+transport, so production would email a one-time link instead of returning the
+password in the response. The invitee enrolls their own TOTP on first login.
+
+### F2 (medium): Admin was denied findings triage
+
+Admin's perm list had `write:all` but not `triage:write` — `POST /v1/findings`
+returned 403 for Admins. Matrix bug; Admin now holds every named perm (Owner's
+`'*'` stays the only catch-all so future perms never silently accrue).
+
+### F3 (medium): emulator snapshots/replay skipped the attestation gate
+
+`POST /sessions/:id/input` and `/crash` required a logged authorization
+attestation, but `/snapshots` (drives the twin mid-testing) and `/replay`
+(reproduces test actions) carried only `requireAuth`. Same gate now applies to
+all four, and every gated action is audited: `emulator_input`,
+`emulator_snapshot`, `emulator_replay`, `emulator_crash` — plus
+`emulator_boot` now logs userId/orgId (it previously logged neither).
+
+### F4 (medium): the audit readout leaked across orgs in dev
+
+`GET /v1/auth/audit` filtered rows in SQL — but the memory fallback behind
+`query()` cannot parse WHERE clauses and returned the 100 newest rows across
+**ALL orgs**. Org A's auditor read org B's auth events in the dev path. Rows
+are now filtered by the caller's org IN JS (backend-agnostic; pg keeps its
+WHERE + LIMIT). `org_id IS NULL` rows stay visible by design: anonymous host
+telemetry (e.g. failed logins for unknown identifiers), not tenant data.
+
+### F5 (low): dead unscoped global write in graph build
+
+`POST /v1/graph/build` wrote every built graph to a module-global in-memory
+store with no org key and no read path — a future-IDOR trap waiting for
+someone to add the GET endpoint. Removed; the route documents the rule:
+persist graphs only WITH an org key when a read path lands.
+
+### Documented decision: compute surfaces are authn-only
+
+`/v1/radar/check`, `/v1/radar/ingest-nvd`, `/v1/radar/poll`, `/v1/graph/build`
+take caller-supplied data in the body and return results to the caller — they
+read no org data and persist nothing, so authentication (not a perm) is the
+correct gate. Pinned as regression tests: a read-limited Viewer may run radar
+checks and graph builds. NVD egress stays behind the shared analysis limiter.
+
+### Verification
+
+- New `apps/api/tests/authz.test.ts` (8 tests): the public-route inventory
+  (exact allow list + 401-not-403 on every protected surface); the full matrix
+  cell by cell for Admin/Analyst/Viewer/Auditor (what each may and may not
+  do); Owner-invite rejection + duplicate 409 + malformed bodies; audit
+  tenancy in BOTH directions (A's auditor sees `user_invited` and never B's
+  distinctive `recovery_regenerate_failed`; B sees their own; no org ids leave
+  the endpoint); gate ordering (`requireAuth` before attestation: no token →
+  401); garbage-id probes; foreign-org session 404 even with a valid own
+  attestation; compute-surface pins.
+- Full battery **146/146 across 13 files**; both typechecks clean; web build
+  clean (web untouched this round — pure API round).
+- **38/38 live protocol checks** against the running API with per-device
+  cookie jars: both org owners enrolled; 4 role invites minted (Owner role
+  400, duplicate 409); invitee TOTP enrollment; Viewer/Auditor matrix probes;
+  audit tenancy both directions; emulator snapshot/replay 403 without the
+  attestation header, 201/200 with it, replay reproducing its snapshot hash;
+  junk attestation 403; emulator audit rows landing in the caller's org only.
+- Honest notes: the live script's "Viewer cannot invite" check fires before
+  that device authenticates (401); the authenticated-Viewer 403 is pinned in
+  the vitest suite. No new migration needed (invite reuses the users table's
+  role column). AI image quota untouched.
+
 ## Dependency Hygiene
 
 - `npm audit --workspaces --audit-level=high` runs in CI
