@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { useStory, seg } from './storyStore';
 import { sfxBlip } from './audio/sfx';
 import PostFX, { usePostOK } from './post/PostFX';
@@ -85,6 +86,34 @@ function Aurora() {
   );
 }
 
+/* ------------- round 25: procedural studio environment ------------- */
+
+// A PMREM-baked RoomEnvironment gives every metal/clearcoat surface a real
+// reflection to sample — without it, a high-metalness face pointing away from
+// the lights resolves to pure black (the solid dark plates seen on some
+// ensemble angles). Zero new dependencies: RoomEnvironment ships inside the
+// three package. environmentIntensity keeps it subordinate to the emissive /
+// bloom identity so the dark-space mood survives.
+function Env() {
+  const scene = useThree((s) => s.scene);
+  const gl = useThree((s) => s.gl);
+  useEffect(() => {
+    const pmrem = new THREE.PMREMGenerator(gl);
+    const room = new RoomEnvironment();
+    const target = pmrem.fromScene(room, 0.04);
+    scene.environment = target.texture;
+    scene.environmentIntensity = 0.45;
+    return () => {
+      scene.environment = null;
+      target.texture.dispose();
+      target.dispose();
+      room.dispose?.();
+      pmrem.dispose();
+    };
+  }, [scene, gl]);
+  return null;
+}
+
 /* ------------- lights: key colors drain toward alert tones during the hunt ------------- */
 
 function Lights() {
@@ -105,6 +134,11 @@ function Lights() {
     <>
       <pointLight ref={l1} position={[8, 6, 8]} intensity={60} color="#22d3ee" />
       <pointLight ref={l2} position={[-8, -4, 6]} intensity={50} color="#a855f7" />
+      {/* round 25: a proper studio rig — directional key for the metal spec
+          highlight, cool rim from behind for edge separation. The point lights
+          alone gave the standard/physical materials no consistent key. */}
+      <directionalLight position={[6, 10, 5]} intensity={1.35} color="#dff5ff" />
+      <directionalLight position={[-7, 3, -9]} intensity={0.8} color="#a855f7" />
     </>
   );
 }
@@ -166,15 +200,46 @@ const SHELL_F = /* glsl */ `
   uniform float uTime;
   uniform float uAlert;
   uniform float uBoost;
+
+  // round 25: flowing energy-cell surface — two fbm bands drift over the
+  // shell and brighten as they cross the limb. The old shader was a flat
+  // two-tone rim; this one reads as living plasma under bloom.
+  float shash(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+  }
+  float snoise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(shash(i), shash(i + vec2(1.0, 0.0)), u.x), mix(shash(i + vec2(0.0, 1.0)), shash(i + vec2(1.0, 1.0)), u.x), u.y);
+  }
+  float fbm(vec2 p) {
+    float v = 0.0;
+    float a = 0.5;
+    for (int k = 0; k < 4; k++) {
+      v += a * snoise(p);
+      p *= 2.13;
+      a *= 0.5;
+    }
+    return v;
+  }
+
   void main() {
-    float rim = pow(1.0 - abs(dot(vN, vI)), 2.4);
+    float ndv = abs(dot(vN, vI));
+    float rim = pow(1.0 - ndv, 2.4);
+    // spherical-ish surface uv from the normal (no seams at this gloss level)
+    vec2 suv = vN.xy * 2.4 + vec2(vN.z * 1.7, vN.y * 0.8);
+    float flow = fbm(suv + vec2(uTime * 0.12, -uTime * 0.07));
+    float band = smoothstep(0.42, 0.62, flow) * 0.6 + smoothstep(0.55, 0.75, fbm(suv * 2.3 - vec2(uTime * 0.05, uTime * 0.03))) * 0.4;
     vec3 cyan = vec3(0.13, 0.83, 0.93);
     vec3 violet = vec3(0.66, 0.33, 0.98);
     vec3 alert = vec3(0.96, 0.24, 0.28);
     vec3 col = mix(cyan, violet, 0.5 + 0.5 * sin(uTime * 0.55));
     col = mix(col, alert, uAlert * 0.75);
+    col *= 0.75 + band * 0.85;
+    col += vec3(0.4, 0.8, 1.0) * rim * band;
     float pulse = 0.72 + 0.28 * sin(uTime * 2.3);
-    gl_FragColor = vec4(col, rim * (0.3 + uBoost * 0.35) * pulse);
+    gl_FragColor = vec4(col, rim * (0.3 + uBoost * 0.35) * pulse * (0.8 + band * 0.5));
   }
 `;
 
@@ -246,7 +311,10 @@ function Core() {
       </mesh>
       <mesh ref={heart}>
         <octahedronGeometry args={[1]} />
-        <meshStandardMaterial color="#0ea5e9" emissive="#22d3ee" emissiveIntensity={2.2} roughness={0.2} />
+        {/* round 25: clearcoat physical material — the heart now rolls a real
+            specular highlight under the key light instead of a flat glow.
+            fog=false: hero objects never bake toward the background color. */}
+        <meshPhysicalMaterial color="#0ea5e9" emissive="#22d3ee" emissiveIntensity={2.2} roughness={0.22} metalness={0.85} clearcoat={1} clearcoatRoughness={0.18} fog={false} />
       </mesh>
       <CoreShell />
     </group>
@@ -339,7 +407,18 @@ function Shards({ count = 14 }: { count?: number }) {
       {items.map((s, i) => (
         <mesh key={i} rotation={s.tilt}>
           <boxGeometry args={s.size} />
-          <meshStandardMaterial color={s.cyan ? '#0e7490' : '#6d28d9'} emissive={s.cyan ? '#22d3ee' : '#a855f7'} emissiveIntensity={0.55} roughness={0.35} metalness={0.6} />
+          {/* round 25: clearcoat plating — machined-metal panels with a sharp
+              topcoat highlight, not flat plastic */}
+          <meshPhysicalMaterial
+            color={s.cyan ? '#0e7490' : '#6d28d9'}
+            emissive={s.cyan ? '#22d3ee' : '#a855f7'}
+            emissiveIntensity={0.55}
+            roughness={0.28}
+            metalness={0.85}
+            clearcoat={1}
+            clearcoatRoughness={0.28}
+            fog={false}
+          />
         </mesh>
       ))}
       <lineSegments geometry={streams}>
@@ -350,6 +429,128 @@ function Shards({ count = 14 }: { count?: number }) {
 }
 
 /* ------------- halo rings: gyroscopic calibration rings around the core ------------- */
+
+/* round 25: SENTINEL DRONES — an instanced patrol of emissive octahedra
+   orbiting the ensemble on individually inclined planes, each trailing a
+   fading ribbon (ring-buffer line segments, head bright → tail dark). They
+   tighten toward the core while it assembles, scatter wide during the hunt,
+   and reform on the verdict — motion density that keeps the scene alive
+   between act beats. Zero new dependencies; 9 instances + ~250 trail verts. */
+
+const DRONE_TRAIL = 14;
+
+type DroneSpec = { radius: number; speed: number; phase: number; yAmp: number; ySpeed: number; inc: number; node: number; dir: number };
+
+function makeDrones(count: number): DroneSpec[] {
+  const rng = mulberry(0xd07e);
+  return Array.from({ length: count }, (_, i) => ({
+    radius: 5.4 + rng() * 1.6,
+    speed: 0.22 + rng() * 0.3,
+    phase: (i / count) * Math.PI * 2 + rng() * 0.5,
+    yAmp: 0.35 + rng() * 0.55,
+    ySpeed: 0.4 + rng() * 0.5,
+    inc: (rng() - 0.5) * 1.1,
+    node: rng() * Math.PI * 2,
+    dir: rng() > 0.5 ? 1 : -1,
+  }));
+}
+
+function Drones({ count = 9 }: { count?: number }) {
+  const meshes = useRef<THREE.InstancedMesh>(null);
+  const specs = useMemo(() => makeDrones(count), [count]);
+  // ring buffers of recent head positions per drone (trails). Circular index,
+  // zero allocation per frame: newest sample overwrites the oldest slot.
+  const trails = useMemo(() => specs.map(() => Array.from({ length: DRONE_TRAIL }, () => new THREE.Vector3(0, 0, 0))), [specs]);
+  const trailIdx = useRef<number[]>(specs.map(() => 0));
+  const geom = useMemo(() => {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(count * DRONE_TRAIL * 6), 3));
+    g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(count * DRONE_TRAIL * 6), 3));
+    return g;
+  }, [count]);
+  const dummy = useMemo(() => new THREE.Object3D(), []);
+  const tmpV = useMemo(() => new THREE.Vector3(), []);
+  const tmpE = useMemo(() => new THREE.Euler(), []);
+
+  useEffect(() => () => geom.dispose(), [geom]);
+
+  useFrame((state, d) => {
+    void d;
+    const t = state.clock.elapsedTime;
+    const p = useStory.getState().p;
+    // choreography: gather during assemble → flare wide in the hunt → reform
+    const a1 = seg(p, 0.02, 0.24);
+    const a3 = seg(p, 0.52, 0.74);
+    const a4 = seg(p, 0.78, 0.96);
+    const radiusMul = 1 - a1 * 0.34 + a3 * 0.42 - a4 * 0.22;
+    const speedMul = 1 + a3 * 1.35 + a4 * 0.3;
+    const pos = geom.attributes.position.array as Float32Array;
+    const col = geom.attributes.color.array as Float32Array;
+    const im = meshes.current;
+    if (!im) return;
+
+    for (let i = 0; i < count; i++) {
+      const sp = specs[i];
+      const ang = sp.phase + t * sp.speed * sp.dir * speedMul;
+      const r = sp.radius * radiusMul;
+      // orbit in the XZ plane, then incline + rotate the plane per drone
+      tmpV.set(Math.cos(ang) * r, Math.sin(t * sp.ySpeed + sp.phase) * sp.yAmp, Math.sin(ang) * r);
+      tmpV.applyEuler(tmpE.set(sp.inc, sp.node, 0));
+      const x = tmpV.x;
+      const y = tmpV.y;
+      const z = tmpV.z;
+
+      // push the head onto this drone's trail ring buffer (circular, no alloc)
+      const ring = trails[i];
+      trailIdx.current[i] = (trailIdx.current[i] + 1) % DRONE_TRAIL;
+      ring[trailIdx.current[i]].set(x, y, z);
+
+      // instance transform: slow tumble + breathing scale
+      dummy.position.set(x, y, z);
+      dummy.rotation.set(t * 0.7 + i, t * 0.9 + sp.phase, 0);
+      const s = 0.85 + 0.2 * Math.sin(t * 2.4 + i * 1.3);
+      dummy.scale.setScalar(s);
+      dummy.updateMatrix();
+      im.setMatrixAt(i, dummy.matrix);
+
+      // trail ribbon: newest → oldest, head bright fading to dark
+      const base = sp.node > Math.PI ? [0.66, 0.33, 0.98] : [0.13, 0.83, 0.93];
+      for (let k = 0; k < DRONE_TRAIL - 1; k++) {
+        const vi = (i * DRONE_TRAIL + k) * 6;
+        const aP = ring[(trailIdx.current[i] - k + DRONE_TRAIL * 2) % DRONE_TRAIL];
+        const bP = ring[(trailIdx.current[i] - k - 1 + DRONE_TRAIL * 2) % DRONE_TRAIL];
+        pos[vi] = aP.x;
+        pos[vi + 1] = aP.y;
+        pos[vi + 2] = aP.z;
+        pos[vi + 3] = bP.x;
+        pos[vi + 4] = bP.y;
+        pos[vi + 5] = bP.z;
+        const fade = Math.pow(1 - k / (DRONE_TRAIL - 1), 2.2) * 0.85;
+        col[vi] = base[0] * fade;
+        col[vi + 1] = base[1] * fade;
+        col[vi + 2] = base[2] * fade;
+        col[vi + 3] = base[0] * fade * 0.55;
+        col[vi + 4] = base[1] * fade * 0.55;
+        col[vi + 5] = base[2] * fade * 0.55;
+      }
+    }
+    im.instanceMatrix.needsUpdate = true;
+    geom.attributes.position.needsUpdate = true;
+    geom.attributes.color.needsUpdate = true;
+  });
+
+  return (
+    <group>
+      <instancedMesh ref={meshes} args={[undefined, undefined, count]}>
+        <octahedronGeometry args={[0.11, 0]} />
+        <meshStandardMaterial color="#7dd3fc" emissive="#22d3ee" emissiveIntensity={1.6} roughness={0.3} metalness={0.6} toneMapped={false} fog={false} />
+      </instancedMesh>
+      <lineSegments geometry={geom}>
+        <lineBasicMaterial vertexColors transparent opacity={0.9} blending={THREE.AdditiveBlending} depthWrite={false} />
+      </lineSegments>
+    </group>
+  );
+}
 
 function HaloRings() {
   const a = useRef<THREE.Mesh>(null);
@@ -851,18 +1052,23 @@ export default function StoryScene() {
   return (
     <div style={{ position: 'absolute', inset: 0 }} data-cursor="drag">
       <Canvas
-        dpr={[1, 2]}
+        // round 25: dpr floor 1.5 supersamples the scene raster (the post
+        // chain's antialias baseline — see PostFX header for why the MSAA
+        // renderbuffer path was replaced)
+        dpr={[1.5, 2]}
         camera={{ position: [0, 1.4, 12.5], fov: 55 }}
         gl={{ antialias: true, alpha: false, powerPreference: 'high-performance' }}
         style={{ position: 'absolute', inset: 0 }}
       >
         <color attach="background" args={['#020617']} />
         <fog attach="fog" args={['#020617', 12, 34]} />
+        <Env />
         <ambientLight intensity={0.55} />
         <Lights />
         <Aurora />
         <Starfield />
         <Ensemble />
+        <Drones />
         <Rig />
         <DragOrbit />
         {/* round 21: grain + bloom + velocity chromatic aberration (gated) */}

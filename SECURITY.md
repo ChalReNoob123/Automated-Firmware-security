@@ -1401,6 +1401,145 @@ checks and graph builds. NVD egress stays behind the shared analysis limiter.
   the vitest suite. No new migration needed (invite reuses the users table's
   role column). AI image quota untouched.
 
+## GUI Misalignment Fix + Renderer Overhaul Round 25 — nav overflow, MSAA→SSAA+FXAA, PMREM environment, drones (2026-11-16)
+
+### The report: a misaligned GUI
+
+User reported the GUI misaligned. Browser measurement on the prod build: page
+`scrollWidth` 1620px against a 990px viewport — the `.sf-nav` right utility
+cluster (audio chip, 8k badge, MENU, Login, UTC clock, API chip) ran 630px past
+the right edge. The nav only had a wrap breakpoint at ≤860px, so every viewport
+between ~860px and ~1230px overflowed the document instead of wrapping.
+
+Fix (`cinematic.css`):
+
+1. `.sf-nav` now wraps at ALL widths (not just ≤860px).
+2. `.sf-nav-links` gets `min-width: 0` + shrink + `overflow-x: auto` with a
+   hidden scrollbar, so the middle cluster yields before the utility cluster
+   is pushed out.
+3. `html, body { overflow-x: clip }` as a hard guarantee — decorative wide
+   layers (`.sf-horizon`) can never create document overflow again.
+4. Verified in the browser: nav cluster fully inside the viewport; `scrollWidth
+   === clientWidth` on `/`, `/dashboard`, and `/login`.
+
+### The black-rectangle investigation (found during round-25 verification)
+
+During post-fix verification, intermittent solid-black rectangles appeared over
+the story canvas in settled frames (act 2). Full evidence trail, in order:
+
+1. DOM audit: no solid-black DOM elements in the affected band (backgroundColor
+   scan over every element) ⇒ not layout/DOM.
+2. `elementFromPoint` at the rect coordinates → `CANVAS`; an isolation
+   screenshot with everything but the canvas hidden still showed a solid black
+   square ⇒ canvas-drawn content.
+3. Live scene-graph dump (37 drawables, temporary debug hook): only four opaque
+   material classes exist (heart, 14 shard plates, drones, shell shader), and
+   every shard carries a live emissive ≥ 0.55 — none should render black.
+4. Deterministic repro: oriented all 14 shard plates face-on toward the camera
+   via raw quaternion math → three solid black squares. Face-on high-metalness
+   (0.85) plates are one root cause candidate: a metal face pointing away from
+   the lights has nothing to reflect.
+5. Direct-render bypass test (patched `gl.render` to draw the main scene
+   straight to the default framebuffer, skipping every post pass): the scene
+   rendered clean — good reflections, no artifacts ⇒ the artifact entered via
+   the render-target chain, not the scene.
+6. GL level: a per-call error ring across 60+ frames recorded zero GL errors;
+   per-format MSAA probes (RGBA16F @8×, @4×, RGBA8 @8× renderbuffers + FBO
+   completeness) all `FRAMEBUFFER_COMPLETE` with no errors; the
+   `WEBGL_multisampled_render_to_texture` extension is absent, so three uses
+   the renderbuffer → texture resolve (blit) path.
+7. A 700-frame `readPixels` detector scanning the grade-pass output (3
+   scanlines/frame, black-run > 50px) found 0 occurrences — the artifact is
+   genuinely intermittent (timing/driver-dependent) and not reproducible on
+   demand.
+
+Root cause (suspected, unproven): the ANGLE/D3D MSAA-renderbuffer resolve path
+behind the post chain. Three r185's resolve blits COLOR|DEPTH by default
+(`resolveDepthBuffer: true`); on this machine the resolved texture
+intermittently presented solid-black screen-aligned tiles when sampled by the
+bloom/grade passes. GL-silent and intermittent ⇒ not safely fixable at our
+layer.
+
+**Decision: remove driver MSAA from the scene target entirely.** Antialiasing
+now comes from:
+
+- **Supersampling** — the story Canvas runs `dpr={[1.5, 2]}`, so the scene
+  rasterizes at ≥1.5× display resolution (verified live: 1286×932 CSS canvas →
+  1929×1397 backing store).
+- **FXAA 3.11-lite** folded into the grade pass (luma-driven edge-span blend).
+- All render-target textures pinned to `LinearFilter` +
+  `generateMipmaps: false` (rules out incomplete-mip sampling as a cause).
+
+Trade-off, honestly noted: the dpr 1.5 floor costs ~2.25× fragment work versus
+dpr 1 and applies to every visitor — including users whose device fails the
+`usePostOK` gate (they pay for supersampling without the post chain). In
+exchange, this artifact class is eliminated deterministically and
+cross-driver.
+
+### Renderer overhaul — the cinematic pass
+
+- **PMREM `RoomEnvironment`** (ships inside three; zero new dependencies)
+  baked to `scene.environment` with `environmentIntensity = 0.45`: metals and
+  clearcoat now reflect a real studio gradient instead of resolving to black,
+  while staying subordinate to the emissive/bloom identity so the dark-space
+  mood survives.
+- **`fog={false}`** on the heart, shard, and drone hero materials — hero
+  objects never bake toward the background color (and the unlit-metal near-
+  black failure mode is now double-fixed by env map + fog exclusion).
+- Directional key + rim lights layered onto the existing alert-draining rig.
+- Heart + shards: `meshPhysicalMaterial` with `clearcoat = 1` — a real
+  specular highlight rolls across surfaces under the key light.
+- Shell: new `SHELL_F` fbm energy-cell fragment shader.
+- **Drones**: 9 instanced octahedra with circular ring-buffer trails (no
+  per-frame allocations), performing the act choreography (gather / flare /
+  reform).
+- **Bloom rebuilt** as a real dual-filter chain: bright-pass with a soft knee
+  → ¼-res target → separable 9-tap gaussian ping-pong, two iterations (the
+  second 2.6× wider) → composited in the grade pass. Replaces round 21's
+  in-pass ring bloom, which banded badly under bright sources.
+- **Grade pass**: FXAA + velocity chromatic aberration + bloom composite +
+  animated grain + vignette, with tone mapping (ACES) + sRGB encode INSIDE the
+  pass — three r185 tone-maps only when rendering to the default framebuffer,
+  so the offscreen chain stays linear HDR and the pass reproduces the direct-
+  render look exactly.
+- Fixed during build: invalid hex literal `0xd0ne` → `0xd07e` (caught by
+  typecheck).
+- CSS polish: `-webkit-font-smoothing: antialiased`, `::selection` theming,
+  smooth scroll behind a reduced-motion guard.
+
+### Final post chain (7 draws)
+
+1. scene → linear HalfFloat RT (no driver MSAA, no mips)
+2. bright-pass + box downsample → ¼-res
+3–6. separable gaussian ping-pong (h, v, 2.6h, 2.6v)
+7. grade (FXAA + CA + bloom + grain + vignette + tone map + sRGB) → screen
+
+A positive-priority `useFrame` takes over rendering from R3F (round-21
+mechanism, unchanged). The `usePostOK` gate is unchanged: reduced-motion
+users, viewports < 900px, and ≤4-core / low-memory devices skip the whole
+chain and get the context's direct antialiased render.
+
+### Verification
+
+- Typecheck + build clean; deployed to `:3006` and browser-verified on the
+  deployed build: fresh reload → canvas backing store 1929×1397 (dpr 1.5
+  exactly), `scrollWidth === clientWidth` on `/`, `/dashboard`, `/login`;
+  acts 1–4 screenshots clean (act 2 sampled twice) — no black rectangles,
+  bloom glow present, env reflections correct, edges smooth.
+- The API chip went red mid-verification: the tsx-watch process died again
+  (known flakiness, documented under Known Limitations). Relaunched, health
+  200. Reminder: API state is still in-memory until Supabase is provisioned —
+  relaunches wipe accounts (migrations 002–006 are ready).
+- Every debug instrument used during the investigation (the `window.__SF`
+  hook, `gl.render`/`setRenderTarget` monkey-patches) was removed from source
+  before commit; the shipped build contains none of them.
+- Honest notes: the black-tile artifact could not be reproduced on demand even
+  with the pixel detector running; the MSAA-resolve attribution is an
+  evidence-based inference (clean scene ⇒ artifact enters via the RT chain),
+  not a driver-level proof. Crossing an act boundary can still render one
+  un-tonemapped frame while scrubbing fast (pre-existing, invisible when
+  settled). AI image quota remains 0 and was not retried.
+
 ## Dependency Hygiene
 
 - `npm audit --workspaces --audit-level=high` runs in CI

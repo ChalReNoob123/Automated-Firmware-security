@@ -5,6 +5,22 @@
   --sf-bg: #020617;
 }
 
+/* round 25: cinematic rendering polish — crisp type, branded selection,
+   smooth in-page scrolling (reduced-motion users keep instant jumps). */
+.sf-body {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+::selection {
+  background: rgba(34, 211, 238, 0.28);
+  color: #f0fdff;
+}
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
 /* Sticky-footer shell: page column fills the viewport, footer parks at the
    bottom even on short pages (login, error states) — no dead void below. */
 .sf-body {
@@ -324,7 +340,18 @@
   transition: background-position 0.7s ease;
 }
 .sf-brand:hover .sf-brand-text { background-position: 100% 0; }
-.sf-nav-links { display: flex; gap: 3px; }
+/* round 25 layout fix: the nav row overflowed the viewport on mid-size
+   windows (measured: right cluster ran 630px past a 990px viewport, pushing a
+   horizontal scrollbar onto the whole page — the reported "misaligned GUI").
+   The row now WRAPS at every width; the link row shrinks (min-width:0) and
+   scrolls horizontally instead of shoving the right cluster off-screen, and
+   the scrollbar is hidden so it still reads as one console strip. */
+.sf-nav {
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+.sf-nav-links { display: flex; gap: 3px; flex: 1 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; }
+.sf-nav-links::-webkit-scrollbar { display: none; }
 .sf-nav-link {
   color: #94a3b8;
   text-decoration: none;
@@ -1206,6 +1233,13 @@ html.sf-cursor-on * { cursor: none !important; }
   60% { transform: translate(-2%, -2%); }
   80% { transform: translate(3%, 3%); }
   100% { transform: translate(0, 0); }
+}
+
+/* round 25: horizontal overflow can never shift the page again — anything
+   wider than the viewport is clipped, not scrollable (the vertical scrollbar
+   is untouched). Belt-and-braces under the nav wrap fix. */
+html, body {
+  overflow-x: clip;
 }
 
 /* themed scrollbar: thin, dark, cyan-to-violet thumb */
