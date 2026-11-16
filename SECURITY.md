@@ -1272,6 +1272,46 @@ was wrong.)
   recovery flows themselves are protocol-verified end to end. Scratch debug
   test deleted after diagnosis. AI image quota untouched.
 
+## Camera Choreography Round 23 — the camera performs the story (2026-11-16)
+
+The pinned story scene already morphed per act and carried the round-21 post
+layer, but the camera only DOLLIED (a single z-distance driven by act
+progress). Round 23 gives the camera the lusion signature: a real shot list.
+
+### The shot list (scroll-scrubbed camera path)
+
+Six keyframed stations, one per story beat — sampled through a **centripetal
+Catmull-Rom curve** so travel arcs around the ensemble instead of cutting
+straight lines through it, with a piecewise p→u remap so each station lands
+exactly on its story position (smoothstep easing — the camera *rests* on
+each framing and travels between them):
+
+- **0.00** establishing three-quarter drift-in (opening)
+- **0.24** assembled: close frontal hero shot
+- **0.48** unpacked: pulled-back 3/4 to read the exploded layout
+- **0.74** hunt: high operator shot looking DOWN at the radar table (the
+  sweep reads like a mission console)
+- **0.90** verdict: swing wide
+- **1.00** settled hero framing
+
+The look-target lerps independently between the same stations. Pointer
+parallax and the hunt roll-wobble ride on top of the path; **act boundaries
+fire a short decaying camera shake** — the visual half of the act cut whose
+audio half (sfxImpact) already existed. DragOrbit still owns the ENSEMBLE
+(yaw/pitch on the group), so grabbing and the camera path compose cleanly.
+Reduced-motion users never mount the canvas at all (unchanged round-5 guard).
+
+### Verification
+
+- Typecheck clean, `next build` clean, full battery **138/138 across 12
+  files** (no API changes this round — web-only).
+- Deployed to prod `:3006`: story SSR markers intact; the camera-path module
+  confirmed in the shipped client chunk (`centripetal` unique string).
+- Honest limits: same occluded embedded-browser artifact — the choreography
+  is verified at SSR + bundle + source level, not by eye. Reduced-motion and
+  capability-gated paths are unchanged by construction (canvas never mounts /
+  PostFX gate), so the worst case for any user is yesterday's rendering.
+
 ## Dependency Hygiene
 
 - `npm audit --workspaces --audit-level=high` runs in CI

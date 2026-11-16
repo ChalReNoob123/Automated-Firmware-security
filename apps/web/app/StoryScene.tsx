@@ -558,26 +558,79 @@ function Dust({ count = 170 }: { count?: number }) {
   );
 }
 
+/* ---------- round 23: the camera performs the story ---------- */
+// Keyframed camera stations — one shot per act, with travel between them:
+//   0.00  establishing three-quarter drift-in (opening)
+//   0.24  assembled: close frontal hero shot
+//   0.48  unpacked: pulled-back 3/4 to read the exploded layout
+//   0.74  hunt: high operator shot looking down at the radar table
+//   0.90  verdict: swing wide
+//   1.00  settled hero framing
+// Sampled through a centripetal Catmull-Rom curve so the travel ARCS around
+// the ensemble instead of cutting straight lines through it. The look-target
+// lerps independently between the same stations. Pointer parallax and the
+// hunt-roll wobble ride ON TOP of the path, and act boundaries fire a short
+// decaying shake — the visual half of the act cut that sfxImpact already
+// lands in audio. DragOrbit still owns the ENSEMBLE (yaw/pitch on the group),
+// so dragging and the camera path compose cleanly.
+
+const STATIONS: { p: number; pos: [number, number, number]; look: [number, number, number] }[] = [
+  { p: 0.0, pos: [2.4, 2.9, 13.8], look: [0, -0.2, 0] },
+  { p: 0.24, pos: [0.35, 1.15, 10.3], look: [0, -0.3, 0] },
+  { p: 0.48, pos: [4.7, 0.8, 11.4], look: [0, -0.55, 0] },
+  { p: 0.74, pos: [0.5, 6.4, 5.4], look: [0, -1.7, 0] },
+  { p: 0.9, pos: [-3.6, 1.7, 12.0], look: [0, -0.35, 0] },
+  { p: 1.0, pos: [0.0, 1.25, 11.4], look: [0, -0.3, 0] },
+];
+
+const ACT_CUTS = [0.26, 0.52, 0.78];
+
 function Rig() {
   const roll = useRef(0);
+  const shake = useRef(0);
+  const lastP = useRef(0);
+  const curve = useMemo(
+    () => new THREE.CatmullRomCurve3(STATIONS.map((s) => new THREE.Vector3(...s.pos)), false, 'centripetal', 0.5),
+    []
+  );
   useFrame((state, d) => {
-    const p = useStory.getState().p;
-    const a1 = seg(p, 0.02, 0.24);
-    const a2 = seg(p, 0.26, 0.48);
-    const a3 = seg(p, 0.52, 0.74);
-    const a4 = seg(p, 0.78, 0.96);
-    // dolly in during assemble, drift back through hunt/verdict — plus parallax
-    const z = 12.5 - a1 * 1.9 - a2 * 0.6 + a3 * 1.1 + a4 * 0.7;
-    const cx = state.pointer.x * 1.2;
-    const cy = 1.4 + state.pointer.y * 0.8;
-    const k = Math.min(1, d * 2.2);
-    state.camera.position.x += (cx - state.camera.position.x) * k;
-    state.camera.position.y += (cy - state.camera.position.y) * k;
-    state.camera.position.z += (z - state.camera.position.z) * k;
-    state.camera.lookAt(0, -0.35 - a2 * 0.35, 0);
-    // subtle roll: pointer lean + a faint wobble while hunting
+    const p = THREE.MathUtils.clamp(useStory.getState().p, 0, 1);
+    // act-boundary shake impulses (crossing either direction)
+    for (const b of ACT_CUTS) {
+      if ((lastP.current < b && p >= b) || (lastP.current > b && p <= b)) shake.current = 1;
+    }
+    lastP.current = p;
+    shake.current *= Math.pow(0.02, d); // frame-rate independent decay
+
+    // piecewise p→curve-u remap so station i lands exactly at its keyframe p
+    let i = 0;
+    while (i < STATIONS.length - 2 && p > STATIONS[i + 1].p) i++;
+    const a = STATIONS[i];
+    const b = STATIONS[i + 1];
+    const local = THREE.MathUtils.clamp((p - a.p) / Math.max(1e-4, b.p - a.p), 0, 1);
+    const eased = local * local * (3 - 2 * local); // smoothstep — rests at stations
+    const pos = curve.getPoint((i + eased) / (STATIONS.length - 1));
+    const look = new THREE.Vector3(
+      a.look[0] + (b.look[0] - a.look[0]) * eased,
+      a.look[1] + (b.look[1] - a.look[1]) * eased,
+      a.look[2] + (b.look[2] - a.look[2]) * eased
+    );
+
+    // pointer parallax rides on top of the path
+    pos.x += state.pointer.x * 0.9;
+    pos.y += state.pointer.y * 0.6;
+    // decaying shake at act cuts
+    const sh = shake.current * 0.07;
     const t = state.clock.elapsedTime;
-    const target = -state.pointer.x * 0.035 + Math.sin(t * 0.8) * a3 * 0.012;
+    pos.x += Math.sin(t * 47.0) * sh;
+    pos.y += Math.sin(t * 39.3 + 1.7) * sh;
+    pos.z += Math.sin(t * 51.1 + 3.1) * sh * 0.6;
+
+    const k = Math.min(1, d * 3.2);
+    state.camera.position.lerp(pos, k);
+    state.camera.lookAt(look);
+    // subtle roll: pointer lean + a faint wobble while hunting
+    const target = -state.pointer.x * 0.035 + Math.sin(t * 0.8) * seg(p, 0.52, 0.74) * 0.012;
     roll.current += (target - roll.current) * Math.min(1, d * 2.5);
     state.camera.rotateZ(roll.current);
   });
