@@ -1,10 +1,12 @@
 import { Router, type Response } from 'express';
 import { z } from 'zod';
 import speakeasy from 'speakeasy';
+import { createHash, randomBytes } from 'node:crypto';
 import { audit, query } from '../db.js';
 import { signAccess, signRefresh, signTemp, verifyRefresh, verifyTemp } from '../auth.js';
 import { requireAuth, requirePerm } from '../middleware/rbac.js';
 import {
+  countUnusedRecoveryCodes,
   createOrg,
   createUser,
   findRefresh,
@@ -12,12 +14,14 @@ import {
   findUserByIdentifier,
   hashPassword,
   listActiveRefreshForUser,
+  replaceRecoveryCodes,
   revokeAccess,
   revokeRefresh,
   revokeAllRefreshForUser,
   revokeRefreshForUser,
   storeRefresh,
   updateUser,
+  useRecoveryCode,
   verifyPassword,
 } from '../store.js';
 
@@ -64,6 +68,31 @@ function failCap(maxFails: number, windowMs: number) {
 
 const TOTP_FAILS = failCap(5, 5 * 60 * 1000);
 const REAUTH_FAILS = failCap(5, 5 * 60 * 1000);
+
+// ── TOTP recovery codes (round 22) ──
+// 10 single-use codes per enrollment. 10 chars from a 32-symbol unambiguous
+// alphabet (no 0/O/1/I/L) ≈ 50 bits — online guessing is bounded by the
+// shared TOTP grind cap plus the /v1/auth IP limiter, and the store keeps
+// only SHA-256 digests of the normalized form. Plaintext is returned exactly
+// once (enrollment completion / regeneration) and never again.
+const RECOVERY_ALPHABET = '23456789ABCDEFGHJKMNPQRSTUVWXYZ'; // 31 symbols — no 0/O/1/I/L lookalikes
+const sha256hex = (normalized: string) => createHash('sha256').update(normalized, 'utf8').digest('hex');
+const normalizeRecovery = (raw: string) => raw.toUpperCase().replace(/[^2-9A-Z]/g, '');
+
+function generateRecoveryCodes(count = 10): string[] {
+  const codes = new Set<string>();
+  while (codes.size < count) {
+    let s = '';
+    while (s.length < 10) {
+      for (const b of randomBytes(16)) {
+        if (b < 248) s += RECOVERY_ALPHABET[b % 31]; // 248 = 8×31 → rejection-free, zero modulo bias
+        if (s.length === 10) break;
+      }
+    }
+    codes.add(`${s.slice(0, 5)}-${s.slice(5)}`);
+  }
+  return [...codes];
+}
 
 function loginRateLimit(identifier: string): boolean {
   const now = Date.now();
@@ -174,20 +203,66 @@ router.post('/login', async (req, res) => {
   res.json({ step: '2fa', tempToken: signTemp(user.id) });
 });
 
-// POST /v1/auth/verify-2fa — TOTP check (window 1) → access + rotating HttpOnly refresh.
+// POST /v1/auth/verify-2fa — TOTP check (window 1) → access + rotating HttpOnly
+// refresh. Round 22: `recoveryCode` may be sent INSTEAD of the 6-digit `code`
+// (lost authenticator) — a valid unused recovery code completes the login
+// without TOTP, consumes itself, REVOKES every other session, and flips
+// totp_enrolled=false so the next login re-enrolls a fresh authenticator.
+// Completing a regular enrollment now also issues the user's recovery codes.
 router.post('/verify-2fa', async (req, res) => {
-  const p = z.object({ tempToken: z.string(), code: z.string().length(6).regex(/^\d{6}$/), rememberMe: z.boolean().optional() }).safeParse(req.body);
+  const p = z
+    .object({ tempToken: z.string(), code: z.string().length(6).regex(/^\d{6}$/).optional(), recoveryCode: z.string().min(6).max(32).optional(), rememberMe: z.boolean().optional() })
+    .refine((d) => !!d.code || !!d.recoveryCode, { message: 'tempToken + 6-digit code required' })
+    .safeParse(req.body);
   if (!p.success) return res.status(400).json({ error: p.error.issues[0]?.message ?? 'tempToken + 6-digit code required' });
   try {
     const t = verifyTemp(p.data.tempToken);
     const user = await findUserById(t.sub);
     if (!user?.totp_secret) throw new Error('no-totp');
-    // TOTP grind cap: too many misses inside the temp-token window → refuse
-    // until the user restarts from the password step (fresh temp token).
+    // Grind cap (shared with recovery codes): too many misses inside the
+    // temp-token window → refuse until the user restarts from the password
+    // step (fresh temp token).
     if (TOTP_FAILS.exceeded(user.id)) {
       await audit('2fa_grind_blocked', { userId: user.id, orgId: user.org_id, ip: req.ip });
       return res.status(403).json({ error: 'Too many verification attempts — start again from the password step.' });
     }
+
+    const issueTokens = async (days: number) => {
+      const access = signAccess({ id: user!.id, orgId: user!.org_id, role: user!.role });
+      const refresh = signRefresh({ id: user!.id }, days);
+      await storeRefresh(refresh.jti, user!.id, refresh.expiresAt);
+      refreshCookie(res, refresh.token, days);
+      return { access, refresh };
+    };
+
+    // ── recovery-code path ──
+    if (p.data.recoveryCode) {
+      const r = await useRecoveryCode(user.id, normalizeRecovery(p.data.recoveryCode));
+      if (!r.used) {
+        TOTP_FAILS.record(user.id);
+        await audit('recovery_code_failed', { userId: user.id, orgId: user.org_id, ip: req.ip });
+        return res.status(401).json({ error: 'Invalid recovery code' });
+      }
+      TOTP_FAILS.clear(user.id);
+      // The authenticator is lost/unknown: kill every other session, then
+      // force a fresh enrollment on the next login.
+      const revokedOtherSessions = await revokeAllRefreshForUser(user.id);
+      await updateUser(user.id, { totp_enrolled: false, totp_secret: null });
+      const { access, refresh } = await issueTokens(p.data.rememberMe ? 30 : 7);
+      await audit('recovery_code_used', { userId: user.id, orgId: user.org_id, ip: req.ip });
+      return res.json({
+        success: true,
+        accessToken: access.token,
+        sessionId: refresh.jti,
+        usedRecoveryCode: true,
+        recoveryRemaining: r.remaining,
+        revokedOtherSessions,
+        user: { id: user.id, username: user.username, email: user.email, role: user.role, orgId: user.org_id },
+      });
+    }
+
+    // ── TOTP path ──
+    if (!p.data.code) return res.status(400).json({ error: 'tempToken + 6-digit code required' });
     const valid = speakeasy.totp.verify({ secret: user.totp_secret, encoding: 'base32', token: p.data.code, window: 1 });
     if (!valid) {
       TOTP_FAILS.record(user.id);
@@ -195,18 +270,23 @@ router.post('/verify-2fa', async (req, res) => {
       return res.status(401).json({ error: 'Invalid 2FA code' });
     }
     TOTP_FAILS.clear(user.id);
-    if (!user.totp_enrolled) await updateUser(user.id, { totp_enrolled: true });
-    const access = signAccess({ id: user.id, orgId: user.org_id, role: user.role });
-    const days = p.data.rememberMe ? 30 : 7;
-    const refresh = signRefresh({ id: user.id }, days);
-    await storeRefresh(refresh.jti, user.id, refresh.expiresAt);
-    refreshCookie(res, refresh.token, days);
+    let recoveryCodes: string[] | undefined;
+    let recoveryRemaining: number | undefined;
+    if (!user.totp_enrolled) {
+      // Enrollment completing: the ONE moment the plaintext codes exist.
+      await updateUser(user.id, { totp_enrolled: true });
+      recoveryCodes = generateRecoveryCodes();
+      await replaceRecoveryCodes(user.id, recoveryCodes.map((c) => sha256hex(normalizeRecovery(c))));
+      recoveryRemaining = recoveryCodes.length;
+    }
+    const { access, refresh } = await issueTokens(p.data.rememberMe ? 30 : 7);
     await audit('2fa_success', { userId: user.id, orgId: user.org_id, ip: req.ip });
     res.json({
       success: true,
       accessToken: access.token,
       // The refresh jti lets this device recognize itself in /sessions.
       sessionId: refresh.jti,
+      ...(recoveryCodes ? { recoveryCodes, recoveryRemaining } : {}),
       user: { id: user.id, username: user.username, email: user.email, role: user.role, orgId: user.org_id },
     });
   } catch {
@@ -400,6 +480,38 @@ router.post('/totp/re-enroll', requireAuth, async (req, res) => {
   REAUTH_FAILS.clear(u.sub);
   await audit('2fa_reenrolled', { userId: user.id, orgId: user.org_id, ip: req.ip });
   res.json({ tempToken: signTemp(user.id), otpauthUrl: secret.otpauth_url, manualKey: secret.base32, revokedOtherSessions });
+});
+
+// ── Recovery-code management (round 22) ─────────────────────────────────────
+// GET /v1/auth/recovery-codes — how many single-use codes remain. The codes
+// themselves are never retrievable (SHA-256 digests only).
+router.get('/recovery-codes', requireAuth, async (req, res) => {
+  const u = authed(req);
+  res.json({ remaining: await countUnusedRecoveryCodes(u.sub) });
+});
+
+// POST /v1/auth/recovery-codes — password re-auth → a FRESH set of 10 codes
+// (the old set is invalidated entirely). Plaintext shown exactly once.
+router.post('/recovery-codes', requireAuth, async (req, res) => {
+  const p = z.object({ password: z.string().min(1).max(256) }).safeParse(req.body);
+  if (!p.success) return res.status(400).json({ error: 'password required' });
+  const u = authed(req);
+  if (REAUTH_FAILS.exceeded(u.sub)) {
+    await audit('recovery_regenerate_blocked', { userId: u.sub, ip: req.ip });
+    return res.status(429).json({ error: 'Too many attempts — try again in a few minutes.' });
+  }
+  const user = await findUserById(u.sub);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  if (!(await verifyPassword(p.data.password, user.password_hash))) {
+    REAUTH_FAILS.record(u.sub);
+    await audit('recovery_regenerate_failed', { userId: user.id, orgId: user.org_id, ip: req.ip });
+    return res.status(401).json({ error: 'Current password is incorrect' });
+  }
+  const codes = generateRecoveryCodes();
+  await replaceRecoveryCodes(user.id, codes.map((c) => sha256hex(normalizeRecovery(c))));
+  REAUTH_FAILS.clear(u.sub);
+  await audit('recovery_codes_regenerated', { userId: user.id, orgId: user.org_id, ip: req.ip });
+  res.json({ codes, remaining: codes.length });
 });
 
 // SAML SSO hook (spec §2 optional SSO) — stub handshake; real passport-saml wiring is a follow-up.

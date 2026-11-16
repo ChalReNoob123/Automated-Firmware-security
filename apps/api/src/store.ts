@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { pool, query } from './db.js';
 import type { Role } from './auth.js';
 
@@ -25,6 +25,7 @@ const mem = {
   orgs: new Map<string, { id: string; name: string }>(),
   users: new Map<string, UserRow>(),
   refresh: new Map<string, RefreshRecord>(),
+  recovery: new Map<string, RecoveryRow>(),
   revokedAccess: new Map<string, number>(),
   devices: new Map<string, DeviceRow>(),
   attestations: new Map<string, AttestationRow>(),
@@ -198,6 +199,75 @@ export async function revokeRefreshForUser(userId: string, jti: string): Promise
   rec.revoked = true;
   rec.reason = 'revoked';
   return true;
+}
+
+// ── TOTP recovery codes (round 22) ──
+// Single-use login factors for a LOST authenticator. Stored SHA-256-hashed
+// (high-entropy random codes — a slow hash buys nothing against an offline
+// crack of a 50-bit random value, and online guessing is bounded by the grind
+// cap + IP limiter; bcrypt stays reserved for the password class of secrets).
+// Plaintext is returned exactly once (enrollment / regeneration) and is never
+// retrievable afterwards. A successful recovery login sets totp_enrolled=false
+// so the NEXT login re-enrolls from scratch: password knowledge + one unused
+// code always recovers the account.
+export type RecoveryRow = { id: string; user_id: string; code_hash: string; used_at: number | null };
+
+export async function replaceRecoveryCodes(userId: string, hashes: string[]): Promise<void> {
+  if (pool) {
+    await pool.query(`DELETE FROM recovery_codes WHERE user_id=$1`, [userId]);
+    for (const h of hashes) await pool.query(`INSERT INTO recovery_codes (user_id, code_hash) VALUES ($1,$2)`, [userId, h]);
+    return;
+  }
+  for (const [id, r] of [...mem.recovery]) if (r.user_id === userId) mem.recovery.delete(id);
+  for (const h of hashes) {
+    const id = randomUUID();
+    mem.recovery.set(id, { id, user_id: userId, code_hash: h, used_at: null });
+  }
+}
+
+export async function countUnusedRecoveryCodes(userId: string): Promise<number> {
+  if (pool) {
+    const r = await pool.query(`SELECT COUNT(*)::int AS n FROM recovery_codes WHERE user_id=$1 AND used_at IS NULL`, [userId]);
+    return r.rows[0]?.n ?? 0;
+  }
+  let n = 0;
+  for (const r of mem.recovery.values()) if (r.user_id === userId && r.used_at === null) n++;
+  return n;
+}
+
+// SHA-256 of the NORMALIZED code (uppercase, dashes stripped) — callers must
+// normalize input the same way before calling.
+const digest = (normalized: string) => createHash('sha256').update(normalized, 'utf8').digest();
+
+function hashMatches(storedHex: string, normalized: string): boolean {
+  const a = Buffer.from(storedHex, 'hex');
+  const b = digest(normalized);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+// Compare against every unused code; the first match is consumed. Returns
+// whether it matched and how many unused codes remain (the consuming attempt
+// is counted out of that number).
+export async function useRecoveryCode(userId: string, normalized: string): Promise<{ used: boolean; remaining: number }> {
+  if (pool) {
+    const r = await pool.query(`SELECT id, code_hash FROM recovery_codes WHERE user_id=$1 AND used_at IS NULL`, [userId]);
+    const rows = r.rows as Array<{ id: string; code_hash: string }>;
+    for (const row of rows) {
+      if (hashMatches(row.code_hash, normalized)) {
+        await pool.query(`UPDATE recovery_codes SET used_at=now() WHERE id=$1`, [row.id]);
+        return { used: true, remaining: Math.max(0, rows.length - 1) };
+      }
+    }
+    return { used: false, remaining: rows.length };
+  }
+  const unused = [...mem.recovery.values()].filter((r) => r.user_id === userId && r.used_at === null);
+  for (const r of unused) {
+    if (hashMatches(r.code_hash, normalized)) {
+      r.used_at = Date.now();
+      return { used: true, remaining: unused.length - 1 };
+    }
+  }
+  return { used: false, remaining: unused.length };
 }
 
 export async function revokeAccess(jti: string, expiresAtMs: number): Promise<void> {

@@ -1182,6 +1182,96 @@ existing, so silent by default as always.
   unmounted since the round-5 landing redesign — PostFX is wired there too
   (dormant) so a future remount inherits the look.
 
+## Recovery Codes Round 22 — the lost-authenticator lockout hole closed (2026-11-16)
+
+Round 20 shipped the Account Security Center and documented TOTP recovery
+codes as "deliberately deferred" with the claim that password knowledge was
+always a recovery factor. Writing round 22's plan surfaced that this claim had
+a **real hole**: it covered only *abandoned re-enrollment flows* (where
+`totp_enrolled` is already false). A user with an **active** enrollment who
+loses their authenticator was hard-locked out — login demands a TOTP code,
+and `/totp/re-enroll` requires an authenticated session they can no longer
+obtain. Round 22 closes that hole end to end.
+
+### API (`/v1/auth/*`)
+
+- **Issuance at enrollment completion** — `verify-2fa` succeeding while
+  `totp_enrolled=false` (first enrollment, or a round-20 re-enrollment)
+  generates **10 single-use codes** and returns them in that ONE response.
+  Plaintext never exists again afterwards (the store keeps SHA-256 digests
+  only).
+- **Recovery login path** — `verify-2fa` now accepts `recoveryCode` instead of
+  the 6-digit `code`. A valid unused code completes the login without TOTP,
+  **consumes itself**, **revokes every other session** (a lost authenticator
+  is a compromise signal), flips `totp_enrolled=false` + clears the stored
+  secret, and reports `usedRecoveryCode` + `recoveryRemaining`. The NEXT login
+  therefore re-enrolls from scratch: password knowledge + one unused code
+  always recovers the account, and the replacement authenticator gets a fresh
+  set at that enrollment.
+- **`GET /recovery-codes`** — remaining count only (never the codes).
+- **`POST /recovery-codes`** — password re-auth (REAUTH_FAILS cap 5/5min) →
+  fresh set of 10; the old set is fully invalidated.
+- **Grind cap** — recovery attempts share the TOTP_FAILS cap (5 misses / 5min
+  per user): a stolen temp token cannot grind the recovery-code space any
+  more than the TOTP space.
+- **Storage** — SHA-256 of the *normalized* code (uppercase, non-alphanumerics
+  stripped), constant-time compare. Deliberate choice, documented: a slow
+  hash buys nothing against a 50-bit random value offline, and online guessing
+  is bounded by the grind cap + IP limiter — bcrypt stays reserved for the
+  password class. Codes use a 31-symbol unambiguous alphabet (no 0/O/1/I/L)
+  generated with rejection sampling (b < 248 = 8×31) for zero modulo bias.
+- `packages/db/migrate-006.sql` (idempotent `recovery_codes` table; memory
+  store mirrors it).
+
+### Two real bugs caught by this round's own tests
+
+1. **`undefined` inside issued codes**: the alphabet has 31 symbols but was
+   indexed `% 32` — index 31 returned `undefined` and was string-concatenated
+   into a code (live: `"UJDun-defined5PUGEU"`). The new per-code format
+   assertion caught it immediately; fixed with `% 31` + rejection sampling.
+2. **Store/compare asymmetry**: the route stored `sha256(code)` *with the
+   dash* while verification compared `sha256(normalized)` *without it* —
+   every valid code failed. Found via a scratch-trace test that dumped actual
+   response bodies; both call sites now hash the normalized form.
+
+(A third, embarrassing one: the test's alphabet regex itself was wrong twice —
+excluding `J`/`U` that the alphabet keeps. The codes were right; the assertion
+was wrong.)
+
+### Web
+
+- **AuthForm**: after enrollment, a one-time "Save your recovery codes" panel
+  (2-col grid, copy-all, navigation held until acknowledged). The verify step
+  gained a "Lost your phone? Use a recovery code" toggle switching to a
+  free-form recovery field (uppercase, dashes OK); recovery sign-in lands with
+  an amber banner ("N unused left — your authenticator is unlinked, the next
+  login enrolls a new one").
+- **Security Center** (`/account`): the AUTHENTICATOR card now carries a
+  RECOVERY CODES console — live unused count, password-gated "NEW SET" flow
+  with the same one-time display + copy-all pattern.
+- Deployed to prod `:3006`; login/account SSR markers verified and the
+  recovery UI confirmed in the shipped client chunk.
+
+### Verification
+
+- Full battery **138/138 across 12 files** (3 new tests in
+  `account.test.ts`: issuance/uniqueness/format + auth-gated count; the
+  complete recovery flow incl. replay-401, junk-401, forced re-enrollment and
+  old-set death; regeneration incl. re-auth + full replacement). Both
+  typechecks clean; `next build` clean.
+- **20/20 live protocol checks** against the running API (`:4000`) with
+  per-device cookie jars: issuance → count → junk 401 → recovery (remaining 9,
+  OTHER SESSION REVOKED — the round-20 `reason='revoked'` quiet-401 semantics
+  visible again) → replay 401 → re-enroll with fresh codes → old set dead →
+  lowercase normalization accepted → regenerate (wrong pw 401, right pw 10
+  fresh, pre-regen dead, new live).
+- Honest notes: the API dev tree died once mid-round (the known tsx-watch
+  fragility) and was relaunched — in-memory accounts wiped; tests and the
+  live script both re-ran against the fresh process. The occluded embedded
+  browser artifact persists, so UI verification is SSR + bundle level; the
+  recovery flows themselves are protocol-verified end to end. Scratch debug
+  test deleted after diagnosis. AI image quota untouched.
+
 ## Dependency Hygiene
 
 - `npm audit --workspaces --audit-level=high` runs in CI

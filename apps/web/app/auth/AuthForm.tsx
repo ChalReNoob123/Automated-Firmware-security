@@ -42,12 +42,21 @@ export default function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
   const [remember, setRemember] = useState(false);
   const [caps, setCaps] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [copiedCodes, setCopiedCodes] = useState(false);
+  const [useRec, setUseRec] = useState(false); // verify step: recovery code instead of TOTP
+  const [rec, setRec] = useState('');
+  const [recCodes, setRecCodes] = useState<string[] | null>(null); // one-time display after enrollment
+  const [recNote, setRecNote] = useState(''); // recovery-login banner
   const codeRef = useRef<HTMLInputElement>(null);
+  const recRef = useRef<HTMLInputElement>(null);
   const autoVerified = useRef(false); // the 6th digit auto-fires verify exactly once
 
   useEffect(() => {
     if (tempToken) codeRef.current?.focus();
   }, [tempToken]);
+  useEffect(() => {
+    if (useRec) recRef.current?.focus();
+  }, [useRec]);
 
   const post = async (path: string, body: unknown) => {
     // credentials: 'include' is REQUIRED — cross-origin XHR (3005 → 4000)
@@ -106,15 +115,60 @@ export default function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
     setBusy(true);
     setErr('');
     try {
-      const j = (await post('/v1/auth/verify-2fa', { tempToken, code: c.trim(), rememberMe: remember })) as { accessToken: string; sessionId?: string };
+      const j = (await post('/v1/auth/verify-2fa', { tempToken, code: c.trim(), rememberMe: remember })) as {
+        accessToken: string;
+        sessionId?: string;
+        recoveryCodes?: string[];
+      };
       setAccess(j.accessToken);
       setSessionId(j.sessionId ?? null);
-      router.push('/');
+      if (j.recoveryCodes?.length) {
+        // Enrollment just completed — the ONLY moment the codes are visible.
+        // Show them and hold the navigation until the user acknowledges.
+        setRecCodes(j.recoveryCodes);
+      } else {
+        router.push('/');
+      }
     } catch (e) {
       setErr((e as Error).message);
       autoVerified.current = false; // allow the next full code to auto-fire again
     } finally {
       setBusy(false);
+    }
+  };
+
+  // Lost-authenticator path: a single-use recovery code replaces the TOTP code.
+  const verifyRecovery = async () => {
+    if (busy || !tempToken || rec.trim().length < 6) return;
+    setBusy(true);
+    setErr('');
+    try {
+      const j = (await post('/v1/auth/verify-2fa', { tempToken, recoveryCode: rec.trim(), rememberMe: remember })) as {
+        accessToken: string;
+        sessionId?: string;
+        recoveryRemaining?: number;
+      };
+      setAccess(j.accessToken);
+      setSessionId(j.sessionId ?? null);
+      setRecNote(
+        `Signed in with a recovery code — ${j.recoveryRemaining ?? 0} unused left. Your authenticator is unlinked: the next login enrolls a new one.`
+      );
+      setRec('');
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const copyCodes = async () => {
+    if (!recCodes) return;
+    try {
+      await navigator.clipboard.writeText(recCodes.join('\n'));
+      setCopiedCodes(true);
+      window.setTimeout(() => setCopiedCodes(false), 1800);
+    } catch {
+      /* clipboard blocked — the codes are selectable text anyway */
     }
   };
 
@@ -211,12 +265,38 @@ export default function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
               No workspace yet? <a href="/signup" style={{ color: '#22d3ee' }}>Create one →</a>
             </p>
           </form>
+        ) : recCodes ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <b style={{ color: '#fff', fontSize: 14 }}>Save your recovery codes.</b>
+            <p style={{ color: '#94a3b8', fontSize: 13, margin: 0, lineHeight: 1.55 }}>
+              If you ever lose your authenticator, one of these single-use codes signs you in. They are shown <b style={{ color: '#fcd34d' }}>only this once</b> — store them in your password manager.
+            </p>
+            <div className="sf-glass" onPointerMove={glassGlow} style={{ borderRadius: 12, padding: 12, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+              {recCodes.map((c) => (
+                <code key={c} style={{ color: '#a5f3fc', fontSize: 12.5, letterSpacing: 1 }}>{c}</code>
+              ))}
+            </div>
+            <button type="button" className="sf-btn" style={{ fontSize: 12 }} onClick={() => void copyCodes()}>
+              {copiedCodes ? '✓ copied all 10' : 'copy all 10 codes'}
+            </button>
+            <button className="sf-btn sf-btn-accent" type="button" onClick={() => router.push('/')}>
+              I've saved them — continue
+            </button>
+          </div>
+        ) : recNote ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <p role="status" style={{ color: '#fcd34d', fontSize: 13, margin: 0, lineHeight: 1.55 }}>{recNote}</p>
+            <button className="sf-btn sf-btn-accent" type="button" onClick={() => router.push('/')}>
+              Continue
+            </button>
+          </div>
         ) : (
           <form
             style={{ display: 'flex', flexDirection: 'column', gap: 10 }}
             onSubmit={(e) => {
               e.preventDefault();
-              void verify();
+              if (useRec) void verifyRecovery();
+              else void verify();
             }}
           >
             {enroll ? (
@@ -233,38 +313,75 @@ export default function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
                 </div>
               </div>
             ) : (
-              <p style={{ fontSize: 13, color: '#94a3b8', margin: 0 }}>Password accepted. Enter the 6-digit code from your authenticator app.</p>
+              <p style={{ fontSize: 13, color: '#94a3b8', margin: 0 }}>
+                {useRec ? 'Enter one of your single-use recovery codes.' : 'Password accepted. Enter the 6-digit code from your authenticator app.'}
+              </p>
             )}
-            <input
-              ref={codeRef}
-              className="sf-input"
-              name="code"
-              aria-label="Two-factor code"
-              autoComplete="one-time-code"
-              placeholder="123456"
-              inputMode="numeric"
-              maxLength={6}
-              value={code}
-              onChange={(e) => {
-                const v = e.target.value.replace(/\D/g, '');
-                setCode(v);
-                // auto-verify when the last digit lands (once per attempt —
-                // wrong codes re-arm it so a corrected entry still auto-fires)
-                if (v.length === 6 && !autoVerified.current && !busy) {
-                  autoVerified.current = true;
-                  void verify(v); // pass the fresh digits — state hasn't re-rendered yet
-                }
-              }}
-              style={{ letterSpacing: 6, textAlign: 'center', fontSize: 20 }}
-            />
+            {useRec ? (
+              <input
+                ref={recRef}
+                className="sf-input"
+                name="recoveryCode"
+                aria-label="Recovery code"
+                placeholder="XXXXX-XXXXX"
+                autoComplete="off"
+                maxLength={12}
+                value={rec}
+                onChange={(e) => setRec(e.target.value)}
+                style={{ letterSpacing: 3, textAlign: 'center', fontSize: 17, textTransform: 'uppercase' }}
+              />
+            ) : (
+              <input
+                ref={codeRef}
+                className="sf-input"
+                name="code"
+                aria-label="Two-factor code"
+                autoComplete="one-time-code"
+                placeholder="123456"
+                inputMode="numeric"
+                maxLength={6}
+                value={code}
+                onChange={(e) => {
+                  const v = e.target.value.replace(/\D/g, '');
+                  setCode(v);
+                  // auto-verify when the last digit lands (once per attempt —
+                  // wrong codes re-arm it so a corrected entry still auto-fires)
+                  if (v.length === 6 && !autoVerified.current && !busy) {
+                    autoVerified.current = true;
+                    void verify(v); // pass the fresh digits — state hasn't re-rendered yet
+                  }
+                }}
+                style={{ letterSpacing: 6, textAlign: 'center', fontSize: 20 }}
+              />
+            )}
             <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#94a3b8', cursor: 'pointer' }}>
               <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} style={{ accentColor: '#22d3ee' }} />
               Stay signed in for 30 days
             </label>
-            <button className="sf-btn sf-btn-accent" type="submit" disabled={busy || code.length !== 6}>
-              {busy ? 'Verifying…' : 'Verify + sign in'}
-            </button>
-            <button className="sf-btn" type="button" onClick={() => { setTempToken(null); setEnroll(null); setCode(''); }} disabled={busy}>
+            {useRec ? (
+              <button className="sf-btn sf-btn-accent" type="submit" disabled={busy || rec.trim().length < 6}>
+                {busy ? 'Checking code…' : 'Use recovery code'}
+              </button>
+            ) : (
+              <button className="sf-btn sf-btn-accent" type="submit" disabled={busy || code.length !== 6}>
+                {busy ? 'Verifying…' : 'Verify + sign in'}
+              </button>
+            )}
+            {!enroll && (
+              <button
+                type="button"
+                className="sf-btn"
+                style={{ fontSize: 12 }}
+                onClick={() => {
+                  setUseRec((v) => !v);
+                  setErr('');
+                }}
+                disabled={busy}
+              >
+                {useRec ? '← use my authenticator instead' : 'Lost your phone? Use a recovery code'}
+              </button>
+            )}
+            <button className="sf-btn" type="button" onClick={() => { setTempToken(null); setEnroll(null); setCode(''); setUseRec(false); setRec(''); }} disabled={busy}>
               Back
             </button>
           </form>

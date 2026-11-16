@@ -68,6 +68,15 @@ export default function AccountClient() {
   const codeRef = useRef<HTMLInputElement>(null);
   const autoVerified = useRef(false);
 
+  // recovery codes (round 22): remaining count + regenerate flow
+  const [recRemaining, setRecRemaining] = useState<number | null>(null);
+  const [recStage, setRecStage] = useState<'idle' | 'pw' | 'codes'>('idle');
+  const [recPw, setRecPw] = useState('');
+  const [recCodes, setRecCodes] = useState<string[]>([]);
+  const [recCopied, setRecCopied] = useState(false);
+  const [recErr, setRecErr] = useState('');
+  const [recCaps, setRecCaps] = useState(false);
+
   // sessions card state
   const [sessionsErr, setSessionsErr] = useState('');
 
@@ -88,13 +97,28 @@ export default function AccountClient() {
     }
   }, []);
 
+  const refreshRecovery = useCallback(async () => {
+    try {
+      const r = await apiFetch('/v1/auth/recovery-codes');
+      if (r.ok) {
+        const j = (await r.json()) as { remaining: number };
+        setRecRemaining(j.remaining);
+      }
+    } catch {
+      /* the count is informational — ignore failures */
+    }
+  }, []);
+
   useEffect(() => {
     (async () => {
       const u = await getMe();
       setMe(u);
-      if (u) void refreshSessions();
+      if (u) {
+        void refreshSessions();
+        void refreshRecovery();
+      }
     })();
-  }, [refreshSessions]);
+  }, [refreshSessions, refreshRecovery]);
 
   useEffect(() => {
     if (enrollStage === 'confirm') codeRef.current?.focus();
@@ -216,6 +240,36 @@ export default function AccountClient() {
     }
   };
 
+  // ── recovery codes ──
+  const regenerateRecovery = async () => {
+    if (busy || recStage !== 'pw') return;
+    setBusy(true);
+    setRecErr('');
+    try {
+      const r = await apiFetch('/v1/auth/recovery-codes', { method: 'POST', body: JSON.stringify({ password: recPw }) });
+      const j = (await r.json().catch(() => ({}))) as { error?: string; codes?: string[]; remaining?: number };
+      if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`);
+      setRecCodes(j.codes ?? []);
+      setRecRemaining(j.remaining ?? (j.codes?.length ?? 0));
+      setRecStage('codes');
+      setRecPw('');
+    } catch (e) {
+      setRecErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const copyRecCodes = async () => {
+    try {
+      await navigator.clipboard.writeText(recCodes.join('\n'));
+      setRecCopied(true);
+      window.setTimeout(() => setRecCopied(false), 1800);
+    } catch {
+      /* clipboard blocked */
+    }
+  };
+
   if (me === undefined) {
     return (
       <p style={{ fontSize: 12, letterSpacing: 2, color: '#64748b', textAlign: 'center', marginTop: 40 }}>○ CHECKING SESSION…</p>
@@ -292,7 +346,7 @@ export default function AccountClient() {
           )}
           {enrollStage === 'idle' && (
             <>
-              <Hint>Lost the phone, swapping apps? Re-enroll with your password. This signs out every other session — and if you abandon the flow, your next login simply re-enrolls from scratch.</Hint>
+              <Hint>Lost the phone? One of your single-use recovery codes signs you in from the login page — or re-enroll here with your password. Re-enrollment signs out every other session, and if you abandon the flow your next login simply re-enrolls from scratch.</Hint>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 14 }}>
                 {field({ name: 'enrollPassword', type: 'password', autoComplete: 'current-password', placeholder: 'Current password', 'aria-label': 'Current password for re-enrollment', value: enrollPw, onChange: (e) => setEnrollPw(e.target.value), onKeyUp: (e) => setEnrollCaps(e.getModifierState?.('CapsLock') ?? false) })}
                 <CapsLockHint on={enrollCaps} />
@@ -300,6 +354,59 @@ export default function AccountClient() {
                   {busy ? 'Working…' : 'Start re-enrollment'}
                 </button>
                 {enrollErr && <p role="alert" style={{ color: '#f87171', fontSize: 13, margin: 0 }}>{enrollErr}</p>}
+              </div>
+              {/* ── recovery codes ── */}
+              <div style={{ borderTop: '1px solid rgba(148,163,184,0.15)', marginTop: 16, paddingTop: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                  <p style={{ margin: 0, fontSize: 11, letterSpacing: 2, color: '#64748b' }}>
+                    RECOVERY CODES · {recRemaining === null ? '…' : `${recRemaining} UNUSED`}
+                  </p>
+                  {recStage === 'idle' && (
+                    <button type="button" className="sf-btn" style={{ fontSize: 11, padding: '3px 10px' }} disabled={busy} onClick={() => { setRecStage('pw'); setRecErr(''); }}>
+                      NEW SET
+                    </button>
+                  )}
+                </div>
+                {recStage === 'idle' && (
+                  <Hint>
+                    {recRemaining === 0
+                      ? 'No unused codes left — generate a new set (shown once, stored hashed).'
+                      : 'Single-use codes for the login page when your authenticator is gone. Stored as hashes; plaintext is shown only when generated.'}
+                  </Hint>
+                )}
+                {recStage === 'pw' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
+                    {field({ name: 'recoveryPassword', type: 'password', autoComplete: 'current-password', placeholder: 'Current password', 'aria-label': 'Current password to regenerate recovery codes', value: recPw, onChange: (e) => setRecPw(e.target.value), onKeyUp: (e) => setRecCaps(e.getModifierState?.('CapsLock') ?? false) })}
+                    <CapsLockHint on={recCaps} />
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button className="sf-btn sf-btn-accent" style={{ fontSize: 12 }} disabled={busy || !recPw} onClick={() => void regenerateRecovery()}>
+                        {busy ? 'Working…' : 'Generate 10 new codes'}
+                      </button>
+                      <button className="sf-btn" style={{ fontSize: 12 }} disabled={busy} onClick={() => { setRecStage('idle'); setRecErr(''); setRecPw(''); }}>
+                        Cancel
+                      </button>
+                    </div>
+                    {recErr && <p role="alert" style={{ color: '#f87171', fontSize: 12.5, margin: 0 }}>{recErr}</p>}
+                  </div>
+                )}
+                {recStage === 'codes' && (
+                  <div style={{ marginTop: 10 }}>
+                    <p style={{ color: '#fcd34d', fontSize: 12.5, margin: '0 0 8px' }}>Shown once — store them in your password manager now.</p>
+                    <div className="sf-glass" onPointerMove={glassGlow} style={{ borderRadius: 10, padding: 12, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                      {recCodes.map((c) => (
+                        <code key={c} style={{ color: '#a5f3fc', fontSize: 12, letterSpacing: 1 }}>{c}</code>
+                      ))}
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                      <button type="button" className="sf-btn" style={{ fontSize: 12 }} onClick={() => void copyRecCodes()}>
+                        {recCopied ? '✓ copied all 10' : 'copy all 10 codes'}
+                      </button>
+                      <button className="sf-btn" style={{ fontSize: 12 }} onClick={() => setRecStage('idle')}>
+                        Done
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </>
           )}

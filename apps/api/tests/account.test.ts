@@ -24,14 +24,16 @@ async function signup(prefix: string): Promise<string> {
 }
 
 // First device: login hits the enroll step and RETURNS the secret.
-async function firstDevice(email: string, password: string): Promise<Device & { secret: string }> {
+async function firstDevice(email: string, password: string): Promise<Device & { secret: string; recoveryCodes: string[] }> {
   const agent = request.agent(app);
   const login = await agent.post('/v1/auth/login').send({ identifier: email, password }).expect(200);
   expect(login.body.step).toBe('enroll');
   const secret = login.body.manualKey as string;
   const code = speakeasy.totp({ secret, encoding: 'base32' });
   const v = await agent.post('/v1/auth/verify-2fa').send({ tempToken: login.body.tempToken, code }).expect(200);
-  return { agent, bearer: v.body.accessToken, sessionId: v.body.sessionId, secret };
+  // completing enrollment issues the one-time recovery-code set (round 22)
+  expect(Array.isArray(v.body.recoveryCodes)).toBe(true);
+  return { agent, bearer: v.body.accessToken, sessionId: v.body.sessionId, secret, recoveryCodes: v.body.recoveryCodes as string[] };
 }
 
 // Later devices: the secret is known — an enrolled login returns only a tempToken.
@@ -153,4 +155,73 @@ describe('account security center — authenticator re-enrollment', () => {
     const after = await api.post('/v1/auth/login').send({ identifier: email, password: PASSWORD }).expect(200);
     expect(after.body.step).toBe('2fa');
   }, 20000);
+});
+
+describe('account security center — recovery codes (round 22)', () => {
+  it('issues 10 unique unambiguous codes at enrollment; count endpoint is auth-gated', async () => {
+    const email = await signup('reccodes');
+    const a = await firstDevice(email, PASSWORD);
+    expect(a.recoveryCodes).toHaveLength(10);
+    expect(new Set(a.recoveryCodes).size).toBe(10);
+    for (const c of a.recoveryCodes) expect(c).toMatch(/^[2-9A-HJKMNP-Z]{5}-[2-9A-HJKMNP-Z]{5}$/); // alphabet excludes only I, L, O
+
+    await api.get('/v1/auth/recovery-codes').expect(401);
+    const c0 = await a.agent.get('/v1/auth/recovery-codes').set('Authorization', `Bearer ${a.bearer}`).expect(200);
+    expect(c0.body.remaining).toBe(10);
+  });
+
+  it('one code recovers a fresh device; replays and junk fail; recovery login forces re-enrollment', async () => {
+    const email = await signup('reclogin');
+    const a = await firstDevice(email, PASSWORD);
+
+    // wrong code first (grind cap counts it — stay well under 5)
+    const lBad = await api.post('/v1/auth/login').send({ identifier: email, password: PASSWORD }).expect(200);
+    await api.post('/v1/auth/verify-2fa').send({ tempToken: lBad.body.tempToken, recoveryCode: 'AAAAA-BBBBB' }).expect(401);
+
+    // the real thing: a fresh device recovers with ONE unused code
+    const l = await api.post('/v1/auth/login').send({ identifier: email, password: PASSWORD }).expect(200);
+    const rec = await api.post('/v1/auth/verify-2fa').send({ tempToken: l.body.tempToken, recoveryCode: a.recoveryCodes[3] }).expect(200);
+    expect(rec.body.usedRecoveryCode).toBe(true);
+    expect(rec.body.recoveryRemaining).toBe(9); // junk attempt consumed nothing; this one did
+    expect(rec.body.sessionId).toBeTruthy();
+    expect(rec.body.accessToken).toBeTruthy();
+
+    // replaying the SAME code fails
+    const l2 = await api.post('/v1/auth/login').send({ identifier: email, password: PASSWORD }).expect(200);
+    const replay = await api.post('/v1/auth/verify-2fa').send({ tempToken: l2.body.tempToken, recoveryCode: a.recoveryCodes[3] });
+    expect(replay.status).toBe(401);
+    expect(replay.body.error).toBe('Invalid recovery code');
+
+    // the account is NOT enrolled anymore: the next login re-enrolls from scratch
+    const l3 = await api.post('/v1/auth/login').send({ identifier: email, password: PASSWORD }).expect(200);
+    expect(l3.body.step).toBe('enroll');
+    // completing THAT enrollment issues a fresh set and invalidates the old one
+    const v3 = await api
+      .post('/v1/auth/verify-2fa')
+      .send({ tempToken: l3.body.tempToken, code: speakeasy.totp({ secret: l3.body.manualKey, encoding: 'base32' }) })
+      .expect(200);
+    expect(v3.body.recoveryCodes).toHaveLength(10);
+    const oldTry = await api.post('/v1/auth/login').send({ identifier: email, password: PASSWORD }).expect(200);
+    await api.post('/v1/auth/verify-2fa').send({ tempToken: oldTry.body.tempToken, recoveryCode: a.recoveryCodes[4] }).expect(401);
+  }, 30000);
+
+  it('regeneration requires password re-auth and fully replaces the set', async () => {
+    const email = await signup('recregen');
+    const a = await firstDevice(email, PASSWORD);
+
+    await api.post('/v1/auth/recovery-codes').send({ password: 'nope' }).expect(401);
+    const bad = await a.agent.post('/v1/auth/recovery-codes').set('Authorization', `Bearer ${a.bearer}`).send({ password: 'Wrong!Pass1' }).expect(401);
+    expect(bad.body.error).toBe('Current password is incorrect');
+    const ok = await a.agent.post('/v1/auth/recovery-codes').set('Authorization', `Bearer ${a.bearer}`).send({ password: PASSWORD }).expect(200);
+    expect(ok.body.codes).toHaveLength(10);
+    expect(ok.body.remaining).toBe(10);
+
+    // an OLD code no longer works
+    const l = await api.post('/v1/auth/login').send({ identifier: email, password: PASSWORD }).expect(200);
+    await api.post('/v1/auth/verify-2fa').send({ tempToken: l.body.tempToken, recoveryCode: a.recoveryCodes[0] }).expect(401);
+    // a NEW one does
+    const l2 = await api.post('/v1/auth/login').send({ identifier: email, password: PASSWORD }).expect(200);
+    const use = await api.post('/v1/auth/verify-2fa').send({ tempToken: l2.body.tempToken, recoveryCode: ok.body.codes[0] }).expect(200);
+    expect(use.body.usedRecoveryCode).toBe(true);
+  }, 30000);
 });
