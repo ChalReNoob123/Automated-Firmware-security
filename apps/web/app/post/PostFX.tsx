@@ -19,6 +19,11 @@ import { useStory } from '../storyStore';
 //   * FXAA 3.11-lite folded into the grade pass (luma-driven span blend),
 //   * the grading pass keeps velocity chromatic aberration / grain / vignette.
 //
+// Round 28 — the grade pass learns film: teal-shadow / warm-highlight split
+// toning + a gentle S-curve (the "graded footage" look), a more present
+// static chromatic aberration, and a deeper vignette. The story canvas's dpr
+// ceiling rises to 2.25 behind the same capability gate (4K-class raster).
+//
 // Chain (7 draws: 1 scene + 1 quarter-res bright + 4 quarter-res blurs + 1
 // fullscreen grade). A positive-priority useFrame subscriber takes over
 // rendering from R3F (confirmed in @react-three/fiber's loop).
@@ -158,8 +163,9 @@ void main() {
 
   // FXAA-blended base, then velocity chromatic aberration on top (the R/B
   // fringe taps stay raw — they only open up in motion, where a little
-  // sparkle reads as speed, not aliasing)
-  float ca = 0.0011 + uVel * 0.0042;
+  // sparkle reads as speed, not aliasing). Round 28: the static term opens
+  // from 0.0011 to 0.0016 — the lens reads as glass even at rest.
+  float ca = 0.0016 + uVel * 0.0042;
   vec2 dir = uv - 0.5;
   vec2 off = dir * dot(dir, dir) * ca * 14.0;
   vec3 fx = fxaa(uv);
@@ -177,9 +183,17 @@ void main() {
   float g = hash(uv * uRes + fract(uTime * 61.7) * 191.3) - 0.5;
   col += g * uGrain;
 
-  // vignette
+  // round 28: filmic split-tone — teal shadows, warm highlights — plus a
+  // gentle S-curve for contrast. After the grain (which stays neutral
+  // sparkle) and before the vignette (whose falloff then rides the grade).
+  float l = clamp(luma(col), 0.0, 1.0);
+  col *= mix(vec3(0.88, 1.0, 1.05), vec3(1.045, 1.0, 0.95), smoothstep(0.0, 0.72, l));
+  vec3 s = clamp(col, 0.0, 1.0);
+  col = mix(col, s * s * (3.0 - 2.0 * s), 0.16);
+
+  // vignette (round 28: 0.38 → 0.46, start pulled in)
   float d = length((uv - 0.5) * vec2(1.22, 1.0));
-  col *= 1.0 - smoothstep(0.52, 1.08, d) * 0.38;
+  col *= 1.0 - smoothstep(0.48, 1.05, d) * 0.46;
 
   gl_FragColor = vec4(max(col, 0.0), 1.0);
   // the direct render's look: renderer tone mapping (ACES) then sRGB encode

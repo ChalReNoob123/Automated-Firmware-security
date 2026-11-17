@@ -439,7 +439,7 @@
   .sf-nav { flex-wrap: wrap; gap: 12px; padding: 12px 16px; }
   .sf-nav-links { order: 3; flex-basis: 100%; overflow-x: auto; padding-bottom: 2px; }
   .sf-page { padding: 32px 18px 48px; }
-  .sf-clock, .sf-hud, .sf-header-path, .sf-kbtn { display: none; }
+  .sf-clock, .sf-hud, .sf-header-path { display: none; }
   .sf-palette-row { grid-template-columns: 1fr auto; }
   .sf-palette-eyebrow, .sf-palette-hint { display: none; }
 }
@@ -1054,10 +1054,38 @@ html.sf-cursor-on * { cursor: none !important; }
 .sf-act-body {
   color: #cbd5e1;
   max-width: 600px;
+  /* round 28 fix: a max-width BLOCK inside the centered act wrapper pins to
+     the wrapper's left edge — text-align only centers lines INSIDE the box,
+     never the box itself. margin:auto is what actually centers the block,
+     and its absence is why the body copy sat left of the title (user-reported). */
+  margin: 0 auto;
   line-height: 1.72;
   font-size: 16.5px;
   text-wrap: pretty;
   text-shadow: 0 1px 12px rgba(2, 6, 23, 0.85);
+}
+
+/* round 28: anamorphic letterbox — the pinned story viewport wears thin
+   cinematic bars top and bottom. Pure CSS, static (reduced-motion safe),
+   pointer-transparent; the gradient tails let HUD text at the edges read. */
+.sf-cinebar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 7vh;
+  z-index: 4;
+  pointer-events: none;
+}
+.sf-cinebar.top {
+  top: 0;
+  background: linear-gradient(to bottom, rgba(2, 6, 23, 0.92), rgba(2, 6, 23, 0.55) 55%, transparent);
+}
+.sf-cinebar.bottom {
+  bottom: 0;
+  background: linear-gradient(to top, rgba(2, 6, 23, 0.92), rgba(2, 6, 23, 0.55) 55%, transparent);
+}
+@media (max-height: 640px) {
+  .sf-cinebar { height: 5vh; }
 }
 .sf-act .sf-btn-ghost { background: rgba(2, 6, 23, 0.6); }
 .sf-story-progress {
@@ -1717,25 +1745,8 @@ html {
 }
 .sf-palette-brand { margin-left: auto; color: #22d3ee; letter-spacing: 3px; }
 
-/* nav ⌘K chip */
-.sf-kbtn {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 10.5px;
-  letter-spacing: 1px;
-  color: #7dd3fc;
-  background: rgba(34, 211, 238, 0.06);
-  border: 1px solid rgba(34, 211, 238, 0.18);
-  border-radius: 8px;
-  padding: 6px 9px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
-}
-.sf-kbtn:hover {
-  border-color: rgba(34, 211, 238, 0.45);
-  background: rgba(34, 211, 238, 0.12);
-  box-shadow: 0 0 18px -6px rgba(34, 211, 238, 0.6);
-}
+/* nav ⌘K chip — round 28: the visible chip is gone (Ctrl/Cmd+K still opens
+   the palette from the keyboard); the styles are removed with it */
 
 /* small screens: story + index adapt */
 @media (max-width: 860px) {

@@ -102,7 +102,7 @@ function Env() {
     const room = new RoomEnvironment();
     const target = pmrem.fromScene(room, 0.04);
     scene.environment = target.texture;
-    scene.environmentIntensity = 0.45;
+    scene.environmentIntensity = 0.62; // round 28: 0.45 → 0.62 — the machined metal reads richer
     return () => {
       scene.environment = null;
       target.texture.dispose();
@@ -139,6 +139,26 @@ function Lights() {
           alone gave the standard/physical materials no consistent key. */}
       <directionalLight position={[6, 10, 5]} intensity={1.35} color="#dff5ff" />
       <directionalLight position={[-7, 3, -9]} intensity={0.8} color="#a855f7" />
+    </>
+  );
+}
+
+/* round 28: orbiting rim lights — two colored point lights circle the
+   ensemble at different heights, phases and speeds, so the clearcoat plates
+   catch MOVING specular streaks even when the camera and pointer are still.
+   Physically-correct decay: ~95cd at ~9 units out ≈ the standing lights. */
+function RimLights() {
+  const a = useRef<THREE.PointLight>(null);
+  const b = useRef<THREE.PointLight>(null);
+  useFrame(({ clock }) => {
+    const t = clock.elapsedTime * 0.21;
+    if (a.current) a.current.position.set(Math.cos(t) * 9.5, 2.6 + Math.sin(t * 0.7) * 1.4, Math.sin(t) * 9.5);
+    if (b.current) b.current.position.set(Math.cos(-t * 0.8 + 2.2) * 11, -1.8 + Math.cos(t * 0.55) * 1.2, Math.sin(-t * 0.8 + 2.2) * 11);
+  });
+  return (
+    <>
+      <pointLight ref={a} intensity={95} color="#67e8f9" distance={44} />
+      <pointLight ref={b} intensity={70} color="#c084fc" distance={44} />
     </>
   );
 }
@@ -1054,8 +1074,11 @@ export default function StoryScene() {
       <Canvas
         // round 25: dpr floor 1.5 supersamples the scene raster (the post
         // chain's antialias baseline — see PostFX header for why the MSAA
-        // renderbuffer path was replaced)
-        dpr={[1.5, 2]}
+        // renderbuffer path was replaced). Round 28: when the post-quality
+        // gate passes, the ceiling rises to 2.25 — the scene rasterizes at
+        // up to 4320px wide on a 1080p display (4K-class sharpness). The
+        // same gate keeps weak devices at the round-25 profile.
+        dpr={fx ? [1.75, 2.25] : [1.5, 2]}
         camera={{ position: [0, 1.4, 12.5], fov: 55 }}
         gl={{ antialias: true, alpha: false, powerPreference: 'high-performance' }}
         style={{ position: 'absolute', inset: 0 }}
@@ -1065,6 +1088,7 @@ export default function StoryScene() {
         <Env />
         <ambientLight intensity={0.55} />
         <Lights />
+        <RimLights />
         <Aurora />
         <Starfield />
         <Ensemble />

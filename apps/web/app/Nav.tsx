@@ -199,14 +199,6 @@ export default function Nav() {
         style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 14 }}
       >
         <SoundToggle />
-        <button
-          className="sf-kbtn"
-          aria-label="Open command palette (Ctrl+K)"
-          title="Command palette — Ctrl+K"
-          onClick={() => window.dispatchEvent(new CustomEvent('sf:palette:open'))}
-        >
-          <span aria-hidden>⌘</span>K
-        </button>
         <button className="sf-burger" aria-label="Open menu" aria-expanded={menu} onClick={() => setMenu(true)}>
           <span className="sf-burger-icon" aria-hidden>
             <span />

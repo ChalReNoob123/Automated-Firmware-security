@@ -4,11 +4,13 @@
 // every blip, whoosh, drone and boot sequence is generated live with the Web
 // Audio API, and the "robotic narrator" is the browser's own speech engine at
 // a crushed pitch. Design decisions:
-//  - OPT-IN ONLY. Browsers suspend AudioContext until a user gesture; the
-//    toggle click IS that gesture. The preference persists (sf_audio), and a
-//    returning user's first pointer-down anywhere re-arms the engine quietly
-//    (no boot sequence on auto-resume — the boot fanfare plays on explicit
-//    enable, a short chirp on resume).
+//  - DEFAULT-ON (round 28), gesture-gated by necessity: browsers suspend
+//    AudioContext until a user gesture, so the FIRST pointer-down or keydown
+//    anywhere arms the engine quietly (no stealth boot fanfare — a short chirp
+//    on auto-resume; the boot fanfare plays only when the chip is clicked
+//    explicitly). The preference persists: sf_audio=1 after enabling,
+//    sf_audio=0 after an explicit mute — the only way sound stays off. There
+//    is no autoplay-before-gesture path, ever.
 //  - The engine OWNS its listeners: delegated pointerover/click sound hooks
 //    and the sf:transit whoosh attach in enableAudio() and detach in
 //    disableAudio(). They mutate no React-managed DOM (hydration-safe by
@@ -43,7 +45,11 @@ export function subscribeAudio(fn: (on: boolean) => void): () => void {
 
 export function audioPreferred(): boolean {
   try {
-    return typeof window !== 'undefined' && localStorage.getItem('sf_audio') === '1';
+    if (typeof window === 'undefined') return false;
+    // round 28: sound is ON by default. An explicit '0' (the mute button) is
+    // the only off state; '1' or no preference at all → the first user
+    // gesture arms the engine.
+    return localStorage.getItem('sf_audio') !== '0';
   } catch {
     return false;
   }
@@ -378,7 +384,9 @@ export function disableAudio(): void {
   }
   enabled = false;
   try {
-    localStorage.removeItem('sf_audio');
+    // explicit mute persists as a real '0' — with the default-on policy,
+    // removeItem would silently re-enable on the next visit
+    localStorage.setItem('sf_audio', '0');
   } catch {
     /* ignore */
   }
@@ -394,13 +402,17 @@ export function disableAudio(): void {
   notify();
 }
 
-// Returning users: the preference persists but AudioContext needs a gesture.
-// The toggle effect installs one capture-phase pointerdown that re-arms quietly.
+// Round 28: sound is default-ON, so this arms on the FIRST gesture for
+// everyone who hasn't explicitly muted. The first pointerdown OR keydown
+// counts (Tab-through users shouldn't miss the console). Quiet resume —
+// no boot fanfare unless the chip is clicked.
 export function armFromPreference(): void {
   if (enabled || !audioPreferred() || engine) return;
   const once = () => {
     document.removeEventListener('pointerdown', once, true);
+    document.removeEventListener('keydown', once, true);
     if (!enabled && audioPreferred()) enableAudio(true);
   };
   document.addEventListener('pointerdown', once, true);
+  document.addEventListener('keydown', once, true);
 }

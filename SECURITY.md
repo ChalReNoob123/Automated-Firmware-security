@@ -1692,6 +1692,76 @@ same, only the arrival is choreographed.
   `pathOffset` inside `initial`/`animate` targets, not as a top-level prop.
   Charts read the same API data as before — no numbers changed.
 
+## Round 28 — default-on audio, the ⌘K removal, the centering fix, and the film grade (2026-11-17)
+
+### The asks (user-reported)
+
+1. Audio experience "at expert level, default on" — was opt-in only.
+2. Remove the ⌘K chip next to MENU.
+3. Act copy mis-centered against the page (screenshots showed the body
+   paragraph sitting left of the headline in every act).
+4. Whole-app cinematic upgrade: richer graphics, shaders, effects.
+
+### Audio: default-ON, still gesture-gated (honest about the browser rule)
+
+- `audioPreferred()` now returns TRUE unless an explicit `sf_audio=0` exists
+  — the first pointer-down OR keydown anywhere arms the engine quietly
+  (short chirp, no boot fanfare; the fanfare is reserved for an explicit
+  chip click). No autoplay-before-gesture path exists or ever will — the
+  browser forbids it; the policy is "arm on the first gesture, always".
+- Muting persists as a real `sf_audio=0` (the old `removeItem` would have
+  silently re-enabled under the new default); enabling stores `1`.
+- SoundToggle chip copy updated: ARMED (waiting for the first gesture) → ON;
+  titles explain exactly what each state does.
+
+### UI removals / fixes
+
+- **⌘K chip removed** from the nav (button + orphaned CSS). The command
+  palette itself stays fully functional — Palette.tsx owns the Ctrl/Cmd+K
+  key handler directly.
+- **The centering bug**: `.sf-act-body` is a 600px-max-width BLOCK inside
+  the centered act wrapper — `text-align: center` centers lines INSIDE the
+  box, but the box itself was pinned to the wrapper's left edge. One line
+  (`margin: 0 auto`) fixes every act; verified live in DOM coordinates:
+  title center 643 = body center 643 = viewport center at 1296px (was
+  ~150px left-of-title before).
+
+### Cinematics
+
+- **Grade pass learns film** (`PostFX.tsx`): teal-shadow / warm-highlight
+  split toning + a gentle 16% S-curve (graded-footage look), static
+  chromatic aberration 0.0011 → 0.0016 (the lens reads as glass at rest),
+  vignette deepened 0.38 → 0.46 with a pulled-in start. All in the same
+  single grade draw — chain stays 7 draws.
+- **Orbiting rim lights** (`StoryScene.tsx`): two colored point lights
+  (cyan 95cd, violet 70cd, physically-correct decay) circle the ensemble at
+  different heights/speeds — the clearcoat plates catch moving specular
+  streaks even with camera and pointer still.
+- **Environment intensity** 0.45 → 0.62: the machined metal reads richer.
+- **DPR ceiling** 1.5–2 → 1.75–2.25 behind the existing capability gate
+  (`usePostOK`): up to a 4320px-wide raster on a 1080p display (4K-class
+  supersampling); weak devices keep the round-25 profile exactly.
+- **Anamorphic letterbox**: two static CSS bars (7vh, gradient tails)
+  frame the pinned story viewport — pointer-transparent, reduced-motion
+  safe, 5vh on short viewports; the HUD/progress elements read through the
+  tails.
+
+### Verification
+
+- Typecheck + production build clean; deployed to `:3006`.
+- Live: nav shows no ⌘K; chip reads **SF://AUDIO ARMED** on load, flips to
+  **SF://AUDIO ON** on the first synthetic pointerdown (stored `1`), mutes
+  to OFF with `sf_audio=0` persisted, re-enables to ON — full cycle.
+- Story acts: both letterbox bars present; act 1 and act 3 screenshots show
+  the body copy centered under the headline; scene visibly richer under the
+  new grade (no console errors during the session).
+- Honest notes: the audio synthesis itself is the same engine verified in
+  R18/R21 — this round changed POLICY (default + persistence), verified via
+  the chip state machine and localStorage, not by ear. The "4K graphics"
+  ask is delivered honestly as: supersampled raster up to 2.25 dpr + the
+  existing HDR bloom/FXAA/grade chain — not a marketing claim; weak devices
+  and reduced-motion users get the unchanged round-25 path.
+
 ## Dependency Hygiene
 
 - `npm audit --workspaces --audit-level=high` runs in CI

@@ -219,6 +219,9 @@ export default function StoryStage() {
       <div style={{ position: 'sticky', top: 0, height: '100vh', overflow: 'hidden', background: '#020617' }}>
         <StoryScene />
         <div className="sf-hero-vignette" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }} />
+        {/* round 28: anamorphic letterbox bars — the story plays inside a frame */}
+        <div className="sf-cinebar top" aria-hidden />
+        <div className="sf-cinebar bottom" aria-hidden />
         {/* round-16: holographic scanline sweeps the pinned viewport every ~9s */}
         <div className="sf-scanline" aria-hidden />
 
