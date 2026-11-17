@@ -14,6 +14,7 @@ import {
   findUserByIdentifier,
   hashPassword,
   listActiveRefreshForUser,
+  listOrgUsers,
   replaceRecoveryCodes,
   revokeAccess,
   revokeRefresh,
@@ -594,6 +595,29 @@ router.get('/audit', requireAuth, requirePerm('read:audit'), async (req, res) =>
     .filter((row) => row.org_id === u.org || row.org_id == null)
     .map(({ event, ip, created_at }) => ({ event, ip, created_at }));
   res.json({ events });
+});
+
+// GET /v1/auth/teammates — the caller's org roster for the Security Center's
+// Teammates console (round 26). manage:users (Owner, Admin) — the same surface
+// that may mint members may read the roster; read:audit is deliberately not
+// enough. Tenancy comes from the TOKEN (u.org), never from client input, and
+// the response shape is pinned by tests: identity + 2FA state only — never
+// password hashes, TOTP secrets, or org-id fields.
+router.get('/teammates', requireAuth, requirePerm('manage:users'), async (req, res) => {
+  const u = authed(req);
+  const rows = await listOrgUsers(u.org);
+  res.json({
+    orgId: u.org,
+    selfId: u.sub,
+    members: rows.map((m) => ({
+      id: m.id,
+      username: m.username,
+      email: m.email,
+      role: m.role,
+      totpEnrolled: m.totp_enrolled,
+      lastLogin: m.last_login,
+    })),
+  });
 });
 
 export default router;

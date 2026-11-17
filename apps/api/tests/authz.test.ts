@@ -244,3 +244,58 @@ describe('compute surfaces take caller-supplied data only', () => {
     await api.get('/v1/radar/demo').expect(200);
   }, 60000);
 });
+
+// ============================================================================
+// 6. TEAMMATES ROSTER — the manage:users READ surface (round 26)
+//    The Security Center's Teammates console reads GET /v1/auth/teammates.
+//    Pins: 401 unauthenticated; Owner/Admin 200; Analyst/Viewer/Auditor 403;
+//    org scoping (another org's owner username must never appear); exact
+//    response shape (no password hashes, no TOTP secrets, no org ids);
+//    per-member 2FA state (enrolled Owner vs freshly-invited unenrolled).
+// ============================================================================
+describe('teammates roster (manage:users read surface)', () => {
+  it('401 without a token; Owner and Admin read; Analyst/Viewer/Auditor are 403', async () => {
+    await api.get('/v1/auth/teammates').expect(401);
+    const owner = await signup(`town${S}`);
+    const adm = await invite(owner, `tadm${S}`, 'Admin');
+    const admT = await inviteeLogin(`tadm${S}`, adm.body.tempPassword);
+    const ana = await invite(owner, `tana${S}`, 'Analyst');
+    const anaT = await inviteeLogin(`tana${S}`, ana.body.tempPassword);
+    const vie = await invite(owner, `tvie${S}`, 'Viewer');
+    const vieT = await inviteeLogin(`tvie${S}`, vie.body.tempPassword);
+    const aud = await invite(owner, `taud${S}`, 'Auditor');
+    const audT = await inviteeLogin(`taud${S}`, aud.body.tempPassword);
+
+    await api.get('/v1/auth/teammates').set('Authorization', `Bearer ${owner}`).expect(200);
+    await api.get('/v1/auth/teammates').set('Authorization', `Bearer ${admT}`).expect(200);
+    await api.get('/v1/auth/teammates').set('Authorization', `Bearer ${anaT}`).expect(403);
+    await api.get('/v1/auth/teammates').set('Authorization', `Bearer ${vieT}`).expect(403);
+    await api.get('/v1/auth/teammates').set('Authorization', `Bearer ${audT}`).expect(403);
+  }, 60000);
+
+  it('the roster is org-scoped, shape-pinned, and leaks no secrets', async () => {
+    const a = await signup(`rown${S}`);
+    await signup(`sown${S}`); // second org — its owner's identity must never appear in A's roster
+    await invite(a, `rinv${S}`, 'Analyst'); // invited but NOT yet logged in → TOTP still unenrolled
+
+    const r = (await api.get('/v1/auth/teammates').set('Authorization', `Bearer ${a}`).expect(200)).body as {
+      orgId: string;
+      selfId: string;
+      members: Array<Record<string, unknown>>;
+    };
+    // exactly A's org: the owner + the one invited analyst
+    expect(r.members).toHaveLength(2);
+    expect(r.members.map((m) => String(m.username)).sort()).toEqual([`rinv${S}`, `rown${S}`]);
+    expect(JSON.stringify(r)).not.toContain(`sown${S}`); // cross-tenant identity never leaks
+    // shape pinned cell by cell: identity + 2FA state only
+    for (const m of r.members) {
+      expect(Object.keys(m).sort()).toEqual(['email', 'id', 'lastLogin', 'role', 'totpEnrolled', 'username']);
+    }
+    // selfId resolves to the caller's own row, which carries the signup role
+    const self = r.members.find((m) => m.id === r.selfId);
+    expect(self?.role).toBe('Owner');
+    // 2FA state is real: the enrolled owner vs the freshly-invited analyst
+    expect(r.members.find((m) => m.username === `rown${S}`)?.totpEnrolled).toBe(true);
+    expect(r.members.find((m) => m.username === `rinv${S}`)?.totpEnrolled).toBe(false);
+  }, 60000);
+});

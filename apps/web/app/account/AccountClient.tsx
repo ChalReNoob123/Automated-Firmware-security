@@ -6,19 +6,32 @@ import { Reveal } from '../motionKit';
 import { apiFetch, getMe, setAccess, setSessionId, API_URL } from '../lib/auth';
 import { pwChecks, pwStrong, PW_RULES } from '../lib/pwRules';
 
-// Account Security Center (round 20). Three consoles:
+// Account Security Center (round 20, extended round 26). Four consoles:
 //   PASSWORD     — rotate with re-auth; other sessions die, this one survives
 //   SESSIONS     — live device list, per-device revoke, sign-out-everywhere
 //   AUTHENTICATOR— re-enroll TOTP via password re-auth + standard verify step
+//   TEAMMATES    — org roster + invite console (Owner/Admin only; the round-24
+//                  invite endpoint finally gets its UI, plus the round-26
+//                  org-scoped roster read)
 // All privileged calls go through apiFetch (memory bearer + silent-refresh
 // retry); verify-2fa is called directly with credentials:'include' like the
 // login form, because it mints the new refresh cookie itself.
 
 type Me = { username: string; email: string; role: string; orgId: string; totpEnrolled?: boolean };
 type SessionRow = { id: string; current: boolean; createdAt: number; expiresAt: number; expiresDays: number };
+type Teammate = { id: string; username: string; email: string; role: string; totpEnrolled: boolean; lastLogin: string | null };
 
-const post = async (path: string, body: unknown) => {
-  const r = await fetch(`${API_URL}${path}`, {
+// Role chip tones for the roster — one hue per RBAC role so a glance reads the
+// org's shape (Owner rose, Admin amber, Analyst cyan, Viewer slate, Auditor violet).
+const ROLE_TONE: Record<string, { c: string; b: string }> = {
+  Owner: { c: '#fda4af', b: 'rgba(244,63,94,0.45)' },
+  Admin: { c: '#fcd34d', b: 'rgba(251,191,36,0.45)' },
+  Analyst: { c: '#22d3ee', b: 'rgba(34,211,238,0.45)' },
+  Viewer: { c: '#94a3b8', b: 'rgba(148,163,184,0.45)' },
+  Auditor: { c: '#c4b5fd', b: 'rgba(167,139,250,0.45)' },
+};
+
+const post = async (path: string, body: unknown) => {  const r = await fetch(`${API_URL}${path}`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
@@ -80,6 +93,16 @@ export default function AccountClient() {
   // sessions card state
   const [sessionsErr, setSessionsErr] = useState('');
 
+  // teammates card state (round 26) — Owner/Admin only
+  const [team, setTeam] = useState<{ orgId: string; selfId: string; members: Teammate[] } | null>(null);
+  const [teamErr, setTeamErr] = useState('');
+  const [invUsername, setInvUsername] = useState('');
+  const [invEmail, setInvEmail] = useState('');
+  const [invRole, setInvRole] = useState<'Admin' | 'Analyst' | 'Viewer' | 'Auditor'>('Analyst');
+  const [invTemp, setInvTemp] = useState<{ username: string; tempPassword: string } | null>(null);
+  const [invCopied, setInvCopied] = useState(false);
+  const [invErr, setInvErr] = useState('');
+
   const refreshSessions = useCallback(async () => {
     try {
       const r = await apiFetch('/v1/auth/sessions');
@@ -109,6 +132,22 @@ export default function AccountClient() {
     }
   }, []);
 
+  const refreshTeam = useCallback(async () => {
+    try {
+      const r = await apiFetch('/v1/auth/teammates');
+      if (r.status === 403) {
+        setTeam(null); // role changed mid-session — the console simply hides
+        return;
+      }
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const j = (await r.json()) as { orgId: string; selfId: string; members: Teammate[] };
+      setTeam(j);
+      setTeamErr('');
+    } catch (e) {
+      setTeamErr((e as Error).message);
+    }
+  }, []);
+
   useEffect(() => {
     (async () => {
       const u = await getMe();
@@ -116,9 +155,10 @@ export default function AccountClient() {
       if (u) {
         void refreshSessions();
         void refreshRecovery();
+        if (u.role === 'Owner' || u.role === 'Admin') void refreshTeam();
       }
     })();
-  }, [refreshSessions, refreshRecovery]);
+  }, [refreshSessions, refreshRecovery, refreshTeam]);
 
   useEffect(() => {
     if (enrollStage === 'confirm') codeRef.current?.focus();
@@ -181,6 +221,42 @@ export default function AccountClient() {
     } catch (e) {
       setSessionsErr((e as Error).message);
       setBusy(false);
+    }
+  };
+
+  // ── teammates: invite (round 26) ──
+  // The 201 response carries the temp password exactly once — displayed in the
+  // card, never stored. 409/400 surface the API's uniform messages verbatim.
+  const inviteMember = async () => {
+    if (busy) return;
+    setBusy(true);
+    setInvErr('');
+    try {
+      const r = await apiFetch('/v1/auth/invite', {
+        method: 'POST',
+        body: JSON.stringify({ email: invEmail.trim(), username: invUsername.trim(), role: invRole }),
+      });
+      const j = (await r.json().catch(() => ({}))) as { error?: string; tempPassword?: string; username?: string };
+      if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`);
+      setInvTemp({ username: j.username ?? invUsername.trim(), tempPassword: j.tempPassword ?? '' });
+      setInvUsername('');
+      setInvEmail('');
+      void refreshTeam();
+    } catch (e) {
+      setInvErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const copyInvTemp = async () => {
+    if (!invTemp) return;
+    try {
+      await navigator.clipboard.writeText(invTemp.tempPassword);
+      setInvCopied(true);
+      window.setTimeout(() => setInvCopied(false), 1800);
+    } catch {
+      /* clipboard blocked — the text is selectable anyway */
     }
   };
 
@@ -294,6 +370,7 @@ export default function AccountClient() {
   const checks = pwChecks(newPw);
   const strong = pwStrong(newPw);
   const match = newPw.length > 0 && newPw === confirmPw;
+  const canManage = me.role === 'Owner' || me.role === 'Admin';
 
   const cardHead = (label: string, status?: React.ReactNode) => (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 6 }}>
@@ -454,8 +531,123 @@ export default function AccountClient() {
         </Card>
       </Reveal>
 
+      {/* ── TEAMMATES (round 26) — Owner/Admin console ── */}
+      {canManage && (
+        <Reveal delay={0.18}>
+          <Card>
+            {cardHead(
+              'SF://TEAMMATES · ORG ROSTER',
+              <span style={{ fontSize: 11, letterSpacing: 1, color: '#64748b' }}>{team ? `${team.members.length} MEMBERS` : 'LOADING…'}</span>
+            )}
+            <Hint>
+              Everyone in your org. An invite mints the account in THIS org with a one-time temporary password — this prototype has no mail
+              transport, so it is shown here exactly once (production emails a one-time link; documented in SECURITY.md). Owner is signup-only:
+              no invite can mint a superior.
+            </Hint>
+            <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {teamErr && <p role="alert" style={{ color: '#f87171', fontSize: 13, margin: 0 }}>{teamErr}</p>}
+              {team && team.members.length === 0 && !teamErr && <p style={{ color: '#64748b', fontSize: 13, margin: 0 }}>No members yet.</p>}
+              {(team?.members ?? []).map((m) => {
+                const tone = ROLE_TONE[m.role] ?? ROLE_TONE.Viewer;
+                return (
+                  <div
+                    key={m.id}
+                    className="sf-glass"
+                    onPointerMove={glassGlow}
+                    style={{ borderRadius: 12, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}
+                  >
+                    <code style={{ color: '#a5f3fc', fontSize: 12.5 }}>{m.username}</code>
+                    <span style={{ fontSize: 11, color: '#64748b' }}>{m.email}</span>
+                    <span
+                      style={{
+                        fontSize: 10.5,
+                        letterSpacing: 1.2,
+                        color: tone.c,
+                        border: `1px solid ${tone.b}`,
+                        borderRadius: 999,
+                        padding: '2px 9px',
+                        background: 'rgba(2,6,23,0.4)',
+                      }}
+                    >
+                      {m.role.toUpperCase()}
+                    </span>
+                    {!m.totpEnrolled && (
+                      <span style={{ fontSize: 10.5, letterSpacing: 1.2, color: '#fcd34d', border: '1px solid rgba(251,191,36,0.45)', borderRadius: 999, padding: '2px 9px' }}>
+                        2FA PENDING
+                      </span>
+                    )}
+                    {m.id === team?.selfId && (
+                      <span
+                        style={{
+                          fontSize: 10.5,
+                          letterSpacing: 1.2,
+                          color: '#22d3ee',
+                          border: '1px solid rgba(34,211,238,0.4)',
+                          borderRadius: 999,
+                          padding: '2px 9px',
+                          background: 'rgba(34,211,238,0.08)',
+                        }}
+                      >
+                        THIS ACCOUNT
+                      </span>
+                    )}
+                    {m.lastLogin && <span style={{ fontSize: 11, color: '#64748b', marginLeft: 'auto' }}>last {new Date(m.lastLogin).toISOString().slice(0, 10)}</span>}
+                  </div>
+                );
+              })}
+            </div>
+            {/* invite form */}
+            <div style={{ borderTop: '1px solid rgba(148,163,184,0.15)', marginTop: 16, paddingTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <p style={{ margin: 0, fontSize: 11, letterSpacing: 2, color: '#64748b' }}>INVITE A TEAMMATE</p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                {field({ name: 'inviteUsername', placeholder: 'username', maxLength: 32, 'aria-label': 'New teammate username', value: invUsername, onChange: (e) => setInvUsername(e.target.value) })}
+                {field({ name: 'inviteEmail', type: 'email', placeholder: 'email', maxLength: 256, 'aria-label': 'New teammate email', value: invEmail, onChange: (e) => setInvEmail(e.target.value) })}
+              </div>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'stretch' }}>
+                <select
+                  className="sf-input"
+                  name="inviteRole"
+                  aria-label="Role for the new teammate"
+                  value={invRole}
+                  onChange={(e) => setInvRole(e.target.value as typeof invRole)}
+                  style={{ flex: 1, color: '#e2e8f0' }}
+                >
+                  <option value="Analyst">Analyst — triage + scans</option>
+                  <option value="Viewer">Viewer — read only</option>
+                  <option value="Auditor">Auditor — audit trail</option>
+                  <option value="Admin">Admin — manage users</option>
+                </select>
+                <button className="sf-btn sf-btn-accent" disabled={busy || !invUsername.trim() || !invEmail.trim()} onClick={() => void inviteMember()}>
+                  {busy ? 'Inviting…' : 'Invite'}
+                </button>
+              </div>
+              {invErr && <p role="alert" style={{ color: '#f87171', fontSize: 12.5, margin: 0 }}>{invErr}</p>}
+              {invTemp && (
+                <div className="sf-glass" onPointerMove={glassGlow} style={{ borderRadius: 12, padding: 14 }}>
+                  <b style={{ color: '#fff', fontSize: 13 }}>Temporary password for {invTemp.username} — shown once.</b>
+                  <p style={{ color: '#fcd34d', fontSize: 12, margin: '6px 0' }}>
+                    Hand it over through a channel you trust. They enroll their own authenticator on first login, and this password never appears again.
+                  </p>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
+                    <code style={{ flex: 1, wordBreak: 'break-all', background: 'rgba(0,0,0,0.5)', borderRadius: 8, padding: 10, color: '#a5f3fc', fontSize: 12 }}>
+                      {invTemp.tempPassword}
+                    </code>
+                    <button type="button" className="sf-btn" style={{ fontSize: 11.5, padding: '0 12px' }} onClick={() => void copyInvTemp()}>
+                      {invCopied ? '✓ copied' : 'copy'}
+                    </button>
+                  </div>
+                  <button className="sf-btn" style={{ fontSize: 11.5, marginTop: 10 }} onClick={() => setInvTemp(null)}>
+                    Done
+                  </button>
+                </div>
+              )}
+            </div>
+          </Card>
+        </Reveal>
+      )}
+
       {/* ── SESSIONS ── */}
-      <Reveal delay={0.18}>
+      <Reveal delay={0.24}>
         <Card style={{ gridColumn: '1 / -1' }}>
           {cardHead(
             'SF://SESSIONS · LIVE DEVICES',

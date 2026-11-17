@@ -88,8 +88,18 @@ export async function createUser(input: { orgId: string; email: string; username
   return u;
 }
 
-export async function updateUser(id: string, patch: Partial<UserRow>): Promise<void> {
+// Roster of one org's users — the Security Center's Teammates console
+// (round 26). Lives beside the other user functions so the pool/memory swap
+// stays transparent; the route maps the row shape and never leaks secrets.
+export async function listOrgUsers(orgId: string): Promise<UserRow[]> {
   if (pool) {
+    const r = await pool.query(`SELECT * FROM users WHERE org_id=$1 ORDER BY username ASC`, [orgId]);
+    return r.rows as UserRow[];
+  }
+  return [...mem.users.values()].filter((u) => u.org_id === orgId).sort((a, b) => a.username.localeCompare(b.username));
+}
+
+export async function updateUser(id: string, patch: Partial<UserRow>): Promise<void> {  if (pool) {
     const keys = Object.keys(patch) as (keyof UserRow)[];
     if (!keys.length) return;
     const sets = keys.map((k, i) => `${k}=$${i + 2}`).join(', ');

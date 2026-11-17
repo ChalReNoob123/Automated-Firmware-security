@@ -1576,6 +1576,69 @@ Honest note: rounds 17–25 were committed with CI never having run on a fresh
 clone — the local machine's stale `dist/` folders and un-upgraded lockfile
 hid both failures. The gates are now proven to run and to block.
 
+## Security Center Round 26 — the RBAC matrix gets its GUI: Teammates console (2026-11-17)
+
+### The gap
+
+Round 24 made the RBAC matrix real at the protocol level (`POST /v1/auth/invite`,
+`manage:users`, Owner signup-only) — but nothing in the GUI could call it, and
+no endpoint could read the org roster at all. Invites existed; nobody could
+see or use them without hand-crafted HTTP.
+
+### API
+
+- New **`GET /v1/auth/teammates`** (round 26): the caller's org roster for the
+  Security Center. Gated `requireAuth` + `requirePerm('manage:users')` — the
+  same surface that may mint members may read the roster; `read:audit` is
+  deliberately not enough (Auditors read events, not the member list).
+- Tenancy comes from the TOKEN (`u.org`), never from client input.
+- Backed by a new `listOrgUsers(orgId)` store function with pool + memory
+  branches — deliberately NOT the raw `query()` path the round-24 audit fix
+  had to JS-filter, because the memory stub cannot parse WHERE clauses. The
+  store-function pattern is immune to that trap by construction.
+- Response shape is pinned by tests: member rows carry exactly
+  `{id, username, email, role, totpEnrolled, lastLogin}` — never password
+  hashes, TOTP secrets, or org-id fields.
+
+### Web
+
+- New **TEAMMATES · ORG ROSTER** console in the Security Center
+  (`apps/web/app/account/AccountClient.tsx`):
+  - roster rows with one-hue-per-role chips (Owner rose / Admin amber /
+    Analyst cyan / Viewer slate / Auditor violet), a **2FA PENDING** amber
+    chip for unenrolled accounts, and a **THIS ACCOUNT** marker on the
+    caller's own row,
+  - invite form: username + email + role select (Owner is not an option —
+    minting a superior is impossible by schema), surfacing the API's uniform
+    400/409 messages verbatim,
+  - on 201 the temporary password is displayed **exactly once** in a
+    copyable panel with an honest note: this prototype has no mail transport
+    (production emails a one-time link — the standing gap in SECURITY.md);
+  - the card renders only for Owner/Admin (`canManage` gate) and hides
+    mid-session if the role drops (403 → console removed).
+- Security Center is now four consoles; sessions card reveal order adjusted.
+
+### Verification
+
+- Battery **148/148 across 13 files** (2 new tests): 401 unauthenticated;
+  Owner and Admin 200; Analyst/Viewer/Auditor 403; org scoping (a second
+  org's owner username must never appear); exact response shape; per-member
+  2FA state real (enrolled Owner vs freshly-invited unenrolled Analyst).
+- Typechecks + web build clean; deployed to `:3006` and verified live
+  end-to-end in the browser: fresh owner signup → TOTP enrollment (code
+  computed in-page via SubtleCrypto HMAC-SHA1) → invite through the UI →
+  one-time password panel → sign out → invited Analyst logs in **with that
+  one-time password** → enrolls → recovery-codes panel → `/account` shows
+  NO teammates console (negative path). Owner re-login exercised the stored
+  key + computed code path.
+- Honest notes: the duplicate-invite 409 message is pinned in the vitest
+  suite; the live-UI check of it was lost to a navigation race and the
+  one-time password of the first invite was unrecoverable after being
+  misread from a screenshot (by design — shown once, never stored). No
+  member-removal / role-edit endpoint yet (candidate for a later round).
+  Live verification ran against the in-memory dev API; accounts vanish on
+  restart until Supabase is provisioned (migrations 002–006 ready).
+
 ## Dependency Hygiene
 
 - `npm audit --workspaces --audit-level=high` runs in CI
