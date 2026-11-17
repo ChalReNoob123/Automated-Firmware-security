@@ -1639,6 +1639,59 @@ see or use them without hand-crafted HTTP.
   Live verification ran against the in-memory dev API; accounts vanish on
   restart until Supabase is provisioned (migrations 002–006 ready).
 
+## Dashboard Round 27 — the data-viz motion pass: charts that land like instruments (2026-11-17)
+
+### The gap
+
+The fleet dashboard's charts reported correctly but arrived statically: the
+donut faded in as a whole, the trend line drew with no companion, and the
+engine bars grew silently. The sensory rhythm (R25 renderer, R26 security)
+called for a data-viz motion round — same honesty rule: the numbers are the
+same, only the arrival is choreographed.
+
+### Web (`apps/web/app/dashboard/Dashboard.tsx`, `Throughput.tsx`)
+
+- **CONFIDENCE MIX donut**: arcs sweep into place with framer-motion's
+  `pathLength`/`pathOffset` API (not raw `strokeDasharray` strings — the
+  attribute/CSS precedence trap), staggered 180ms apart, one low-volume
+  console tick per arc landing (pitch rises with the arc index); a dotted
+  scan orbit rotates around the ring (70s/turn); the center total ticks via
+  `CountUp` in an **HTML overlay** — the old `<text>` center could never host
+  a span; legend rows stagger-rise after the sweep.
+- **CONFIRMED SHARE TREND**: the existing left→right line draw now runs under
+  a scan head — a vertical light column (gradient core + halo) sweeping in
+  sync (same 1.35s easeOut); data-point markers pop in after the draw (only
+  when the queue is ≤ 40 points — markers don't pay off on dense queues);
+  the newest point holds a pulsing beacon (repeat: Infinity halo) — the
+  "this is now" dot.
+- **ENGINE COVERAGE bars**: rows cascade in (x + fade, 70ms stagger), values
+  count up, each bar lands with one rising-pitch tick, and a periodic sheen
+  sweeps across the fill (every ~5.7s, staggered); rows lean 3px toward the
+  pointer on hover.
+- **ENGINE THROUGHPUT ledger**: run rows cascade (stagger capped at 8).
+- **Sound**: one quiet sonar ping when the dashboard's data lands (once per
+  mount) and one when a seed completes — both through the existing
+  programmatic sfx path, which no-ops while the audio engine is off. Volume
+  ≤ 0.026; the console stays a console.
+- Reduced-motion: every one of these gates on `prefers-reduced-motion` —
+  donut arcs render as plain static SVG circles, the scan head / sheen /
+  beacon / markers / row motion are skipped entirely, CountUp snaps.
+
+### Verification
+
+- Typecheck + production build clean; deployed to `:3006` and verified live:
+  fresh owner signup → TOTP enroll → `/dashboard` empty state → seeded the
+  demo queue through the UI → captured the **mid-sweep** frame (arcs in
+  flight, legend rows mid-stagger, scan head visible at the sweep edge) and
+  the **settled** frame (full donut, drawn line, markers, beacon). Browser
+  console: zero errors across the whole sequence.
+- Honest notes: sound cues are verified by construction (the sfx path is the
+  same engine used by the R18/R21 features; `sfxBlip`/`sfxPing` no-op with
+  audio off) — not by ear in this session. The donut sweep fix went through
+  one typecheck iteration: this framer-motion version (12.43.0) types
+  `pathOffset` inside `initial`/`animate` targets, not as a top-level prop.
+  Charts read the same API data as before — no numbers changed.
+
 ## Dependency Hygiene
 
 - `npm audit --workspaces --audit-level=high` runs in CI

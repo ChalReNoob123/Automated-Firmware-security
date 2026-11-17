@@ -160,9 +160,12 @@ export default function Throughput() {
           )}
           {note && <p style={{ fontSize: 12, color: '#fcd34d', margin: '0 0 8px' }}>{note}</p>}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {m.recent.map((r) => (
-              <div
+            {m.recent.map((r, i) => (
+              <motion.div
                 key={r.runId}
+                initial={reduced ? false : { opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={reduced ? undefined : { delay: 0.05 * Math.min(i, 8), duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
                 style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 12, fontFamily: 'ui-monospace, monospace', color: '#94a3b8', padding: '7px 10px', borderRadius: 8, background: 'rgba(148,163,184,0.05)' }}
               >
                 <span style={{ color: '#22d3ee' }}>{r.runId.slice(0, 8)}</span>
@@ -170,7 +173,7 @@ export default function Throughput() {
                   {Math.round(r.wallMs)}ms · {fmtRate(r.fuzzExecsPerSec)} · {r.findingsCount} findings
                 </span>
                 <span>{r.poolMode}</span>
-              </div>
+              </motion.div>
             ))}
           </div>
         </>
