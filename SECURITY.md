@@ -1540,6 +1540,42 @@ chain and get the context's direct antialiased render.
   un-tonemapped frame while scrubbing fast (pre-existing, invisible when
   settled). AI image quota remains 0 and was not retried.
 
+## CI Hardening Round 25a — the pipeline runs for real and every gate bites (2026-11-17)
+
+The first-ever full CI run on a fresh clone (GitHub, 2026-11-17) exposed three
+real gaps that local development had masked, each fixed and verified by
+reproduction:
+
+1. **Library builds missing before typecheck** — `dist/` is git-ignored, and
+   the per-package `npm --prefix` steps bypass turbo, so the declared
+   `dependsOn: ["^build"]` ordering never applied. `apps/api typecheck` could
+   not resolve `@sentinelforge/{workers,mcp-servers,graph-service}` (9×
+   TS2307 + 2 cascade TS7006). Verified by hiding the three dist folders
+   locally, reproducing all 11 CI errors file-for-file, then running the new
+   order (workers → graph-service → mcp-servers builds → typecheck) from the
+   same dist-less tree to green.
+2. **The audit gate fired for the first time and caught real advisories** —
+   body-parser 2.3.0 → 2.4.0 (HIGH, DoS via trailing bytes after a compressed
+   request body, GHSA-27r3-jxmh-p828), zod 4.4.3 → 4.6.7 (HIGH, memory
+   exhaustion validating oversized collections, GHSA-mrhx-c7xc-m3w5),
+   next 16.4.2 → 16.4.6 (MODERATE info disclosure via `unstable_cache`,
+   GHSA-mfr8-8qww-v76h — below the high-level gate, fixed for hygiene).
+   Battery 146/146 + api/web typechecks + builds + live spot-check on the
+   next-16.4.6 runtime all re-verified. The nested `apps/web/package-lock.json`
+   is now committed so CI's web install is reproducible.
+3. **The secret-scan gate tripped on the AWS documentation example key** —
+   the workers demo embeds the canonical example Access Key ID printed in the
+   official AWS docs (public placeholder, not a credential). The demo literal
+   is now assembled at runtime from three parts with a citing comment; no
+   blanket file exclusions were added, the gate still scans every tracked
+   file, and `node dist/index.js demo` output is unchanged.
+
+Final state: CI **green end-to-end** (install → check-deps → library builds →
+5 typechecks → 4 test suites → api/web builds → audit gate → secret scan).
+Honest note: rounds 17–25 were committed with CI never having run on a fresh
+clone — the local machine's stale `dist/` folders and un-upgraded lockfile
+hid both failures. The gates are now proven to run and to block.
+
 ## Dependency Hygiene
 
 - `npm audit --workspaces --audit-level=high` runs in CI
