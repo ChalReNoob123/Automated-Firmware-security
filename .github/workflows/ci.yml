@@ -11,9 +11,19 @@
 name: sentinelforge-ci
 on:
   push:
-    paths: ['apps/**', 'packages/**', '.github/workflows/ci.yml']
+    # Round 29: the root manifests join the filter. The blocking audit gate
+    # reads the ROOT package-lock.json, yet a lockfile-only fix (removing an
+    # unused prod dependency after a new advisory) silently skipped CI — no
+    # run was created and the fix was never verified by the pipeline it was
+    # written for. Any change to the dependency graph must run the gate.
+    paths:
+      - 'apps/**'
+      - 'packages/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/ci.yml'
   pull_request:
-    paths: ['apps/**', 'packages/**']
+    paths: ['apps/**', 'packages/**', 'package.json', 'package-lock.json']
 
 jobs:
   verify:
