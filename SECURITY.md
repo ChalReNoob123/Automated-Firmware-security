@@ -1849,6 +1849,78 @@ supertest could see (below).
    honest pin is 403-authenticated/404-identity) — all fixed to match
    verified behavior, never weakened to pass.
 
+## Sensory Round 30 — Account Security Center motion + sound pass (2026-11-18)
+
+The `/account` console gets award-grade choreography and a five-word sound
+vocabulary. Security behavior is untouched — this is a sensory round, and the
+only code fix it produced came from driving the flow live (below).
+
+### Motion (all `prefers-reduced-motion` gated)
+
+- **Roster/session rows enter and exit** through `AnimatePresence`: a
+  `motion.div` wrapper (layout only) + inner `motion.div.sf-glass` carrying
+  enter/exit variants on the fleet's `EASE = [0.22, 1, 0.36, 1]`. Reduced
+  motion strips it to opacity-only and disables `layout`.
+- **Row sweep flash**: a keyed `motion.span` gradient overlay
+  (`linear-gradient(105deg, transparent 26%, rgba(34,211,238,…) 44–50%…)`),
+  0.85s, self-clears at 1100ms, fired only AFTER `await refreshTeam()` so the
+  row exists; skipped entirely under reduced motion.
+- **Role-chip pop** (`motion.span key={m.role}`, spring 520/22) and
+  **count flip** (`motion.span key={count}`); the sessions header reuses the
+  existing `.sf-api-dot live` pulse instead of a new effect.
+- **Status notes** are one top-level `Note` component (`role="status"` /
+  `role="alert"`, keyed by message text); errors mount with an x-axis
+  shake. No layout shift, no aria noise.
+
+### Sound (sfx engine discipline: muted/background = no-op, gains 0.02–0.12,
+zero DOM mutation)
+
+- New vocabulary in `audio/sfx.ts`: `sfxGrant` (invite, password rotate,
+  enroll/verify success), `sfxShift(up)` — direction from
+  `ROLE_RANK = {Viewer:0, Auditor:1, Analyst:2, Admin:3, Owner:4}` so
+  promotions rise and demotions fall, `sfxDeny` (every catch block), plus
+  `sfxImpact` on member removal/session revoke and `sfxBlip` reused for the
+  re-enroll tick. Deny fires exactly once per failure and never on load-time
+  refresh errors.
+
+### The bug only a live browser could see (re-enrollment was dead)
+
+- `startReenroll` called the local cookie-only `post()` helper, but
+  `POST /v1/auth/totp/re-enroll` runs under `requireAuth` (**Bearer only**)
+  — so the button had **always failed live with `No token`** since it
+  shipped in round 20; round 29's E2E only exercised the login-page enroll,
+  which uses a different path. Fixed to `apiFetch` (memory bearer + one
+  silent refresh), like every other authenticated call on the page.
+  `post()` keeps its one correct caller: `verify-2fa` (tempToken-auth).
+
+### Verification (honest, in order)
+
+1. Web typecheck + production build clean; root battery **153/153**.
+2. **Live browser E2E** on `:3006` (fresh signup `viz-org-r30`/`r30own`,
+   manual-key TOTP enroll, audio armed `SF://AUDIO ON` so sound call paths
+   genuinely execute): row-enter shot mid-choreography → invite →
+   **sweep DOM-proven at 351ms** with the exact designed gradient while the
+   new row entered and the count flipped `1 → 2 MEMBERS` → role change →
+   note `✓ r30mate → Admin…` + chip pop + select synced → Remove → native
+   confirm (exact pinned copy) → **exit DOM-verified at opacity 0.28** →
+   duplicate-username invite → 409 alert at **34ms** mid-shake
+   (`matrix(1,0,0,1,-0.57,7.87)`) → re-enroll blip → confirm stage at 302ms
+   → fresh TOTP code → `● ENROLLED` + grant note.
+3. Console: **0 JS exceptions** (one 401 network log — the expected
+   refresh-dance dedup plus one deliberately-invalid code attempt).
+4. **Honest limits**: sounds are not machine-verifiable from screenshots —
+   what is verified is that every one of the five sound functions executed
+   its call path with the engine ON and preference persisted (`sf_audio=1`),
+   and that nothing logged or mutated the DOM. The reduced-motion branch is
+   code-review-verified only (not driven live this round).
+5. Environment note (not a product defect): during E2E the `:3006` server
+   was found serving build #1's chunk manifest after a rebuild replaced
+   `.next` (all JS 500s, zero hydration) — fixed by restarting by PID; and
+   Next's prerendered `loading.tsx` shell reveals via a rAF-gated `$RV`
+   call that never fires while the automation window is occluded
+   (`TRACING…` forever) — foregrounding the window reveals content
+   normally. Both documented so the next investigation starts ahead.
+
 ## Dependency Hygiene
 
 - `npm audit --workspaces --audit-level=high` runs in CI

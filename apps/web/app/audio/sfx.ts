@@ -190,6 +190,72 @@ export function sfxImpact(): void {
   src.start(t);
 }
 
+/* --------------------- round 30: the action vocabulary ---------------------
+// The security console acts on IDENTITIES — invite (mint), promote/demote
+// (shift), remove (purge), refused (deny). The delegated click-chirp only
+// says "pressed"; these say what LANDED. Same discipline as everything else
+// in here: no-op when muted or in a background tab, gains 0.03–0.06 so the
+// mix stays a console and never an arcade, zero DOM mutation, and (like
+// boot()'s stagger) a later call is safe even if the engine goes away. */
+
+// grant: three quick rising blips — the action landed (invite minted,
+// password rotated, authenticator confirmed, recovery codes regenerated)
+export function sfxGrant(): void {
+  if (!engine || document.hidden) return;
+  blip(660, 940, 0.05, 0.03);
+  window.setTimeout(() => blip(880, 1240, 0.05, 0.032), 75);
+  window.setTimeout(() => blip(1245, 1720, 0.07, 0.034), 155);
+}
+
+// shift: two triangle tones — rising for a promotion, falling for a demotion
+// (round 30 role change; direction comes from the caller's rank compare)
+export function sfxShift(up = true): void {
+  if (!engine || document.hidden) return;
+  const { ac, master } = engine;
+  const t = ac.currentTime;
+  const notes: [number, number][] = up
+    ? [[620, 0], [930, 0.085]]
+    : [[930, 0], [620, 0.085]];
+  for (const [freq, dt] of notes) {
+    const osc = ac.createOscillator();
+    const g = ac.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(freq, t + dt);
+    g.gain.setValueAtTime(0, t + dt);
+    g.gain.linearRampToValueAtTime(0.034, t + dt + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dt + 0.12);
+    osc.connect(g).connect(master);
+    osc.start(t + dt);
+    osc.stop(t + dt + 0.14);
+  }
+}
+
+// deny: a low filtered double-thud — the console refused the request (the
+// uniform API error line carries the words; this carries the refusal)
+export function sfxDeny(): void {
+  if (!engine || document.hidden) return;
+  const { ac, master } = engine;
+  const hit = (dt: number, vol: number) => {
+    const t = ac.currentTime + dt;
+    const osc = ac.createOscillator();
+    const g = ac.createGain();
+    const lp = ac.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 420;
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(230, t);
+    osc.frequency.exponentialRampToValueAtTime(120, t + 0.14);
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(vol, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.17);
+    osc.connect(lp).connect(g).connect(master);
+    osc.start(t);
+    osc.stop(t + 0.19);
+  };
+  hit(0, 0.05);
+  hit(0.13, 0.034);
+}
+
 // the boot fanfare: four rising console blips + a soft pad sweep + the narrator
 function boot() {
   if (!engine) return;

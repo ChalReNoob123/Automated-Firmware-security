@@ -1,12 +1,15 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { AnimatePresence, motion, useReducedMotion, type MotionProps } from 'framer-motion';
 import { Card, glassGlow } from '../components/ui';
 import { Reveal } from '../motionKit';
 import { apiFetch, getMe, setAccess, setSessionId, API_URL } from '../lib/auth';
 import { pwChecks, pwStrong, PW_RULES } from '../lib/pwRules';
+import { sfxBlip, sfxDeny, sfxGrant, sfxImpact, sfxShift } from '../audio/sfx';
 
-// Account Security Center (round 20, extended rounds 26 + 29). Four consoles:
+// Account Security Center (round 20, extended rounds 26 + 29, sensory pass 30).
+// Four consoles:
 //   PASSWORD     — rotate with re-auth; other sessions die, this one survives
 //   SESSIONS     — live device list, per-device revoke, sign-out-everywhere
 //   AUTHENTICATOR— re-enroll TOTP via password re-auth + standard verify step
@@ -16,6 +19,13 @@ import { pwChecks, pwStrong, PW_RULES } from '../lib/pwRules';
 //                  loop closes in place: per-row role change + member removal
 //                  (PATCH/DELETE /v1/auth/teammates/:id), never offered for the
 //                  caller's own row or the immutable Owner row.
+// Round 30 — the console now ACTS like one: list rows rise in and collapse
+// out (AnimatePresence + layout reflow, reduced motion → plain fades), a
+// sweep of light crosses a row the moment it's minted or its role register
+// changes, role chips pop on swap, counts flip, status notes rise (errors
+// shake once), and every outcome speaks the round-30 sfx vocabulary
+// (grant/shift/impact/deny — no-ops when muted). All ambient framer-motion
+// honors prefers-reduced-motion, same as the rest of the fleet.
 // All privileged calls go through apiFetch (memory bearer + silent-refresh
 // retry); verify-2fa is called directly with credentials:'include' like the
 // login form, because it mints the new refresh cookie itself.
@@ -33,6 +43,13 @@ const ROLE_TONE: Record<string, { c: string; b: string }> = {
   Viewer: { c: '#94a3b8', b: 'rgba(148,163,184,0.45)' },
   Auditor: { c: '#c4b5fd', b: 'rgba(167,139,250,0.45)' },
 };
+
+// Round 30: authority order for the shift cue — a promotion sounds up, a
+// demotion sounds down (Owner included only for compare completeness; it is
+// never assignable). The RBAC model itself is unchanged: Analyst/Viewer/
+// Auditor are parallel duties, this ladder is purely the SOUND's direction.
+const ROLE_RANK: Record<string, number> = { Viewer: 0, Auditor: 1, Analyst: 2, Admin: 3, Owner: 4 };
+const EASE = [0.22, 1, 0.36, 1] as const; // the fleet's motionKit ease
 
 const post = async (path: string, body: unknown) => {  const r = await fetch(`${API_URL}${path}`, {
     method: 'POST',
@@ -56,6 +73,30 @@ function CapsLockHint({ on }: { on: boolean }) {
 
 function Hint({ children }: { children: React.ReactNode }) {
   return <p style={{ color: '#64748b', fontSize: 12, margin: 0, lineHeight: 1.55 }}>{children}</p>;
+}
+
+// Round 30: every status line announces itself. Confirmations rise into
+// place; errors shake once on arrival. The key follows the MESSAGE, so a
+// repeated-but-changed error remounts → re-animates AND re-announces
+// (role="alert" fires on mount). Reduced motion gets a plain fade.
+function Note({ tone, shake, style, children }: { tone: 'ok' | 'err'; shake?: boolean; style?: React.CSSProperties; children: React.ReactNode }) {
+  const reduced = useReducedMotion() ?? false;
+  const animate = reduced
+    ? { opacity: 1 }
+    : shake
+      ? { opacity: 1, y: 0, x: [0, -5, 5, -4, 4, -2, 2, 0] }
+      : { opacity: 1, y: 0 };
+  return (
+    <motion.p
+      role={tone === 'ok' ? 'status' : 'alert'}
+      initial={reduced ? { opacity: 0 } : { opacity: 0, y: 8 }}
+      animate={animate}
+      transition={shake && !reduced ? { duration: 0.4 } : { duration: 0.3 }}
+      style={{ fontSize: 13, margin: 0, color: tone === 'ok' ? '#4ade80' : '#f87171', ...style }}
+    >
+      {children}
+    </motion.p>
+  );
 }
 
 export default function AccountClient() {
@@ -109,6 +150,37 @@ export default function AccountClient() {
   // the invite form, plus a success note and a verbatim-error line
   const [teamMsg, setTeamMsg] = useState('');
   const [teamActionErr, setTeamActionErr] = useState('');
+
+  // round 30: choreography state
+  const reduced = useReducedMotion() ?? false;
+  // Row motion shared by both lists: rise in from the left, COLLAPSE out on
+  // removal (x-slid + height→0, so siblings reflow through it). Reduced
+  // motion strips every transform — opacity only, no layout animation.
+  const rowProps = (delay = 0): MotionProps =>
+    reduced
+      ? {
+          initial: { opacity: 0 },
+          animate: { opacity: 1 },
+          exit: { opacity: 0, transition: { duration: 0.15 } },
+          transition: { duration: 0.25, delay },
+        }
+      : {
+          initial: { opacity: 0, x: -14 },
+          animate: { opacity: 1, x: 0 },
+          exit: { opacity: 0, x: 26, height: 0, transition: { duration: 0.3, ease: EASE } },
+          transition: { duration: 0.45, ease: EASE, delay },
+        };
+  // A sweep of light crosses a roster row the moment its member is minted
+  // (cyan) or its role register changes (the new role's hue). Fires once,
+  // self-clears; keyed by USERNAME because the invite response carries no id.
+  const [flash, setFlash] = useState<{ user: string; color: string } | null>(null);
+  const flashTimer = useRef<number | null>(null);
+  const fireFlash = (user: string, color: string) => {
+    setFlash({ user, color });
+    if (flashTimer.current) window.clearTimeout(flashTimer.current);
+    flashTimer.current = window.setTimeout(() => setFlash(null), 1100);
+  };
+  useEffect(() => () => { if (flashTimer.current) window.clearTimeout(flashTimer.current); }, []);
 
   const refreshSessions = useCallback(async () => {
     try {
@@ -187,12 +259,14 @@ export default function AccountClient() {
       const r = await apiFetch('/v1/auth/password', { method: 'POST', body: JSON.stringify({ currentPassword: curPw, newPassword: newPw }) });
       const j = (await r.json().catch(() => ({}))) as { error?: string; revokedOtherSessions?: number };
       if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`);
+      sfxGrant();
       setPwMsg(`Password rotated — ${j.revokedOtherSessions ?? 0} other session(s) signed out.`);
       setCurPw('');
       setNewPw('');
       setConfirmPw('');
       void refreshSessions();
     } catch (e) {
+      sfxDeny();
       setPwErr((e as Error).message);
     } finally {
       setBusy(false);
@@ -207,12 +281,14 @@ export default function AccountClient() {
       const r = await apiFetch('/v1/auth/sessions/revoke', { method: 'POST', body: JSON.stringify({ jti: id }) });
       const j = (await r.json().catch(() => ({}))) as { error?: string; selfRevoked?: boolean };
       if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`);
+      sfxImpact(); // a device just lost its seat — purge reads as a hard cut
       if (j.selfRevoked) {
         signedOut();
         return;
       }
       void refreshSessions();
     } catch (e) {
+      sfxDeny();
       setSessionsErr((e as Error).message);
     } finally {
       setBusy(false);
@@ -224,8 +300,10 @@ export default function AccountClient() {
     setBusy(true);
     try {
       await apiFetch('/v1/auth/sessions/revoke-all', { method: 'POST' });
+      sfxImpact();
       signedOut();
     } catch (e) {
+      sfxDeny();
       setSessionsErr((e as Error).message);
       setBusy(false);
     }
@@ -245,11 +323,15 @@ export default function AccountClient() {
       });
       const j = (await r.json().catch(() => ({}))) as { error?: string; tempPassword?: string; username?: string };
       if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`);
-      setInvTemp({ username: j.username ?? invUsername.trim(), tempPassword: j.tempPassword ?? '' });
+      const minted = j.username ?? invUsername.trim();
+      sfxGrant();
+      setInvTemp({ username: minted, tempPassword: j.tempPassword ?? '' });
       setInvUsername('');
       setInvEmail('');
-      void refreshTeam();
+      await refreshTeam(); // then light the row — it only exists AFTER the refetch
+      fireFlash(minted, ROLE_TONE[invRole]?.c ?? '#22d3ee'); // …in the color of the role it arrived with
     } catch (e) {
+      sfxDeny();
       setInvErr((e as Error).message);
     } finally {
       setBusy(false);
@@ -286,9 +368,12 @@ export default function AccountClient() {
       });
       const j = (await r.json().catch(() => ({}))) as { error?: string };
       if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`);
+      sfxShift((ROLE_RANK[role] ?? 0) >= (ROLE_RANK[m.role] ?? 0)); // rising = promotion, falling = demotion
+      fireFlash(m.username, ROLE_TONE[role]?.c ?? '#22d3ee'); // the row relights in its NEW register
       setTeamMsg(`${m.username} → ${role}. Their next sign-in carries the new role.`);
       void refreshTeam();
     } catch (e) {
+      sfxDeny();
       setTeamActionErr((e as Error).message);
     } finally {
       setBusy(false);
@@ -305,9 +390,11 @@ export default function AccountClient() {
       const r = await apiFetch(`/v1/auth/teammates/${encodeURIComponent(m.id)}`, { method: 'DELETE' });
       const j = (await r.json().catch(() => ({}))) as { error?: string };
       if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`);
+      sfxImpact(); // the row collapses out under this — a purge, not a fade
       setTeamMsg(`${m.username} removed — all their sessions were revoked.`);
       void refreshTeam();
     } catch (e) {
+      sfxDeny();
       setTeamActionErr((e as Error).message);
     } finally {
       setBusy(false);
@@ -320,7 +407,15 @@ export default function AccountClient() {
     setBusy(true);
     setEnrollErr('');
     try {
-      const j = (await post('/v1/auth/totp/re-enroll', { password: enrollPw })) as { tempToken: string; manualKey: string; revokedOtherSessions: number };
+      // round-30 fix: this route runs under requireAuth (bearer only) — the old
+      // cookie-only post() reached it with no Authorization header and had
+      // ALWAYS failed live with "No token" (the login-page enroll never uses
+      // this path). apiFetch attaches the memory-held bearer and silently
+      // refreshes once on expiry, like every other authenticated call here.
+      const r = await apiFetch('/v1/auth/totp/re-enroll', { method: 'POST', body: JSON.stringify({ password: enrollPw }) });
+      const j = (await r.json().catch(() => ({}))) as { error?: string; tempToken: string; manualKey: string; revokedOtherSessions: number };
+      if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`);
+      sfxBlip(700, 1500, 0.07, 0.028); // rising tick — the console awaits a code
       setEnroll({ tempToken: j.tempToken, manualKey: j.manualKey });
       setEnrollStage('confirm');
       setCode('');
@@ -329,6 +424,7 @@ export default function AccountClient() {
       setMe({ ...me, totpEnrolled: false });
       void refreshSessions();
     } catch (e) {
+      sfxDeny();
       setEnrollErr((e as Error).message);
     } finally {
       setBusy(false);
@@ -342,6 +438,7 @@ export default function AccountClient() {
     setEnrollErr('');
     try {
       const j = (await post('/v1/auth/verify-2fa', { tempToken: enroll.tempToken, code: c.trim() })) as { accessToken: string; sessionId?: string };
+      sfxGrant();
       setAccess(j.accessToken);
       setSessionId(j.sessionId ?? null);
       setEnrollStage('done');
@@ -352,6 +449,7 @@ export default function AccountClient() {
       if (me) setMe({ ...me, totpEnrolled: true });
       void refreshSessions();
     } catch (e) {
+      sfxDeny();
       setEnrollErr((e as Error).message);
       autoVerified.current = false; // re-arm so a corrected code auto-fires
     } finally {
@@ -379,11 +477,13 @@ export default function AccountClient() {
       const r = await apiFetch('/v1/auth/recovery-codes', { method: 'POST', body: JSON.stringify({ password: recPw }) });
       const j = (await r.json().catch(() => ({}))) as { error?: string; codes?: string[]; remaining?: number };
       if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`);
+      sfxGrant();
       setRecCodes(j.codes ?? []);
       setRecRemaining(j.remaining ?? (j.codes?.length ?? 0));
       setRecStage('codes');
       setRecPw('');
     } catch (e) {
+      sfxDeny();
       setRecErr((e as Error).message);
     } finally {
       setBusy(false);
@@ -460,8 +560,8 @@ export default function AccountClient() {
             <button className="sf-btn sf-btn-accent" disabled={busy || !strong || !match || !curPw} onClick={() => void changePassword()}>
               {busy ? 'Rotating…' : 'Rotate password'}
             </button>
-            {pwMsg && <p role="status" style={{ color: '#6ee7b7', fontSize: 13, margin: 0 }}>{pwMsg}</p>}
-            {pwErr && <p role="alert" style={{ color: '#f87171', fontSize: 13, margin: 0 }}>{pwErr}</p>}
+            {pwMsg && <Note key={pwMsg} tone="ok">{pwMsg}</Note>}
+            {pwErr && <Note key={pwErr} tone="err" shake>{pwErr}</Note>}
           </div>
         </Card>
       </Reveal>
@@ -484,7 +584,7 @@ export default function AccountClient() {
                 <button className="sf-btn sf-btn-accent" disabled={busy || !enrollPw} onClick={() => void startReenroll()}>
                   {busy ? 'Working…' : 'Start re-enrollment'}
                 </button>
-                {enrollErr && <p role="alert" style={{ color: '#f87171', fontSize: 13, margin: 0 }}>{enrollErr}</p>}
+                {enrollErr && <Note key={enrollErr} tone="err" shake>{enrollErr}</Note>}
               </div>
               {/* ── recovery codes ── */}
               <div style={{ borderTop: '1px solid rgba(148,163,184,0.15)', marginTop: 16, paddingTop: 14 }}>
@@ -517,7 +617,7 @@ export default function AccountClient() {
                         Cancel
                       </button>
                     </div>
-                    {recErr && <p role="alert" style={{ color: '#f87171', fontSize: 12.5, margin: 0 }}>{recErr}</p>}
+                    {recErr && <Note key={recErr} tone="err" shake>{recErr}</Note>}
                   </div>
                 )}
                 {recStage === 'codes' && (
@@ -575,12 +675,14 @@ export default function AccountClient() {
                 <button className="sf-btn sf-btn-accent" disabled={busy || code.length !== 6} onClick={() => void verifyEnroll()}>
                   {busy ? 'Verifying…' : 'Confirm new authenticator'}
                 </button>
-                {enrollErr && <p role="alert" style={{ color: '#f87171', fontSize: 13, margin: 0 }}>{enrollErr}</p>}
+                {enrollErr && <Note key={enrollErr} tone="err" shake>{enrollErr}</Note>}
               </div>
             </div>
           )}
           {enrollStage === 'done' && (
-            <p role="status" style={{ color: '#6ee7b7', fontSize: 13, margin: '12px 0 0' }}>{enrollMsg}</p>
+            <div style={{ marginTop: '12px' }}>
+              <Note key={enrollMsg} tone="ok">{enrollMsg}</Note>
+            </div>
           )}
         </Card>
       </Reveal>
@@ -591,7 +693,20 @@ export default function AccountClient() {
           <Card>
             {cardHead(
               'SF://TEAMMATES · ORG ROSTER',
-              <span style={{ fontSize: 11, letterSpacing: 1, color: '#64748b' }}>{team ? `${team.members.length} MEMBERS` : 'LOADING…'}</span>
+              team ? (
+                // round 30: the count flips when the roster changes shape
+                <motion.span
+                  key={team.members.length}
+                  initial={reduced ? { opacity: 0 } : { opacity: 0, y: -6 }}
+                  animate={reduced ? { opacity: 1 } : { opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3 }}
+                  style={{ fontSize: 11, letterSpacing: 1, color: '#64748b' }}
+                >
+                  {team.members.length} MEMBERS
+                </motion.span>
+              ) : (
+                <span style={{ fontSize: 11, letterSpacing: 1, color: '#64748b' }}>LOADING…</span>
+              )
             )}
             <Hint>
               Everyone in your org. An invite mints the account in THIS org with a one-time temporary password — this prototype has no mail
@@ -599,97 +714,124 @@ export default function AccountClient() {
               no invite can mint a superior.
             </Hint>
             <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {teamErr && <p role="alert" style={{ color: '#f87171', fontSize: 13, margin: 0 }}>{teamErr}</p>}
+              {teamErr && <Note key={teamErr} tone="err" shake>{teamErr}</Note>}
               {team && team.members.length === 0 && !teamErr && <p style={{ color: '#64748b', fontSize: 13, margin: 0 }}>No members yet.</p>}
-              {(team?.members ?? []).map((m) => {
-                const tone = ROLE_TONE[m.role] ?? ROLE_TONE.Viewer;
-                return (
-                  <div
-                    key={m.id}
-                    className="sf-glass"
-                    onPointerMove={glassGlow}
-                    style={{ borderRadius: 12, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}
-                  >
-                    <code style={{ color: '#a5f3fc', fontSize: 12.5 }}>{m.username}</code>
-                    <span style={{ fontSize: 11, color: '#64748b' }}>{m.email}</span>
-                    <span
-                      style={{
-                        fontSize: 10.5,
-                        letterSpacing: 1.2,
-                        color: tone.c,
-                        border: `1px solid ${tone.b}`,
-                        borderRadius: 999,
-                        padding: '2px 9px',
-                        background: 'rgba(2,6,23,0.4)',
-                      }}
-                    >
-                      {m.role.toUpperCase()}
-                    </span>
-                    {!m.totpEnrolled && (
-                      <span style={{ fontSize: 10.5, letterSpacing: 1.2, color: '#fcd34d', border: '1px solid rgba(251,191,36,0.45)', borderRadius: 999, padding: '2px 9px' }}>
-                        2FA PENDING
-                      </span>
-                    )}
-                    {m.id === team?.selfId && (
-                      <span
-                        style={{
-                          fontSize: 10.5,
-                          letterSpacing: 1.2,
-                          color: '#22d3ee',
-                          border: '1px solid rgba(34,211,238,0.4)',
-                          borderRadius: 999,
-                          padding: '2px 9px',
-                          background: 'rgba(34,211,238,0.08)',
-                        }}
+              {/*
+                Round 30: AnimatePresence owns the row lifecycle. OUTER motion
+                div = layout only (siblings glide when a row unmounts); INNER
+                = the enter/exit choreography (rise in, slide-fade out) — two
+                elements so framer's layout transforms and the x-animation
+                never write the same transform twice.
+              */}
+              <AnimatePresence>
+                {(team?.members ?? []).map((m) => {
+                  const tone = ROLE_TONE[m.role] ?? ROLE_TONE.Viewer;
+                  return (
+                    <motion.div key={m.id} layout={!reduced} style={{ overflow: 'hidden', borderRadius: 12 }}>
+                      <motion.div
+                        className="sf-glass"
+                        onPointerMove={glassGlow}
+                        {...rowProps()}
+                        style={{ borderRadius: 12, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', position: 'relative', overflow: 'hidden' }}
                       >
-                        THIS ACCOUNT
-                      </span>
-                    )}
-                    {m.lastLogin && <span style={{ fontSize: 11, color: '#64748b', marginLeft: 'auto' }}>last {new Date(m.lastLogin).toISOString().slice(0, 10)}</span>}
-                    {/*
-                      round 29: row actions — deliberately absent for the caller's
-                      own row and the Owner row (the API refuses both anyway:
-                      self 400, Owner 403; the UI never offers the foot-gun).
-                    */}
-                    {m.id !== team?.selfId && m.role !== 'Owner' && (
-                      <span style={{ display: 'flex', gap: 8, alignItems: 'center', marginLeft: m.lastLogin ? 0 : 'auto' }}>
-                        <select
-                          className="sf-input"
-                          aria-label={`Role for ${m.username}`}
-                          value={m.role}
-                          disabled={busy}
-                          onChange={(e) => void changeRole(m, e.target.value)}
-                          style={{ fontSize: 11.5, padding: '4px 8px', color: '#e2e8f0' }}
+                        {flash?.user === m.username && !reduced && (
+                          <motion.span
+                            aria-hidden
+                            initial={{ x: '-120%' }}
+                            animate={{ x: '120%', transition: { duration: 0.85, ease: 'easeInOut' } }}
+                            style={{
+                              position: 'absolute',
+                              inset: 0,
+                              borderRadius: 12,
+                              pointerEvents: 'none',
+                              background: `linear-gradient(105deg, transparent 26%, ${flash.color}1a 44%, ${flash.color}59 50%, ${flash.color}1a 56%, transparent 74%)`,
+                            }}
+                          />
+                        )}
+                        <code style={{ color: '#a5f3fc', fontSize: 12.5 }}>{m.username}</code>
+                        <span style={{ fontSize: 11, color: '#64748b' }}>{m.email}</span>
+                        {/*
+                          Round 30: the chip's key follows the ROLE — changing
+                          it remounts the chip alone (the row persists), so the
+                          swap pops on a spring in the NEW role's hue.
+                        */}
+                        <motion.span
+                          key={m.role}
+                          initial={reduced ? { opacity: 0 } : { opacity: 0, scale: 0.55, y: 3 }}
+                          animate={reduced ? { opacity: 1 } : { opacity: 1, scale: 1, y: 0 }}
+                          transition={reduced ? { duration: 0.15 } : { type: 'spring', stiffness: 520, damping: 22 }}
+                          style={{
+                            fontSize: 10.5,
+                            letterSpacing: 1.2,
+                            color: tone.c,
+                            border: `1px solid ${tone.b}`,
+                            borderRadius: 999,
+                            padding: '2px 9px',
+                            background: 'rgba(2,6,23,0.4)',
+                            display: 'inline-block',
+                          }}
                         >
-                          <option value="Admin">Admin</option>
-                          <option value="Analyst">Analyst</option>
-                          <option value="Viewer">Viewer</option>
-                          <option value="Auditor">Auditor</option>
-                        </select>
-                        <button
-                          type="button"
-                          className="sf-btn"
-                          disabled={busy}
-                          onClick={() => void removeMember(m)}
-                          style={{ fontSize: 11.5, padding: '5px 10px', color: '#f87171', borderColor: 'rgba(248,113,113,0.35)' }}
-                        >
-                          Remove
-                        </button>
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
-              {teamMsg && !teamActionErr && (
-                <p role="status" style={{ color: '#4ade80', fontSize: 12.5, margin: 0 }}>
-                  ✓ {teamMsg}
-                </p>
-              )}
-              {teamActionErr && (
-                <p role="alert" style={{ color: '#f87171', fontSize: 12.5, margin: 0 }}>
-                  {teamActionErr}
-                </p>
-              )}
+                          {m.role.toUpperCase()}
+                        </motion.span>
+                        {!m.totpEnrolled && (
+                          <span style={{ fontSize: 10.5, letterSpacing: 1.2, color: '#fcd34d', border: '1px solid rgba(251,191,36,0.45)', borderRadius: 999, padding: '2px 9px' }}>
+                            2FA PENDING
+                          </span>
+                        )}
+                        {m.id === team?.selfId && (
+                          <span
+                            style={{
+                              fontSize: 10.5,
+                              letterSpacing: 1.2,
+                              color: '#22d3ee',
+                              border: '1px solid rgba(34,211,238,0.4)',
+                              borderRadius: 999,
+                              padding: '2px 9px',
+                              background: 'rgba(34,211,238,0.08)',
+                            }}
+                          >
+                            THIS ACCOUNT
+                          </span>
+                        )}
+                        {m.lastLogin && <span style={{ fontSize: 11, color: '#64748b', marginLeft: 'auto' }}>last {new Date(m.lastLogin).toISOString().slice(0, 10)}</span>}
+                        {/*
+                          round 29: row actions — deliberately absent for the caller's
+                          own row and the Owner row (the API refuses both anyway:
+                          self 400, Owner 403; the UI never offers the foot-gun).
+                        */}
+                        {m.id !== team?.selfId && m.role !== 'Owner' && (
+                          <span style={{ display: 'flex', gap: 8, alignItems: 'center', marginLeft: m.lastLogin ? 0 : 'auto' }}>
+                            <select
+                              className="sf-input"
+                              aria-label={`Role for ${m.username}`}
+                              value={m.role}
+                              disabled={busy}
+                              onChange={(e) => void changeRole(m, e.target.value)}
+                              style={{ fontSize: 11.5, padding: '4px 8px', color: '#e2e8f0' }}
+                            >
+                              <option value="Admin">Admin</option>
+                              <option value="Analyst">Analyst</option>
+                              <option value="Viewer">Viewer</option>
+                              <option value="Auditor">Auditor</option>
+                            </select>
+                            <button
+                              type="button"
+                              className="sf-btn"
+                              disabled={busy}
+                              onClick={() => void removeMember(m)}
+                              style={{ fontSize: 11.5, padding: '5px 10px', color: '#f87171', borderColor: 'rgba(248,113,113,0.35)' }}
+                            >
+                              Remove
+                            </button>
+                          </span>
+                        )}
+                      </motion.div>
+                    </motion.div>
+                  );
+                })}
+              </AnimatePresence>
+              {teamMsg && !teamActionErr && <Note key={teamMsg} tone="ok">✓ {teamMsg}</Note>}
+              {teamActionErr && <Note key={teamActionErr} tone="err" shake>{teamActionErr}</Note>}
             </div>
             {/* invite form */}
             <div style={{ borderTop: '1px solid rgba(148,163,184,0.15)', marginTop: 16, paddingTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -716,7 +858,7 @@ export default function AccountClient() {
                   {busy ? 'Inviting…' : 'Invite'}
                 </button>
               </div>
-              {invErr && <p role="alert" style={{ color: '#f87171', fontSize: 12.5, margin: 0 }}>{invErr}</p>}
+              {invErr && <Note key={invErr} tone="err" shake>{invErr}</Note>}
               {invTemp && (
                 <div className="sf-glass" onPointerMove={glassGlow} style={{ borderRadius: 12, padding: 14 }}>
                   <b style={{ color: '#fff', fontSize: 13 }}>Temporary password for {invTemp.username} — shown once.</b>
@@ -746,37 +888,56 @@ export default function AccountClient() {
         <Card style={{ gridColumn: '1 / -1' }}>
           {cardHead(
             'SF://SESSIONS · LIVE DEVICES',
-            <span style={{ fontSize: 11, letterSpacing: 1, color: '#64748b' }}>{sessions ? `${sessions.length} ACTIVE` : 'LOADING…'}</span>
+            sessions ? (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, letterSpacing: 1, color: '#64748b' }}>
+                {/* same radiating-ring dot the nav uses for API LIVE — green keyframe, already reduced-motion-gated in CSS */}
+                <span className="sf-api-dot live" style={{ width: 7, height: 7, borderRadius: '50%', background: '#34d399', boxShadow: '0 0 9px #34d399' }} />
+                <motion.span
+                  key={sessions.length}
+                  initial={reduced ? { opacity: 0 } : { opacity: 0, y: -6 }}
+                  animate={reduced ? { opacity: 1 } : { opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  {sessions.length} ACTIVE
+                </motion.span>
+              </span>
+            ) : (
+              <span style={{ fontSize: 11, letterSpacing: 1, color: '#64748b' }}>LOADING…</span>
+            )
           )}
           <Hint>Every browser holding a live refresh cookie for this account. Revoking one cuts its ability to mint new access tokens; its short-lived access token dies naturally within minutes.</Hint>
           <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {sessionsErr && <p role="alert" style={{ color: '#f87171', fontSize: 13, margin: 0 }}>{sessionsErr}</p>}
+            {sessionsErr && <Note key={sessionsErr} tone="err" shake>{sessionsErr}</Note>}
             {sessions && sessions.length === 0 && !sessionsErr && <p style={{ color: '#64748b', fontSize: 13, margin: 0 }}>No live sessions.</p>}
-            {(sessions ?? []).map((s) => (
-              <div
-                key={s.id}
-                className="sf-glass"
-                onPointerMove={glassGlow}
-                style={{ borderRadius: 12, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}
-              >
-                <code style={{ color: '#a5f3fc', fontSize: 12, letterSpacing: 1 }}>{s.id.slice(0, 8)}</code>
-                <span style={{ fontSize: 12, color: '#94a3b8' }}>since {new Date(s.createdAt).toISOString().slice(0, 10)}</span>
-                <span style={{ fontSize: 12, color: '#64748b' }}>expires in {s.expiresDays}d</span>
-                {s.current && (
-                  <span style={{ fontSize: 10.5, letterSpacing: 1.2, color: '#22d3ee', border: '1px solid rgba(34,211,238,0.4)', borderRadius: 999, padding: '2px 9px', background: 'rgba(34,211,238,0.08)' }}>
-                    THIS DEVICE
-                  </span>
-                )}
-                <button
-                  className="sf-btn"
-                  style={{ marginLeft: 'auto', fontSize: 11, padding: '4px 12px', color: '#f87171', borderColor: 'rgba(248,113,113,0.4)' }}
-                  disabled={busy}
-                  onClick={() => void revoke(s.id)}
-                >
-                  REVOKE
-                </button>
-              </div>
-            ))}
+            <AnimatePresence>
+              {(sessions ?? []).map((s) => (
+                <motion.div key={s.id} layout={!reduced} style={{ overflow: 'hidden', borderRadius: 12 }}>
+                  <motion.div
+                    className="sf-glass"
+                    onPointerMove={glassGlow}
+                    {...rowProps()}
+                    style={{ borderRadius: 12, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}
+                  >
+                    <code style={{ color: '#a5f3fc', fontSize: 12, letterSpacing: 1 }}>{s.id.slice(0, 8)}</code>
+                    <span style={{ fontSize: 12, color: '#94a3b8' }}>since {new Date(s.createdAt).toISOString().slice(0, 10)}</span>
+                    <span style={{ fontSize: 12, color: '#64748b' }}>expires in {s.expiresDays}d</span>
+                    {s.current && (
+                      <span style={{ fontSize: 10.5, letterSpacing: 1.2, color: '#22d3ee', border: '1px solid rgba(34,211,238,0.4)', borderRadius: 999, padding: '2px 9px', background: 'rgba(34,211,238,0.08)' }}>
+                        THIS DEVICE
+                      </span>
+                    )}
+                    <button
+                      className="sf-btn"
+                      style={{ marginLeft: 'auto', fontSize: 11, padding: '4px 12px', color: '#f87171', borderColor: 'rgba(248,113,113,0.4)' }}
+                      disabled={busy}
+                      onClick={() => void revoke(s.id)}
+                    >
+                      REVOKE
+                    </button>
+                  </motion.div>
+                </motion.div>
+              ))}
+            </AnimatePresence>
             {sessions && sessions.length > 0 && (
               <button className="sf-btn" style={{ alignSelf: 'flex-start', marginTop: 6, fontSize: 11.5, color: '#f87171', borderColor: 'rgba(248,113,113,0.4)' }} disabled={busy} onClick={() => void revokeAll()}>
                 {busy ? 'Working…' : 'SIGN OUT EVERYWHERE'}
