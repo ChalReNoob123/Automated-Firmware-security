@@ -110,6 +110,19 @@ export async function updateUser(id: string, patch: Partial<UserRow>): Promise<v
   if (u) mem.users.set(id, { ...u, ...patch });
 }
 
+// Round 29: member removal. The pg branch cascades to refresh_tokens
+// (migrate-002 defines ON DELETE CASCADE) and recovery codes (migrate-006);
+// the memory branch deletes the row and the caller revokes refreshes
+// explicitly first, so both branches leave the same end state: no user, no
+// live refresh, no recovery codes.
+export async function deleteUser(id: string): Promise<void> {
+  if (pool) {
+    await pool.query(`DELETE FROM users WHERE id=$1`, [id]);
+    return;
+  }
+  mem.users.delete(id);
+}
+
 export async function storeRefresh(jti: string, userId: string, expiresAt: number): Promise<void> {
   if (pool) {
     await pool.query(`INSERT INTO refresh_tokens (jti, user_id, expires_at) VALUES ($1,$2,$3)`, [jti, userId, expiresAt]);

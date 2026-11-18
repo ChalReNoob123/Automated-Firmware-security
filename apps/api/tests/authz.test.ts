@@ -299,3 +299,142 @@ describe('teammates roster (manage:users read surface)', () => {
     expect(r.members.find((m) => m.username === `rinv${S}`)?.totpEnrolled).toBe(false);
   }, 60000);
 });
+
+// ============================================================================
+// 7. TEAM MANAGEMENT — role change + member removal (round 29)
+//    PATCH /v1/auth/teammates/:id and DELETE /v1/auth/teammates/:id close
+//    the loop the invite endpoint opened. Pins: manage:users only; tenancy
+//    from the token (cross-org id = unknown id, uniform 404); self-actions
+//    refused; the Owner row immutable; role changes revoke the target's
+//    refresh tokens so the new role is live from the next login; removal
+//    makes re-authentication impossible (login 401) and kills the identity
+//    row (the stale bearer still passes signature checks for ≤15 min — it
+//    403s on perm-gated routes, NOT 401 — while /me 404s: account gone);
+//    both actions land in the org-scoped audit trail with the target named.
+// ============================================================================
+describe('team management — role change + removal', () => {
+  const roster = async (owner: string) =>
+    (await api.get('/v1/auth/teammates').set('Authorization', `Bearer ${owner}`).expect(200)).body as {
+      selfId: string;
+      members: { id: string; username: string; role: string }[];
+    };
+
+  it('401 without a token; Analyst/Viewer 403 for both actions', async () => {
+    await api.patch('/v1/auth/teammates/x_id').send({ role: 'Viewer' }).expect(401);
+    await api.delete('/v1/auth/teammates/x_id').expect(401);
+    const owner = await signup(`lown${S}`);
+    const vie = await invite(owner, `lvie${S}`, 'Viewer');
+    const vieT = await inviteeLogin(`lvie${S}`, vie.body.tempPassword);
+    await api.patch(`/v1/auth/teammates/x_id`).set('Authorization', `Bearer ${vieT}`).send({ role: 'Viewer' }).expect(403);
+    await api.delete(`/v1/auth/teammates/x_id`).set('Authorization', `Bearer ${vieT}`).expect(403);
+  }, 60000);
+
+  it('refuses self-actions, the Owner row, and bad roles; cross-org ids are indistinguishable from unknown', async () => {
+    const a = await signup(`hown${S}`);
+    const adm = await invite(a, `hadm${S}`, 'Admin');
+    const admT = await inviteeLogin(`hadm${S}`, adm.body.tempPassword);
+    const rosterA = await roster(a);
+    const adminId = rosterA.members.find((m) => m.username === `hadm${S}`)!.id;
+    const ownerId = rosterA.members.find((m) => m.username === `hown${S}`)!.id;
+
+    // self: the roster carries selfId — changing or removing yourself is refused
+    await api.patch(`/v1/auth/teammates/${rosterA.selfId}`).set('Authorization', `Bearer ${a}`).send({ role: 'Viewer' }).expect(400);
+    await api.delete(`/v1/auth/teammates/${rosterA.selfId}`).set('Authorization', `Bearer ${a}`).expect(400);
+
+    // the Owner row: immutable through this API, even for the Admin
+    await api.patch(`/v1/auth/teammates/${ownerId}`).set('Authorization', `Bearer ${admT}`).send({ role: 'Viewer' }).expect(403);
+    await api.delete(`/v1/auth/teammates/${ownerId}`).set('Authorization', `Bearer ${admT}`).expect(403);
+
+    // invalid role body
+    await api.patch(`/v1/auth/teammates/${adminId}`).set('Authorization', `Bearer ${a}`).send({ role: 'Owner' }).expect(400);
+    await api.patch(`/v1/auth/teammates/${adminId}`).set('Authorization', `Bearer ${a}`).send({}).expect(400);
+
+    // tenancy: another org's owner id reads as plain "not found"
+    const other = await signup(`iother${S}`);
+    const otherRoster = await roster(other);
+    await api.patch(`/v1/auth/teammates/${otherRoster.selfId}`).set('Authorization', `Bearer ${a}`).send({ role: 'Viewer' }).expect(404);
+    const nf = await api.delete(`/v1/auth/teammates/${otherRoster.selfId}`).set('Authorization', `Bearer ${a}`).expect(404);
+    expect(nf.body.error).toBe('Teammate not found');
+    // ...and an outright unknown id gets the same uniform answer
+    await api.delete('/v1/auth/teammates/00000000-0000-0000-0000-000000000000').set('Authorization', `Bearer ${a}`).expect(404);
+  }, 60000);
+
+  it('role change: 200 + roster reflects it + the fresh login carries the new role + matrix takes effect + audited', async () => {
+    const owner = await signup(`jown${S}`);
+    const ana = await invite(owner, `jana${S}`, 'Analyst');
+    const anaId = (await roster(owner)).members.find((m) => m.username === `jana${S}`)!.id;
+
+    const r = (await api.patch(`/v1/auth/teammates/${anaId}`).set('Authorization', `Bearer ${owner}`).send({ role: 'Viewer' }).expect(200)).body as {
+      id: string;
+      role: string;
+      sessionsRevoked: boolean;
+    };
+    expect(r).toMatchObject({ id: anaId, role: 'Viewer', sessionsRevoked: true });
+    // the roster (read fresh) shows the new role
+    expect((await roster(owner)).members.find((m) => m.id === anaId)?.role).toBe('Viewer');
+
+    // the member logs in again — the fresh session carries the DEMOTED role
+    const reLogin = await api.post('/v1/auth/login').send({ identifier: `jana${S}@t.test`, password: ana.body.tempPassword }).expect(200);
+    const code = speakeasy.totp({ secret: reLogin.body.manualKey, encoding: 'base32' });
+    const v = await api.post('/v1/auth/verify-2fa').send({ tempToken: reLogin.body.tempToken, code }).expect(200);
+    const me = await api.get('/v1/auth/me').set('Authorization', `Bearer ${v.body.accessToken}`).expect(200);
+    expect(me.body.user.role).toBe('Viewer');
+    // the RBAC matrix enforces it: triage:write (Analyst-only) now 403s
+    await api.post('/v1/findings/demo').set('Authorization', `Bearer ${v.body.accessToken}`).expect(403);
+
+    // audited, org-scoped, with the event visible in the readout
+    const aud = (await api.get('/v1/auth/audit').set('Authorization', `Bearer ${owner}`).expect(200)).body as {
+      events: { event: string }[];
+    };
+    expect(aud.events.some((e) => e.event === 'user_role_changed')).toBe(true);
+  }, 60000);
+
+  it('removal: 200 + roster drops the row + the removed member can never log in again + audited', async () => {
+    const owner = await signup(`kown${S}`);
+    const ana = await invite(owner, `kana${S}`, 'Analyst');
+    const anaT = await inviteeLogin(`kana${S}`, ana.body.tempPassword); // a real enrolled session exists
+    const anaId = (await roster(owner)).members.find((m) => m.username === `kana${S}`)!.id;
+
+    const r = (await api.delete(`/v1/auth/teammates/${anaId}`).set('Authorization', `Bearer ${owner}`).expect(200)).body as {
+      removed: boolean;
+      id: string;
+    };
+    expect(r).toMatchObject({ removed: true, id: anaId });
+    expect((await roster(owner)).members.map((m) => m.username)).toEqual([`kown${S}`]);
+
+    // the account is GONE: the temp password login fails with uniform invalid
+    // credentials — re-authentication is impossible, which is the point.
+    await api.post('/v1/auth/login').send({ identifier: `kana${S}@t.test`, password: ana.body.tempPassword }).expect(401);
+    // the removed member's still-warm bearer keeps PASSING authentication (the
+    // access token is signature-valid and unrevoked — the standing ≤15-min
+    // window, same model as password rotation). The honest end-state is pinned
+    // precisely: 403 on a manager route = authenticated but the OLD role claim
+    // lacks the perm (NOT 401 — auth succeeded); /me 404s because the
+    // identity row itself is gone.
+    await api.get('/v1/auth/teammates').set('Authorization', `Bearer ${anaT}`).expect(403);
+    await api.get('/v1/auth/me').set('Authorization', `Bearer ${anaT}`).expect(404);
+
+    const aud = (await api.get('/v1/auth/audit').set('Authorization', `Bearer ${owner}`).expect(200)).body as {
+      events: { event: string }[];
+    };
+    expect(aud.events.some((e) => e.event === 'user_removed')).toBe(true);
+  }, 60000);
+
+  // The gap only a REAL browser can see: supertest never sends an OPTIONS
+  // preflight (same-origin), but every fetch from the web app does — with a
+  // static method list missing PATCH, the role change died as "Failed to
+  // fetch" while every unit test stayed green. Pinned here so the preflight
+  // list can never silently lag behind the routes again.
+  it('CORS preflight admits PATCH + DELETE for the web origin', async () => {
+    const r = await api
+      .options('/v1/auth/teammates/x_id')
+      .set('Origin', 'http://localhost:3006')
+      .set('Access-Control-Request-Method', 'PATCH')
+      .set('Access-Control-Request-Headers', 'content-type,authorization')
+      .expect((res) => expect([200, 204]).toContain(res.status));
+    expect(String(r.headers['access-control-allow-methods'] ?? '')).toContain('PATCH');
+    expect(String(r.headers['access-control-allow-methods'] ?? '')).toContain('DELETE');
+    expect(r.headers['access-control-allow-origin']).toBe('http://localhost:3006');
+    expect(r.headers['access-control-allow-credentials']).toBe('true');
+  }, 60000);
+});

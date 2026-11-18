@@ -9,6 +9,7 @@ import {
   countUnusedRecoveryCodes,
   createOrg,
   createUser,
+  deleteUser,
   findRefresh,
   findUserById,
   findUserByIdentifier,
@@ -618,6 +619,53 @@ router.get('/teammates', requireAuth, requirePerm('manage:users'), async (req, r
       lastLogin: m.last_login,
     })),
   });
+});
+
+// Round 29 — team management completion: role change + member removal.
+// Both are manage:users; both take tenancy from the token; both refuse the
+// self-action (no lockout foot-guns) and refuse to touch the Owner row
+// (Owner is signup-only and immutable through this API). A cross-org id is
+// indistinguishable from an unknown id (uniform 404 — no existence probe).
+const roleChangeSchema = z.object({ role: z.enum(['Admin', 'Analyst', 'Viewer', 'Auditor']) });
+const teammateId = (req: unknown) => String((req as { params?: { id?: string } }).params?.id ?? '');
+
+// PATCH /v1/auth/teammates/:id — set a teammate's role. Access tokens carry
+// the role CLAIM, so the target's refresh tokens are all revoked on change:
+// the stale bearer keeps its old perms only until it expires (the standing
+// ≤15-min window, same as password rotation — documented in SECURITY.md),
+// and the new role is live from their very next login.
+router.patch('/teammates/:id', requireAuth, requirePerm('manage:users'), async (req, res) => {
+  const p = roleChangeSchema.safeParse(req.body);
+  if (!p.success) return res.status(400).json({ error: p.error.issues[0]?.message ?? 'role required' });
+  const u = authed(req);
+  const target = await findUserById(teammateId(req));
+  if (!target || target.org_id !== u.org) return res.status(404).json({ error: 'Teammate not found' });
+  if (target.id === u.sub) return res.status(400).json({ error: 'You cannot change your own role' });
+  if (target.role === 'Owner') return res.status(403).json({ error: 'The Owner role is fixed — signup-only, never editable' });
+  await updateUser(target.id, { role: p.data.role });
+  await revokeAllRefreshForUser(target.id);
+  await audit('user_role_changed', { orgId: u.org, userId: u.sub, targetId: target.id, ip: req.ip });
+  res.json({ id: target.id, role: p.data.role, sessionsRevoked: true });
+});
+
+// DELETE /v1/auth/teammates/:id — remove a teammate. The account row goes
+// away and every refresh token dies with it: the removed member cannot
+// re-authenticate (their password no longer resolves to a user). Their
+// unexpired ACCESS bearer still passes signature+jti checks for ≤15 min —
+// it 403s on perm-gated routes (old role claim, NOT 401) while identity-
+// scoped endpoints (/me) 404 once the row is gone. The standing short-TTL
+// window, same model as password rotation — documented in SECURITY.md and
+// pinned exactly like that in the tests.
+router.delete('/teammates/:id', requireAuth, requirePerm('manage:users'), async (req, res) => {
+  const u = authed(req);
+  const target = await findUserById(teammateId(req));
+  if (!target || target.org_id !== u.org) return res.status(404).json({ error: 'Teammate not found' });
+  if (target.id === u.sub) return res.status(400).json({ error: 'You cannot remove your own account here' });
+  if (target.role === 'Owner') return res.status(403).json({ error: 'The Owner cannot be removed' });
+  await revokeAllRefreshForUser(target.id);
+  await deleteUser(target.id);
+  await audit('user_removed', { orgId: u.org, userId: u.sub, targetId: target.id, ip: req.ip });
+  res.json({ removed: true, id: target.id });
 });
 
 export default router;

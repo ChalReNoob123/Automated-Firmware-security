@@ -45,7 +45,11 @@ app.use(
       if (!origin || ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
       return cb(new Error('CORS: origin not allowed'));
     },
-    methods: ['GET', 'POST', 'OPTIONS'],
+    // Round 29: PATCH + DELETE join the list — the preflight is what the
+    // browser actually consults (supertest never sends one, so the live E2E
+    // caught this gap: "Failed to fetch" on the role change). Every method a
+    // route implements must appear here or its preflight dies silently.
+    methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'x-attestation-id'],
     credentials: true, // refresh cookie flows on same-site origins (ports ignored)
   })

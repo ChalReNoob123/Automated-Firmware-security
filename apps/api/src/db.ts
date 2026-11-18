@@ -29,8 +29,9 @@ export async function query<T extends Row = Row>(text: string, params: unknown[]
     mem.auth_audit.push({
       org_id: params[0],
       user_id: params[1],
-      event: params[2],
-      ip: params[3],
+      target_id: params[2],
+      event: params[3],
+      ip: params[4],
       created_at: new Date().toISOString(),
     } as Row);
     return { rows: [] };
@@ -44,11 +45,12 @@ export async function query<T extends Row = Row>(text: string, params: unknown[]
   return { rows: [] };
 }
 
-export async function audit(event: string, meta: { orgId?: string; userId?: string; ip?: string }) {
+export async function audit(event: string, meta: { orgId?: string; userId?: string; targetId?: string; ip?: string }) {
   const at = new Date().toISOString();
-  await query(`INSERT INTO auth_audit (org_id, user_id, event, ip) VALUES ($1,$2,$3,$4)`, [
+  await query(`INSERT INTO auth_audit (org_id, user_id, target_id, event, ip) VALUES ($1,$2,$3,$4,$5)`, [
     meta.orgId ?? null,
     meta.userId ?? null,
+    meta.targetId ?? null,
     event,
     meta.ip ?? null,
   ]);
@@ -60,7 +62,7 @@ export async function audit(event: string, meta: { orgId?: string; userId?: stri
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       signal: AbortSignal.timeout(5000),
-      body: JSON.stringify({ event, orgId: meta.orgId ?? null, userId: meta.userId ?? null, ip: meta.ip ?? null, at }),
+      body: JSON.stringify({ event, orgId: meta.orgId ?? null, userId: meta.userId ?? null, targetId: meta.targetId ?? null, ip: meta.ip ?? null, at }),
     }).catch(() => undefined);
   }
 }

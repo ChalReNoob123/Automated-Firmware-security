@@ -1762,6 +1762,93 @@ same, only the arrival is choreographed.
   existing HDR bloom/FXAA/grade chain — not a marketing claim; weak devices
   and reduced-motion users get the unchanged round-25 path.
 
+## Round 29 — team management completion: role change + member removal (2026-11-18)
+
+### The gap closed
+
+Round 26 ended with the roster read + invite; this round completes the
+management loop — and the live browser E2E immediately exposed a gap no
+supertest could see (below).
+
+### API surface — PATCH + DELETE /v1/auth/teammates/:id
+
+- Both gated `manage:users` (Owner, Admin); tenancy comes from the TOKEN.
+- **Uniform 404 `Teammate not found`** for cross-org AND unknown ids — a
+  cross-org probe is indistinguishable from a nonexistent id (no existence
+  oracle).
+- **Self-actions refuse (400)**: you cannot change your own role or remove
+  your own account here — no lockout foot-guns. **The Owner row is immutable
+  through this API (403)**: `The Owner role is fixed — signup-only, never
+  editable` / `The Owner cannot be removed`.
+- Role body: `z.enum(['Admin','Analyst','Viewer','Auditor'])` — Owner is
+  never an assignable value (400), so no Admin can mint a superior.
+- **Role change** revokes ALL of the target's refresh tokens
+  (`revokeAllRefreshForUser`): the new role is live from their very next
+  login (verified: fresh session carries `Viewer`, `triage:write` then 403s).
+  **Removal** revokes refreshes and deletes the account row (pg cascades
+  refresh tokens + recovery codes via FKs from migrate-002/006; the memory
+  branch revokes explicitly before delete — both end in the same state).
+- **Honest stale-bearer semantics (pinned by tests, not assumed):** access
+  tokens carry the role claim and `verifyAccess` checks signature + jti only.
+  After a role change the stale bearer keeps its OLD role for ≤15 min — the
+  standing short-TTL window, same model as password rotation. After removal:
+  re-login → 401 (uniform invalid credentials; the account is gone), the
+  removed member's unexpired bearer still PASSES authentication (403-not-401
+  on manager routes — old claim, authenticated), and identity lookups 404
+  (`/me` — the row itself is gone). All three responses asserted in tests.
+- **Audit targets**: `auth_audit.target_id` (migration 007, idempotent)
+  names the TARGET alongside the actor for `user_role_changed` /
+  `user_removed`; `audit()` carries `targetId` through the pg INSERT, the
+  memory stub, and the webhook payload. Migrations 002–007 await Supabase.
+
+### The bug only a browser could see (CORS preflight)
+
+- The API's CORS `methods` list was `['GET','POST','OPTIONS']` — every
+  supertest call is same-origin and never preflights, so PATCH/DELETE looked
+  perfect (64/64 green) while the real UI died as **`Failed to fetch`** on
+  the first role change. Found by driving the actual web console; fixed by
+  admitting `PATCH` + `DELETE` (which also unbreaks the round-26 findings
+  DELETE from browsers), and **pinned by a new preflight test** asserting
+  `access-control-allow-methods` admits both for the web origin with
+  credentials — the preflight list can never silently lag the routes again.
+- Same class of bug, second instance: the machine-local root `.env`
+  (gitignored, loaded by the root CWD `npm test`) carried a stale Vite-era
+  origin list WITHOUT 3005/3006 — the preflight test failed locally with 403
+  while CI (no `.env`, code defaults) passed. The local list now includes
+  the Next.js dev/prod origins. Honest note: production must set
+  `ALLOWED_ORIGINS` deliberately — the code default admits only localhost.
+
+### UI — Teammates console row actions
+
+- Per-row **role select** (PATCH) and **Remove** (DELETE) with an explicit
+  native confirm: `Remove <user> from the org? Their sign-ins are revoked
+  immediately and the account cannot log in again.` (browser-report-verified
+  text). Controls are **never rendered** for the caller's own row or the
+  Owner row — the UI doesn't offer what the API refuses. Uniform API error
+  messages surface verbatim; each action shows a green success note.
+
+### Verification (honest, in order)
+
+1. API typecheck clean; API battery **64/64** (section 7 = five tests:
+   401/403 matrix, self/Owner/bad-role/tenancy rules, role change happy path
+   incl. fresh-login role + audit, removal happy path incl. login-401 +
+   stale-bearer pins + audit, CORS preflight).
+2. Web typecheck + production build clean; deployed on `:3006`.
+3. Full root battery **153/153 across 13 files** (baseline 148 + 5).
+4. **Live browser E2E** (in-memory API, real UI, screenshots): signup →
+   TOTP enroll → recovery → invite (roster 2, temp password shown once) →
+   role change via the row select (`r29ana → Viewer` note, VIEWER chip,
+   select synced) → Remove → confirm dialog (exact copy) → roster 1 + note →
+   removed account re-login **401**. Console: **0 errors**. One honest wrinkle:
+   the CORS fix edit restarted `tsx watch` mid-E2E (memory wipe) — the flow
+   was re-run end-to-end after the restart, which is also what re-verified it.
+5. Test-behavior notes: the earlier failing section-7 run (3 failures) was
+   my own test-authoring bugs — username prefixes colliding with an earlier
+   section under the same run-suffix (`gown`), reading `/me`'s role flat when
+   it nests under `user`, and asserting `/me` 200 for a REMOVED account (the
+   honest pin is 403-authenticated/404-identity) — all fixed to match
+   verified behavior, never weakened to pass.
+
 ## Dependency Hygiene
 
 - `npm audit --workspaces --audit-level=high` runs in CI

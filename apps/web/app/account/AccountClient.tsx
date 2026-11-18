@@ -6,13 +6,16 @@ import { Reveal } from '../motionKit';
 import { apiFetch, getMe, setAccess, setSessionId, API_URL } from '../lib/auth';
 import { pwChecks, pwStrong, PW_RULES } from '../lib/pwRules';
 
-// Account Security Center (round 20, extended round 26). Four consoles:
+// Account Security Center (round 20, extended rounds 26 + 29). Four consoles:
 //   PASSWORD     — rotate with re-auth; other sessions die, this one survives
 //   SESSIONS     — live device list, per-device revoke, sign-out-everywhere
 //   AUTHENTICATOR— re-enroll TOTP via password re-auth + standard verify step
 //   TEAMMATES    — org roster + invite console (Owner/Admin only; the round-24
 //                  invite endpoint finally gets its UI, plus the round-26
-//                  org-scoped roster read)
+//                  org-scoped roster read), and since round 29 the management
+//                  loop closes in place: per-row role change + member removal
+//                  (PATCH/DELETE /v1/auth/teammates/:id), never offered for the
+//                  caller's own row or the immutable Owner row.
 // All privileged calls go through apiFetch (memory bearer + silent-refresh
 // retry); verify-2fa is called directly with credentials:'include' like the
 // login form, because it mints the new refresh cookie itself.
@@ -102,6 +105,10 @@ export default function AccountClient() {
   const [invTemp, setInvTemp] = useState<{ username: string; tempPassword: string } | null>(null);
   const [invCopied, setInvCopied] = useState(false);
   const [invErr, setInvErr] = useState('');
+  // round 29: row actions (role change + removal) — one shared busy flag with
+  // the invite form, plus a success note and a verbatim-error line
+  const [teamMsg, setTeamMsg] = useState('');
+  const [teamActionErr, setTeamActionErr] = useState('');
 
   const refreshSessions = useCallback(async () => {
     try {
@@ -257,6 +264,53 @@ export default function AccountClient() {
       window.setTimeout(() => setInvCopied(false), 1800);
     } catch {
       /* clipboard blocked — the text is selectable anyway */
+    }
+  };
+
+  // ── teammates: role change + member removal (round 29) ──
+  // The UI never OFFERS the foot-guns the API refuses: no controls on the
+  // caller's own row (self-actions 400) or the Owner row (immutable 403).
+  // Everything else goes through the real endpoints — a role change revokes
+  // the member's refresh tokens server-side, so their NEXT sign-in carries
+  // the new role; removal kills the account and every live session. Uniform
+  // API messages (404 "Teammate not found", 403 Owner lines) surface verbatim.
+  const changeRole = async (m: Teammate, role: string) => {
+    if (busy) return;
+    setBusy(true);
+    setTeamMsg('');
+    setTeamActionErr('');
+    try {
+      const r = await apiFetch(`/v1/auth/teammates/${encodeURIComponent(m.id)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ role }),
+      });
+      const j = (await r.json().catch(() => ({}))) as { error?: string };
+      if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`);
+      setTeamMsg(`${m.username} → ${role}. Their next sign-in carries the new role.`);
+      void refreshTeam();
+    } catch (e) {
+      setTeamActionErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const removeMember = async (m: Teammate) => {
+    if (busy) return;
+    if (!window.confirm(`Remove ${m.username} from the org? Their sign-ins are revoked immediately and the account cannot log in again.`)) return;
+    setBusy(true);
+    setTeamMsg('');
+    setTeamActionErr('');
+    try {
+      const r = await apiFetch(`/v1/auth/teammates/${encodeURIComponent(m.id)}`, { method: 'DELETE' });
+      const j = (await r.json().catch(() => ({}))) as { error?: string };
+      if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`);
+      setTeamMsg(`${m.username} removed — all their sessions were revoked.`);
+      void refreshTeam();
+    } catch (e) {
+      setTeamActionErr((e as Error).message);
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -592,9 +646,50 @@ export default function AccountClient() {
                       </span>
                     )}
                     {m.lastLogin && <span style={{ fontSize: 11, color: '#64748b', marginLeft: 'auto' }}>last {new Date(m.lastLogin).toISOString().slice(0, 10)}</span>}
+                    {/*
+                      round 29: row actions — deliberately absent for the caller's
+                      own row and the Owner row (the API refuses both anyway:
+                      self 400, Owner 403; the UI never offers the foot-gun).
+                    */}
+                    {m.id !== team?.selfId && m.role !== 'Owner' && (
+                      <span style={{ display: 'flex', gap: 8, alignItems: 'center', marginLeft: m.lastLogin ? 0 : 'auto' }}>
+                        <select
+                          className="sf-input"
+                          aria-label={`Role for ${m.username}`}
+                          value={m.role}
+                          disabled={busy}
+                          onChange={(e) => void changeRole(m, e.target.value)}
+                          style={{ fontSize: 11.5, padding: '4px 8px', color: '#e2e8f0' }}
+                        >
+                          <option value="Admin">Admin</option>
+                          <option value="Analyst">Analyst</option>
+                          <option value="Viewer">Viewer</option>
+                          <option value="Auditor">Auditor</option>
+                        </select>
+                        <button
+                          type="button"
+                          className="sf-btn"
+                          disabled={busy}
+                          onClick={() => void removeMember(m)}
+                          style={{ fontSize: 11.5, padding: '5px 10px', color: '#f87171', borderColor: 'rgba(248,113,113,0.35)' }}
+                        >
+                          Remove
+                        </button>
+                      </span>
+                    )}
                   </div>
                 );
               })}
+              {teamMsg && !teamActionErr && (
+                <p role="status" style={{ color: '#4ade80', fontSize: 12.5, margin: 0 }}>
+                  ✓ {teamMsg}
+                </p>
+              )}
+              {teamActionErr && (
+                <p role="alert" style={{ color: '#f87171', fontSize: 12.5, margin: 0 }}>
+                  {teamActionErr}
+                </p>
+              )}
             </div>
             {/* invite form */}
             <div style={{ borderTop: '1px solid rgba(148,163,184,0.15)', marginTop: 16, paddingTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
