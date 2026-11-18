@@ -2,8 +2,13 @@
   "name": "sentinelgrid-soc",
   "private": true,
   "version": "1.0.0",
-  "workspaces": ["apps/*", "packages/*"],
-  "engines": { "node": ">=20" },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "overrides": {
     "proxy-addr": "^2.0.8",
     "body-parser": "^2.3.0",
@@ -59,7 +64,6 @@
     "react-window": "^2.2.7",
     "recharts": "^3.8.1",
     "speakeasy": "^2.0.0",
-    "sqlite3": "^6.0.1",
     "tailwind-merge": "3.4.0",
     "ws": "^8.20.0",
     "zod": "^4.4.3",

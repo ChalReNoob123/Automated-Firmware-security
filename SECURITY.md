@@ -1854,3 +1854,28 @@ supertest could see (below).
 - `npm audit --workspaces --audit-level=high` runs in CI
 - Critical vulnerabilities in production dependencies block deployment
 - `overrides` in root `package.json` pin vulnerable transitive dependencies
+
+### CVE-2026-112366 — picomatch ReDoS, no upstream fix (2026-11-18)
+
+- **What happened**: the advisory `GHSA-fc5q-39xc-vjpf` (ReDoS via
+  single-branch repeated extglobs, high, CVSS 8.7) was updated in the
+  advisory DB on 2026-11-17; the next CI run after it (round 29's push)
+  failed the blocking audit gate for the first time since it was added.
+- **Affected ≤ 4.0.7, patched: NONE** — every released picomatch version is
+  vulnerable (upstream fix unshipped; `micromatch/picomatch#194`), so no
+  version bump can clear it: `npm audit fix` reports "fix available" but
+  installs nothing, which was verified, not assumed.
+- **How it reached the prod tree**: the root `sqlite3` dependency (prod
+  manifest) → optional `node-gyp` → `tinyglobby` → `fdir` → picomatch.
+  The repo's actual SQL layer is **`node:sqlite` (built-in)** — zero imports
+  of the npm `sqlite3` package exist anywhere (verified by repo-wide search).
+- **Resolution**: removed the unused `sqlite3` root dependency — the
+  vulnerable chain left the production tree, gate now reports **0
+  vulnerabilities** (not weakened: still `--omit=dev --audit-level=high`).
+  A routine `npm audit fix` (in-range only, no `--force`) ran first and its
+  lockfile churn rides along. Dev-only consumers of picomatch (vitest,
+  vite, micromatch) stay out of the gate by design — same standing policy
+  as the documented Vite dev advisory.
+- Honest note: picomatch remains INSTALLED for dev tooling until upstream
+  ships a patch; when a fixed release appears, re-run `npm audit fix` and
+  confirm the gate — the removal means production is unaffected either way.
