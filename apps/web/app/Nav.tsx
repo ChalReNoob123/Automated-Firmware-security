@@ -10,6 +10,12 @@ import SoundToggle from './audio/SoundToggle';
 // breathing brand sigil + text sheen, a real status chip, a styled login
 // button, a proper 3-bar burger, and a staggered entrance cascade — all
 // gated for reduced motion.
+//
+// Round 31 — two-tier command bar: DOM order is brand → cluster → links so
+// it matches BOTH the visual order (tier 1 = identity left / instruments
+// right, tier 2 = the link strip) and keyboard focus order exactly. CSS
+// grid areas (.sf-nav) place the rows; the cluster can no longer wrap into
+// a lonely second row the way flex-wrap used to let it.
 
 const LINKS: [string, string][] = [
   ['Forge', '/'],
@@ -96,26 +102,16 @@ function SessionChip() {
       </a>
     );
   }
+  // classes, not inline styles — round 31 folds these into the shared
+  // "instrument" spec every cluster control lives by (30px / 8px radius /
+  // mono micro-type), so state chips and buttons read as one panel.
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-      <span
-        title={me.username}
-        style={{
-          fontSize: 11,
-          letterSpacing: 0.5,
-          color: '#a5f3fc',
-          border: '1px solid rgba(34,211,238,0.35)',
-          borderRadius: 999,
-          padding: '5px 11px',
-          background: 'rgba(34,211,238,0.08)',
-          whiteSpace: 'nowrap',
-        }}
-      >
+    <span className="sf-session">
+      <span className="sf-user-chip" title={me.username}>
         {me.username} · {me.role.toUpperCase()}
       </span>
       <button
-        className="sf-btn"
-        style={{ fontSize: 11, padding: '5px 11px' }}
+        className="sf-signout-btn"
         onClick={async () => {
           await logoutEverywhere();
           setMe(null);
@@ -179,7 +175,24 @@ export default function Nav() {
           ◈
         </span>
         <span className="sf-brand-text">SENTINELFORGE</span>
+        <span className="sf-brand-ver" aria-hidden>
+          V3
+        </span>
       </motion.a>
+      <motion.div variants={item} className="sf-nav-cluster">
+        <SoundToggle />
+        <button className="sf-burger" aria-label="Open menu" aria-expanded={menu} onClick={() => setMenu(true)}>
+          <span className="sf-burger-icon" aria-hidden>
+            <span />
+            <span />
+            <span />
+          </span>
+          MENU
+        </button>
+        <SessionChip />
+        <Clock />
+        <ApiDot />
+      </motion.div>
       <div ref={linksRef} className="sf-nav-links">
         {LINKS.map(([label, href]) => (
           <motion.a
@@ -194,23 +207,6 @@ export default function Nav() {
           </motion.a>
         ))}
       </div>
-      <motion.div
-        variants={item}
-        style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 14 }}
-      >
-        <SoundToggle />
-        <button className="sf-burger" aria-label="Open menu" aria-expanded={menu} onClick={() => setMenu(true)}>
-          <span className="sf-burger-icon" aria-hidden>
-            <span />
-            <span />
-            <span />
-          </span>
-          MENU
-        </button>
-        <SessionChip />
-        <Clock />
-        <ApiDot />
-      </motion.div>
       <MenuOverlay open={menu} onClose={() => setMenu(false)} />
     </motion.nav>
   );

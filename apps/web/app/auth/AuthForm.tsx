@@ -16,6 +16,14 @@ import { PW_RULES, pwChecks, pwStrong } from '../lib/pwRules';
 // the API (both login and verify steps — it used to be dead code), auto-verify
 // when the 6th TOTP digit lands, a copy button for the enrollment key, and a
 // caps-lock warning on the password fields.
+//
+// Round-31 hardening: every form carries method="post". React's onSubmit
+// calls preventDefault, but a click that lands BEFORE hydration attaches the
+// submit listener falls through to the browser's native submission — with no
+// method that is a GET, and a GET puts identifier+password into the URL,
+// browser history and access logs (observed live in E2E when a synthetic
+// click raced hydration). method="post" fails closed instead: no JS = POST
+// to a page route = 405, never credentials in a query string.
 
 function CapsLockHint({ on }: { on: boolean }) {
   if (!on) return null;
@@ -195,6 +203,7 @@ export default function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
         </p>
         {mode === 'signup' ? (
           <form
+            method="post"
             style={{ display: 'flex', flexDirection: 'column', gap: 10 }}
             onSubmit={(e) => {
               e.preventDefault();
@@ -235,6 +244,7 @@ export default function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
           </form>
         ) : tempToken === null ? (
           <form
+            method="post"
             style={{ display: 'flex', flexDirection: 'column', gap: 10 }}
             onSubmit={(e) => {
               e.preventDefault();
@@ -292,6 +302,7 @@ export default function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
           </div>
         ) : (
           <form
+            method="post"
             style={{ display: 'flex', flexDirection: 'column', gap: 10 }}
             onSubmit={(e) => {
               e.preventDefault();

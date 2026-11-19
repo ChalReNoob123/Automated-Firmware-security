@@ -1921,6 +1921,74 @@ zero DOM mutation)
    (`TRACING…` forever) — foregrounding the window reveals content
    normally. Both documented so the next investigation starts ahead.
 
+## Round 31 — nav redesign: two-tier command bar + auth forms fail closed (2026-11-19)
+
+### The redesign (requested: professional + aesthetic chrome)
+
+- **Root problem**: `.sf-nav` was `flex-wrap: wrap` — on real laptop widths
+  the utility cluster silently wrapped to a lonely, half-empty second row,
+  and the five cluster controls each carried their own geometry (pill vs
+  8px chip vs borderless text, 5–8px paddings, 3 font sizes) — the bar read
+  accidental, not designed, and stood ~115px tall.
+- **Structure**: CSS **grid areas** — tier 1 = brand (left) + instrument
+  cluster (right) sharing a row at *every* viewport width (the cluster can
+  no longer wrap below the links), tier 2 = the full-width link strip
+  behind its own hairline. DOM order (brand → cluster → links) now equals
+  visual order AND keyboard focus order; the entrance stagger chain was
+  restructured to match (brand → instruments → link cascade).
+- **One instrument spec** (deliberately late in `cinematic.css` so it wins
+  geometry without touching colors): every cluster control is 30px tall,
+  8px radius, mono 10.5px uppercase — audio chip, burger (now a real
+  chip), clock, API status, user chip, sign-out. Status semantics stay
+  per-control (green API, cyan clock, rose sign-out hover).
+- **Hierarchy**: `LOGIN` became the cluster's single gradient accent CTA
+  (was a fifth ghost pill); the wordmark gained a `V3` micro-tag.
+- **A11y/motion**: reduced-motion gate extended to the new transitions and
+  hover lifts; press feedback + the fleet's expo-out easing list cover the
+  new controls. Reticle active state, pointer spotlight, sheen, and the
+  entrance cascade are unchanged.
+
+### The bug only a browser could see (auth forms failed OPEN)
+
+- Driving the real login flow, a synthetic click that **raced React
+  hydration** hit the submit button before `onSubmit` attached — the
+  browser then performed its **native default submission**, and with no
+  `method` attribute that is a GET: observed live as
+  `GET /login?identifier=…&password=…` (**200**) — credentials into the
+  URL, browser history, and access logs. Not attacker-exploitable (needs a
+  pre-hydration click), but a fail-open default on an auth form.
+- **Fix**: `method="post"` on all three `AuthForm` forms (signup, login,
+  verify). Pre-hydration/no-JS now POSTs to the page route → 405 — fails
+  closed, never credentials in a query string. Verified present in the
+  served HTML. `AccountClient` has no native forms (button handlers).
+- E2E technique note (why the first fills "did nothing"): React
+  initializes each input's value-tracker from the **DOM value at
+  hydration** — a pre-hydration fill desyncs tracker from state, so every
+  later input event reads as "no change" and `onChange` never fires. The
+  two-step fill (set `''`, dispatch, set value, dispatch) restores a real
+  delta; fill only after hydration for clean runs.
+
+### Verification (honest, in order)
+
+1. Web typecheck + production build clean; `:3006` restarted on the fresh
+   build — served HTML contains `method="post"`, 12/12 chunk refs exist.
+2. **Live screenshots** (both cluster states): logged-out bar with the
+   gradient `LOGIN` CTA and `V3` tag; signed-in bar with `R31OWN · OWNER`
+   + `SIGN OUT` in the unified instrument language; two-tier layout with
+   the hairline link strip; `API LIVE` green once the API was relaunched.
+3. Menu overlay opens from the new burger chip (`aria-expanded=true`,
+   11 links) and closes; console: **0 JS exceptions** from this work (the
+   two 403 "attestation required" logs are the emulator API correctly
+   refusing un-attested test runs during user-driven browsing).
+4. **Environment notes**: screenshots and rAF-gated reveals need the
+   OpenCode window foregrounded — a competing app repeatedly stole focus,
+   so the final capture was taken with the two earlier shots. Also, the
+   restart kill-matcher missed the real process cmdline
+   (`…next" start` — quote between words), letting a stale server keep
+  serving the previous build until killed with a quote-tolerant pattern;
+   always verify served content (`method=…`, chunk refs on disk), not just
+   HTTP 200, after a rebuild.
+
 ## Dependency Hygiene
 
 - `npm audit --workspaces --audit-level=high` runs in CI
