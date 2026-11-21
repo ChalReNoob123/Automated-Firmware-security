@@ -31,6 +31,7 @@ signup/verification you did is gone. With Postgres, state survives restarts.
    | 9 | `migrate-009.sql` | one finding per (org, firmware, title) + truthful `encrypted_at_rest` backfill |
    | 10 | `migrate-010.sql` | `findings.source` provenance for per-run reconciliation |
    | 11 | `migrate-011.sql` | `findings.analysis_run_at` — concurrent runs can't delete each other's findings |
+   | 12 | `migrate-012.sql` | `analysis_run_seq` sequence + `firmware.applied_run_seq` — run ordering without wall-clock timestamps |
 
    All files are idempotent (`IF NOT EXISTS` / guarded `ALTER`s) — re-running
    them is safe. Notes:

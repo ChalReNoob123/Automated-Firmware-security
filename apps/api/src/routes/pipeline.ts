@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import { requireAuth } from '../middleware/rbac.js';
 import { requireAttestation } from './devices.js';
-import { getFirmware, getRunDoc, putRun, reconcileFindingsForFirmware, upsertFindingForFirmware } from '../store.js';
+import { getFirmware, getRunDoc, nextAnalysisRunSeq, persistAnalysisRun, putRun } from '../store.js';
 import { priorityOf, runPipeline, type RunMetrics } from '@sentinelforge/workers';
 
 const router = Router();
@@ -14,6 +14,10 @@ type QueuedRun = {
   version: string;
   status: 'queued' | 'running' | 'done' | 'failed';
   createdAt: string;
+  /** position in the analysis sequence, taken when the run is created */
+  seq?: number;
+  /** a newer run already applied its verdicts, so this one wrote nothing */
+  superseded?: boolean;
   finishedAt?: string;
   // Executions are labeled: 'demo' = the deterministic synthetic image the
   // workers suite pins (real engine work, NOT a real customer firmware);
@@ -124,51 +128,60 @@ async function executeQueuedUpload(org: string, run: QueuedRun, data: Uint8Array
   try {
     await putRun(org, run.runId, { ...run, status: 'running' });
     const state = await runPipeline(data, { id: run.firmwareId, version: run.version });
-    const created: NonNullable<QueuedRun['findings']> = [];
-    for (const c of state.consensus) {
-      // Round 34: idempotent per (firmware, title) — a re-run updates the
-      // verdict instead of appending a duplicate copy to the queue.
-      const row = await upsertFindingForFirmware({
-        orgId: org,
-        firmwareId: run.firmwareId,
+    // Ordering comes from the sequence, not the clock. One transaction writes this
+    // run's verdicts and prunes the ones it no longer produces; a run whose
+    // sequence is already behind the image's applied sequence writes nothing.
+    const runSeq = run.seq ?? (await nextAnalysisRunSeq());
+    const write = await persistAnalysisRun(
+      org,
+      run.firmwareId,
+      { seq: runSeq, startedAt: run.createdAt },
+      state.consensus.map((c) => ({
         title: c.title,
         confidence: c.confidence,
         engines: c.engines as string[],
         why: c.why.join('; '),
-        source: 'analysis',
-        analysisRunAt: run.createdAt,
         ...(c.snapshotRef ? { snapshotRef: c.snapshotRef } : {}),
         ...(c.epss != null ? { epss: c.epss } : {}),
         ...(c.ssvc ? { ssvc: c.ssvc } : {}),
+      }))
+    );
+    if (!write.applied) {
+      await putRun(org, run.runId, {
+        ...run,
+        seq: runSeq,
+        status: 'done',
+        superseded: true,
+        finishedAt: new Date().toISOString(),
+        findingsCount: 0,
+        findings: [],
+        note: 'a newer analysis of this image already applied its verdicts — this run wrote nothing',
       });
-      created.push({
-        id: row.id,
-        title: row.title,
-        confidence: row.confidence,
-        priority: priorityOf({
-          engines: row.corroborating_engines,
-          epss: row.epss ?? undefined,
-          ssvc: (['Track', 'Track*', 'Attend', 'Act'] as const).includes(row.ssvc as never)
-            ? (row.ssvc as 'Track' | 'Track*' | 'Attend' | 'Act')
-            : undefined,
-        }),
-      });
+      return;
     }
-    // Drop analysis verdicts this run no longer produces. Manual findings are
-    // untouched, and the removed titles are reported rather than vanishing.
-    // Only rows from runs that started before this one are eligible, so a run
-    // analysing the same image concurrently keeps its own findings.
-    const removed = await reconcileFindingsForFirmware(org, run.firmwareId, created.map((c) => c.id), run.createdAt);
+    const created: NonNullable<QueuedRun['findings']> = write.rows.map((row) => ({
+      id: row.id,
+      title: row.title,
+      confidence: row.confidence,
+      priority: priorityOf({
+        engines: row.corroborating_engines,
+        epss: row.epss ?? undefined,
+        ssvc: (['Track', 'Track*', 'Attend', 'Act'] as const).includes(row.ssvc as never)
+          ? (row.ssvc as 'Track' | 'Track*' | 'Attend' | 'Act')
+          : undefined,
+      }),
+    }));
     const elf = state.artifacts.binary?.elf;
     const done: QueuedRun = {
       ...run,
+      seq: runSeq,
       status: 'done',
       finishedAt: new Date().toISOString(),
       stageStatus: state.stages,
       metrics: state.metrics,
       findingsCount: created.length,
       findings: created,
-      ...(removed.length ? { removed } : {}),
+      ...(write.removed.length ? { removed: write.removed } : {}),
       firmwareSha256: state.firmware.sha256,
       artifacts: {
         elf: elf && elf.valid ? { valid: true, machine: elf.machine, bits: elf.bits, endian: elf.endian } : { valid: false },
@@ -227,12 +240,15 @@ router.post('/runs', requireAuth, requireAttestation, async (req, res) => {
   }
   const fw = await getFirmware(p.data.firmwareId, org);
   if (!fw) return res.status(404).json({ error: 'firmware not found in your org — upload it at POST /v1/firmware' });
+  // Position in the global analysis order, taken once when the run is created.
+  const seq = await nextAnalysisRunSeq();
   const run: QueuedRun = {
     runId,
     firmwareId: fw.record.id,
     version: p.data.version ?? fw.record.version,
     status: 'queued',
     createdAt: new Date().toISOString(),
+    seq,
     source: 'upload',
     firmwareSha256: fw.record.sha256,
   };

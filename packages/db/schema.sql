@@ -64,6 +64,10 @@ CREATE TABLE IF NOT EXISTS firmware (
   -- Set from what actually happened to the bytes: true only when the blob was
   -- sealed with AES-256-GCM (FIRMWARE_ENC_KEY configured), never assumed.
   encrypted_at_rest BOOLEAN NOT NULL DEFAULT FALSE,
+  -- Newest analysis sequence whose verdicts were applied to this image. A run
+  -- whose sequence is lower finishing later writes nothing, so it cannot
+  -- re-create findings a newer run already pruned (see migrate-012).
+  applied_run_seq BIGINT NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE(org_id, sha256)
 );
@@ -74,6 +78,13 @@ CREATE TABLE IF NOT EXISTS firmware_blobs (
   data BYTEA NOT NULL,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Analysis run ordering. Runs take a value here when they are created, every
+-- analysis finding records the value of the run that produced it, and
+-- reconciliation compares those values instead of wall-clock timestamps. A
+-- sequence is global to the database, so two API instances cannot disagree
+-- about which run is newer (see migrate-012).
+CREATE SEQUENCE IF NOT EXISTS analysis_run_seq;
 
 CREATE TABLE IF NOT EXISTS findings (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -91,10 +102,14 @@ CREATE TABLE IF NOT EXISTS findings (
   -- 'analysis' rows are owned by the engine and reconciled each run;
   -- 'manual' rows belong to an analyst and are never auto-deleted
   source TEXT NOT NULL DEFAULT 'manual',
-  -- start time of the analysis run that last produced this row: reconciliation
-  -- only prunes rows older than the run pruning them, so concurrent runs on the
-  -- same image cannot delete each other's findings
+  -- start time of the run that produced this row — informational, shown on the
+  -- evidence timeline. Ordering no longer uses it: clocks drift across API
+  -- instances, and a late run could resurrect findings a newer run pruned.
   analysis_run_at TIMESTAMPTZ,
+  -- position of the producing run in analysis_run_seq — THE reconcile ordering
+  -- key. Pruning removes only lower values, and an older run cannot overwrite a
+  -- newer verdict.
+  analysis_run_seq BIGINT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS findings_fw_conf ON findings(firmware_id, confidence);

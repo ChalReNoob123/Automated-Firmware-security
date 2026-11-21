@@ -33,6 +33,7 @@ const mem = {
   sessions: new Map<string, { data: unknown; updated: number }>(),
   runs: new Map<string, { data: unknown; updated: number }>(),
   firmware: new Map<string, FirmwareRow>(),
+  appliedRunSeq: new Map<string, number>(),
 };
 
 export const hashPassword = (pw: string) => bcrypt.hash(pw, 12);
@@ -429,10 +430,14 @@ export type FindingRow = {
   // produced it. Only analysis rows are reconciled when a re-run drops a
   // verdict, so an analyst's own finding is never deleted by the engine.
   source: 'manual' | 'analysis';
-  // Start time of the run that last produced this verdict. Reconciliation only
-  // prunes rows older than the run doing the pruning, so a concurrent run's
-  // findings survive (see reconcileFindingsForFirmware).
+  // Start time of the run that produced this verdict — informational, shown on
+  // the evidence timeline. Nothing orders by it any more (see
+  // analysis_run_seq).
   analysis_run_at?: string | null;
+  // Position of the producing run in the analysis sequence. This is the
+  // reconcile ordering key: a prune removes only rows produced by an earlier
+  // run, and an older run can never overwrite a newer verdict.
+  analysis_run_seq?: number | null;
   created_at: string;
 };
 
@@ -449,27 +454,74 @@ export type NewFinding = {
   why?: string;
   snapshotRef?: string;
   source?: 'manual' | 'analysis';
-  /** the producing run's start time — the reconcile ordering key */
+  /** the producing run's start time — informational, shown on the timeline */
   analysisRunAt?: string;
+  /** the producing run's sequence value — the reconcile ordering key */
+  analysisRunSeq?: number;
 };
+
+export async function createFinding(f: NewFinding): Promise<FindingRow> {
+  if (pool) return insertFinding(pool, f);
+  return insertFindingMem(f);
+}
 
 const findingMem = new Map<string, FindingRow[]>();
 
-export async function createFinding(f: NewFinding): Promise<FindingRow> {
+// ── Analysis run ordering ─────────────────────────────────────────────────
+// A run's place in the order comes from a database sequence taken when the run
+// is created, not from its clock. Timestamps let two API instances disagree and
+// let a run that finishes late re-create what a newer run already pruned.
+let memRunSeq = 0;
+
+export async function nextAnalysisRunSeq(): Promise<number> {
   if (pool) {
-    const r = await pool.query(
-      `INSERT INTO findings (org_id, firmware_id, title, emb3d, cvss_v4, epss, ssvc, confidence, corroborating_engines, why_flagged, snapshot_ref, source, analysis_run_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
-       RETURNING id, org_id, firmware_id, title, emb3d, cvss_v4, epss, ssvc, confidence, corroborating_engines, why_flagged, snapshot_ref, source, analysis_run_at, created_at`,
-      [f.orgId, f.firmwareId ?? null, f.title, f.emb3d ?? null, f.cvss ?? null, f.epss ?? null, f.ssvc ?? null, f.confidence, f.engines, f.why ?? null, f.snapshotRef ?? null, f.source ?? 'manual', f.analysisRunAt ?? null]
-    );
-    return r.rows[0];
+    const r = await pool.query(`SELECT nextval('analysis_run_seq') AS seq`);
+    return Number(r.rows[0].seq);
   }
+  memRunSeq += 1;
+  return memRunSeq;
+}
+
+export type AnalysisVerdict = {
+  title: string;
+  confidence: FindingRow['confidence'];
+  engines: string[];
+  why?: string;
+  snapshotRef?: string;
+  epss?: number;
+  ssvc?: string;
+};
+
+export type AnalysisWrite = {
+  /** false when a newer run already applied its verdicts — then nothing was written */
+  applied: boolean;
+  rows: FindingRow[];
+  removed: string[];
+};
+
+const FINDING_COLUMNS =
+  'id, org_id, firmware_id, title, emb3d, cvss_v4, epss, ssvc, confidence, corroborating_engines, why_flagged, snapshot_ref, source, analysis_run_at, analysis_run_seq, created_at';
+
+// Satisfied by both Pool and PoolClient.
+type Sql = { query: (text: string, values?: unknown[]) => Promise<{ rows: unknown[]; rowCount: number | null }> };
+
+async function insertFinding(exec: Sql, f: NewFinding): Promise<FindingRow> {
+  const r = await exec.query(
+    `INSERT INTO findings (org_id, firmware_id, title, emb3d, cvss_v4, epss, ssvc, confidence, corroborating_engines, why_flagged, snapshot_ref, source, analysis_run_at, analysis_run_seq)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+     RETURNING ${FINDING_COLUMNS}`,
+    [f.orgId, f.firmwareId ?? null, f.title, f.emb3d ?? null, f.cvss ?? null, f.epss ?? null, f.ssvc ?? null, f.confidence, f.engines, f.why ?? null, f.snapshotRef ?? null, f.source ?? 'manual', f.analysisRunAt ?? null, f.analysisRunSeq ?? null]
+  );
+  return r.rows[0] as FindingRow;
+}
+
+function insertFindingMem(f: NewFinding): FindingRow {
   const row: FindingRow = {
     id: randomUUID(), org_id: f.orgId, firmware_id: f.firmwareId ?? null, title: f.title,
     emb3d: f.emb3d ?? null, cvss_v4: f.cvss ?? null, epss: f.epss ?? null, ssvc: f.ssvc ?? null,
     confidence: f.confidence, corroborating_engines: f.engines, why_flagged: f.why ?? null,
     snapshot_ref: f.snapshotRef ?? null, source: f.source ?? 'manual', analysis_run_at: f.analysisRunAt ?? null,
+    analysis_run_seq: f.analysisRunSeq ?? null,
     created_at: new Date().toISOString(),
   };
   const list = findingMem.get(f.orgId) ?? [];
@@ -478,95 +530,137 @@ export async function createFinding(f: NewFinding): Promise<FindingRow> {
   return row;
 }
 
-// Round 34 — re-running analysis must not fork the queue. A finding from a run
-// is identified by (org, firmware, title): the same image re-analysed updates
-// the verdict in place and keeps the row id, so evidence links, exports and the
-// dashboard don't accumulate copies. migrate-009 adds the matching unique index
-// so two concurrent runs cannot both insert; the catch re-reads the winner.
-export async function upsertFindingForFirmware(f: NewFinding & { firmwareId: string }): Promise<FindingRow> {
-  if (pool) {
-    const updated = await pool.query(
-      `UPDATE findings
-          SET confidence=$3, corroborating_engines=$4, why_flagged=$5, snapshot_ref=$6, epss=$7, ssvc=$8, analysis_run_at=$10
-        WHERE org_id=$1 AND firmware_id=$2 AND title=$9
-        RETURNING id, org_id, firmware_id, title, emb3d, cvss_v4, epss, ssvc, confidence, corroborating_engines, why_flagged, snapshot_ref, source, analysis_run_at, created_at`,
-      [f.orgId, f.firmwareId, f.confidence, f.engines, f.why ?? null, f.snapshotRef ?? null, f.epss ?? null, f.ssvc ?? null, f.title, f.analysisRunAt ?? null]
-    );
-    if (updated.rowCount) return updated.rows[0] as FindingRow;
-    try {
-      return await createFinding(f);
-    } catch (e) {
-      const again = await pool.query(
-        `SELECT id, org_id, firmware_id, title, emb3d, cvss_v4, epss, ssvc, confidence, corroborating_engines, why_flagged, snapshot_ref, source, analysis_run_at, created_at
-           FROM findings WHERE org_id=$1 AND firmware_id=$2 AND title=$3`,
-        [f.orgId, f.firmwareId, f.title]
-      );
-      if (again.rows[0]) return again.rows[0] as FindingRow;
-      throw e;
-    }
-  }
-  const list = findingMem.get(f.orgId) ?? [];
-  const hit = list.find((r) => r.firmware_id === f.firmwareId && r.title === f.title);
-  if (hit) {
-    hit.confidence = f.confidence;
-    hit.corroborating_engines = f.engines;
-    hit.why_flagged = f.why ?? null;
-    hit.snapshot_ref = f.snapshotRef ?? null;
-    hit.epss = f.epss ?? null;
-    hit.ssvc = f.ssvc ?? null;
-    hit.analysis_run_at = f.analysisRunAt ?? null;
-    return hit;
-  }
-  return createFinding(f);
+async function upsertVerdict(
+  client: Sql,
+  orgId: string,
+  firmwareId: string,
+  run: { seq: number; startedAt: string },
+  v: AnalysisVerdict
+): Promise<FindingRow> {
+  const updated = await client.query(
+    `UPDATE findings
+        SET confidence=$3, corroborating_engines=$4, why_flagged=$5, snapshot_ref=$6, epss=$7, ssvc=$8, analysis_run_at=$10, analysis_run_seq=$11
+      WHERE org_id=$1 AND firmware_id=$2 AND title=$9
+        AND (analysis_run_seq IS NULL OR analysis_run_seq <= $11)
+      RETURNING ${FINDING_COLUMNS}`,
+    [orgId, firmwareId, v.confidence, v.engines, v.why ?? null, v.snapshotRef ?? null, v.epss ?? null, v.ssvc ?? null, v.title, run.startedAt, run.seq]
+  );
+  if (updated.rows[0]) return updated.rows[0] as FindingRow;
+  // Either the row is new, or it belongs to a newer run and keeps its verdict.
+  const existing = await client.query(
+    `SELECT ${FINDING_COLUMNS} FROM findings WHERE org_id=$1 AND firmware_id=$2 AND title=$3`,
+    [orgId, firmwareId, v.title]
+  );
+  if (existing.rows[0]) return existing.rows[0] as FindingRow;
+  return insertFinding(client, { orgId, firmwareId, ...v, source: 'analysis', analysisRunAt: run.startedAt, analysisRunSeq: run.seq });
 }
 
-// Round 35 — a run OWNS its analysis findings. After the current run's verdicts
-// are upserted, anything previously attributed to this firmware by analysis but
-// absent from this run is stale and gets dropped. Manual findings are never
-// touched (source='manual'), so an analyst's own row survives engine churn.
-//
-// Round 37 — concurrency. A keep list only knows the verdicts of the run that
-// built it, so two runs on the same image used to delete each other's findings
-// here. Every analysis upsert now stamps `analysis_run_at` with its run's start
-// time, and this prune removes only rows OLDER than the pruning run: findings a
-// concurrent (newer) run produced always survive, while the latest completed run
-// still drops verdicts nobody produces any more. Rows without a stamp
-// (pre-migration) count as old and equal stamps never delete anything — both err
-// toward keeping a row. Known, benign interleaving: if an older run writes after
-// a newer run has already pruned, it re-creates findings that newer run no longer
-// produces; they stay only until the next run reconciles. Nothing a newer run
-// produced is ever removed by an older one.
-export async function reconcileFindingsForFirmware(
+function upsertVerdictMem(
+  orgId: string,
+  firmwareId: string,
+  run: { seq: number; startedAt: string },
+  v: AnalysisVerdict
+): FindingRow {
+  const list = findingMem.get(orgId) ?? [];
+  const hit = list.find((r) => r.firmware_id === firmwareId && r.title === v.title);
+  if (!hit) {
+    return insertFindingMem({ orgId, firmwareId, ...v, source: 'analysis', analysisRunAt: run.startedAt, analysisRunSeq: run.seq });
+  }
+  // Same rule as the SQL guard: a row produced by a newer run keeps its verdict.
+  if (hit.analysis_run_seq != null && hit.analysis_run_seq > run.seq) return hit;
+  hit.confidence = v.confidence;
+  hit.corroborating_engines = v.engines;
+  hit.why_flagged = v.why ?? null;
+  hit.snapshot_ref = v.snapshotRef ?? null;
+  hit.epss = v.epss ?? null;
+  hit.ssvc = v.ssvc ?? null;
+  hit.analysis_run_at = run.startedAt;
+  hit.analysis_run_seq = run.seq;
+  return hit;
+}
+
+async function pruneVerdicts(
+  client: Sql,
   orgId: string,
   firmwareId: string,
   keepIds: string[],
-  runStartedAt: string
+  runSeq: number
 ): Promise<string[]> {
-  if (pool) {
-    const r = await pool.query(
-      `DELETE FROM findings
-        WHERE org_id=$1 AND firmware_id=$2 AND source='analysis'
-          AND NOT (id = ANY($3::uuid[]))
-          AND (analysis_run_at IS NULL OR analysis_run_at < $4::timestamptz)
-        RETURNING id, title`,
-      [orgId, firmwareId, keepIds, runStartedAt]
-    );
-    return (r.rows as { id: string; title: string }[]).map((x) => x.title);
-  }
+  const r = await client.query(
+    `DELETE FROM findings
+      WHERE org_id=$1 AND firmware_id=$2 AND source='analysis'
+        AND NOT (id = ANY($3::uuid[]))
+        AND (analysis_run_seq IS NULL OR analysis_run_seq < $4::bigint)
+      RETURNING title`,
+    [orgId, firmwareId, keepIds, runSeq]
+  );
+  return (r.rows as { title: string }[]).map((x) => x.title);
+}
+
+function pruneVerdictsMem(orgId: string, firmwareId: string, keepIds: string[], runSeq: number): string[] {
   const list = findingMem.get(orgId) ?? [];
   const keep = new Set(keepIds);
-  const runStart = Date.parse(runStartedAt);
   const removed: string[] = [];
   const next = list.filter((f) => {
-    // No stamp (pre-migration) or an unparseable one counts as old.
-    const producedAt = f.analysis_run_at ? Date.parse(f.analysis_run_at) : NaN;
-    const olderThanThisRun = !(producedAt >= runStart);
+    // No sequence (pre-migration) counts as old.
+    const producedSeq = f.analysis_run_seq ?? null;
+    const olderThanThisRun = producedSeq === null || producedSeq < runSeq;
     const stale = f.firmware_id === firmwareId && f.source === 'analysis' && !keep.has(f.id) && olderThanThisRun;
     if (stale) removed.push(f.title);
     return !stale;
   });
   findingMem.set(orgId, next);
   return removed;
+}
+
+// The whole result of one run, in one transaction: lock the image's ordering row,
+// refuse a superseded run, upsert this run's verdicts, prune the ones it no
+// longer produces, advance applied_run_seq, commit.
+//
+// The lock is what claim-then-write could not give. Two runs of one image are
+// serialized, so once a newer run has pruned, an older run has either already
+// committed (and its stale rows are gone) or has not begun writing and is
+// refused. There is no window where an older run writes after the newer prune.
+export async function persistAnalysisRun(
+  orgId: string,
+  firmwareId: string,
+  run: { seq: number; startedAt: string },
+  verdicts: AnalysisVerdict[]
+): Promise<AnalysisWrite> {
+  if (pool) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const lock = await client.query(
+        `SELECT applied_run_seq FROM firmware WHERE id=$1 AND org_id=$2 FOR UPDATE`,
+        [firmwareId, orgId]
+      );
+      if (!lock.rows[0]) throw new Error('firmware not found in this org');
+      if (Number((lock.rows[0] as { applied_run_seq: string | number }).applied_run_seq) >= run.seq) {
+        await client.query('ROLLBACK');
+        return { applied: false, rows: [], removed: [] };
+      }
+      const rows: FindingRow[] = [];
+      for (const v of verdicts) rows.push(await upsertVerdict(client, orgId, firmwareId, run, v));
+      const removed = await pruneVerdicts(client, orgId, firmwareId, rows.map((r) => r.id), run.seq);
+      await client.query(`UPDATE firmware SET applied_run_seq=$3 WHERE id=$1 AND org_id=$2`, [firmwareId, orgId, run.seq]);
+      await client.query('COMMIT');
+      return { applied: true, rows, removed };
+    } catch (e) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw e;
+    } finally {
+      client.release();
+    }
+  }
+  // Postgres needs the row lock for this; the memory branch is synchronous, so
+  // nothing can interleave between the check and the writes below.
+  const key = `${orgId}:${firmwareId}`;
+  if ((mem.appliedRunSeq.get(key) ?? 0) >= run.seq) return { applied: false, rows: [], removed: [] };
+  const rows = verdicts.map((v) => upsertVerdictMem(orgId, firmwareId, run, v));
+  const removed = pruneVerdictsMem(orgId, firmwareId, rows.map((r) => r.id), run.seq);
+  mem.appliedRunSeq.set(key, run.seq);
+  return { applied: true, rows, removed };
 }
 
 export async function listFindings(orgId: string, opts: { confidence?: string; limit?: number } = {}): Promise<FindingRow[]> {

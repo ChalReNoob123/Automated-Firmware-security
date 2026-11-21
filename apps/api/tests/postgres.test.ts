@@ -125,46 +125,65 @@ describe('postgres integration', () => {
     expect(await readStatus(id)).toBe('booting');
   });
 
-  it('does not let a reconcile delete a concurrent run’s findings', async () => {
-    const fw = '33333333-3333-4333-8333-333333333333';
-    await outside.query(`INSERT INTO firmware (id, org_id, version, sha256, bytes) VALUES ($1,$2,'1.0',$3,1024)`, [fw, ORG, 'a'.repeat(64)]);
+  it('writes a run in one transaction: a superseded run changes nothing', async () => {
+    const fw = '44444444-4444-4444-8444-444444444444';
+    await outside.query(`INSERT INTO firmware (id, org_id, version, sha256, bytes) VALUES ($1,$2,'2.0',$3,2048)`, [fw, ORG, 'b'.repeat(64)]);
 
-    const t1 = '2026-01-01T00:00:00.000Z';
-    const t2 = '2026-01-01T00:00:05.000Z';
-    const t3 = '2026-01-01T00:00:10.000Z';
-    const t4 = '2026-01-01T00:00:15.000Z';
-    const finding = (title: string, analysisRunAt: string, source: 'analysis' | 'manual' = 'analysis') => ({
-      orgId: ORG,
-      firmwareId: fw,
-      title,
-      confidence: 'Likely' as const,
-      engines: ['taint'],
-      source,
-      analysisRunAt,
+    const first = await store.nextAnalysisRunSeq();
+    const second = await store.nextAnalysisRunSeq();
+    const third = await store.nextAnalysisRunSeq();
+    expect(second).toBeGreaterThan(first);
+    expect(third).toBeGreaterThan(second);
+    const startedAt = '2026-01-01T00:00:00.000Z';
+    const verdict = (title: string, confidence: 'Confirmed' | 'Likely' = 'Likely') => ({ title, confidence, engines: ['taint'] });
+
+    // `second` writes X and Y, then a manual row that no run may ever delete.
+    const write = await store.persistAnalysisRun(ORG, fw, { seq: second, startedAt }, [verdict('X'), verdict('Y')]);
+    expect(write.applied).toBe(true);
+    expect(write.rows.map((r) => r.title).sort()).toEqual(['X', 'Y']);
+    const manual = await store.createFinding({ orgId: ORG, firmwareId: fw, title: 'Analyst note', confidence: 'Confirmed', engines: [], source: 'manual' });
+
+    // The late `first` run is behind the applied sequence: it writes nothing at all.
+    expect(await store.persistAnalysisRun(ORG, fw, { seq: first, startedAt }, [verdict('Old')])).toEqual({
+      applied: false,
+      rows: [],
+      removed: [],
     });
 
-    // Run A starts at t1; run B starts at t2 while A is still working. B produces
-    // X and Y, A only X — sharing the X row thanks to the (org, firmware, title) key.
-    const aX = await store.upsertFindingForFirmware(finding('X', t1));
-    const bX = await store.upsertFindingForFirmware(finding('X', t2));
-    const bY = await store.upsertFindingForFirmware(finding('Y', t2));
-    expect(bX.id).toBe(aX.id);
-    const manual = await store.createFinding(finding('Analyst note', t1, 'manual'));
-
-    // A finishes first. Its keep list has never heard of Y, but Y belongs to a
-    // newer run, so A must not touch it.
-    expect(await store.reconcileFindingsForFirmware(ORG, fw, [aX.id], t1)).toEqual([]);
-
-    // A later run that yields only Y still prunes X (and never the manual row).
-    expect((await store.reconcileFindingsForFirmware(ORG, fw, [bY.id], t3)).sort()).toEqual(['X']);
-
-    // A run that produced nothing at all clears the remaining verdict — this is
-    // also the empty keep list, which must still bind as a uuid[].
-    expect(await store.reconcileFindingsForFirmware(ORG, fw, [], t4)).toEqual(['Y']);
+    // A later run that yields only Y prunes X inside its own transaction.
+    const later = await store.persistAnalysisRun(ORG, fw, { seq: third, startedAt }, [verdict('Y')]);
+    expect(later.applied).toBe(true);
+    expect(later.removed).toEqual(['X']);
 
     const left = await store.listFindings(ORG, { limit: 50 });
-    expect(left.map((f) => f.title)).toEqual(['Analyst note']);
+    expect(left.map((f) => f.title).sort()).toEqual(['Analyst note', 'Y']);
     expect(left.find((f) => f.title === 'Analyst note')?.id).toBe(manual.id);
+  });
+
+  it('serializes concurrent runs of one image, so an older run cannot leave findings behind', async () => {
+    const fw = '55555555-5555-4555-8555-555555555555';
+    await outside.query(`INSERT INTO firmware (id, org_id, version, sha256, bytes) VALUES ($1,$2,'3.0',$3,4096)`, [fw, ORG, 'c'.repeat(64)]);
+    const startedAt = '2026-01-01T00:00:00.000Z';
+    const older = await store.nextAnalysisRunSeq();
+    const newer = await store.nextAnalysisRunSeq();
+    expect(newer).toBeGreaterThan(older);
+
+    // Start both while neither has committed: the firmware row lock decides who
+    // writes first. This is the interleaving plain claim-then-write could not
+    // express — the older run holding the lock would still write after the newer
+    // one pruned.
+    const [olderWrite, newerWrite] = await Promise.all([
+      store.persistAnalysisRun(ORG, fw, { seq: older, startedAt }, [{ title: 'Old', confidence: 'Likely', engines: ['taint'] }]),
+      store.persistAnalysisRun(ORG, fw, { seq: newer, startedAt }, [{ title: 'New', confidence: 'Confirmed', engines: ['taint', 'fuzz'] }]),
+    ]);
+
+    const left = await store.listFindings(ORG, { limit: 50 }).then((rows) => rows.filter((f) => f.firmware_id === fw));
+    expect(left.map((f) => f.title)).toEqual(['New']);
+    expect(left[0]?.confidence).toBe('Confirmed');
+    // If the older run committed first the newer pruned its row; if the newer run
+    // committed first the older was refused outright.
+    expect(newerWrite.applied).toBe(true);
+    expect(olderWrite.applied || newerWrite.removed.includes('Old')).toBe(true);
   });
 });
 
