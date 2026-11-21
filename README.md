@@ -1,105 +1,95 @@
-# 🛡️ SentinelGrid Enterprise SOC Platform v2.0
+# SentinelForge — Firmware Security Analysis Platform
 
-**Advanced Real-Time Threat Detection & 24/7 Automated Response**
+**Static analysis, SBOM and evidence-backed findings for real uploaded IoT firmware — plus an image-bound emulator twin for reproduction.**
 
-![Status](https://img.shields.io/badge/status-production--ready-green)
-![Version](https://img.shields.io/badge/version-2.1-blue)
-![Frameworks](https://img.shields.io/badge/frameworks-5-orange)
-![License](https://img.shields.io/badge/license-proprietary-red)
+![Status](https://img.shields.io/badge/status-active--development-yellow)
+![Stack](https://img.shields.io/badge/stack-TypeScript-blue)
+![Database](https://img.shields.io/badge/database-PostgreSQL-informational)
+![Tests](https://img.shields.io/badge/tests-vitest%20%2B%20Postgres-brightgreen)
 
-## 🚀 Overview
+## Overview
 
-SentinelGrid is a **Security Operations Center (SOC) prototype** designed to demonstrate real-time threat detection and compliance tracking. It provides:
+SentinelForge analyses firmware images that are actually uploaded, and keeps the
+reasoning behind every verdict reviewable. An image is ingested, hashed and stored per
+organisation, pushed through acquisition, unpack planning, static analysis and SBOM/VEX
+generation, and the resulting verdicts are reconciled into a findings queue. Each
+finding carries the engines that corroborate it, the evidence that produced it, a
+reproducible emulator snapshot where one exists, and an honest confidence level
+(`Confirmed`, `Likely`, `Unconfirmed`) instead of a single opaque score.
 
-- ✅ **5 Major Frameworks** integrated (MITRE, NIST, CIS, ISO 27001, OWASP)
-- ✅ **Heuristic Threat Scoring** based on security event patterns
-- ✅ **Host-based Monitoring** of critical system events
-- ✅ **Automated Response** simulation and logic
-- ✅ **Real-Time Compliance Tracking** across multiple standards
-- ✅ **Threat Analytics** with framework correlation
-- ✅ **8 Specialized UI Views** for security analysts
+Whatever cannot be established is reported as not-run rather than invented: discovery,
+fuzzing and protocol testing run only when a call graph or harness is supplied, and real
+emulation is opt-in.
 
-## 🎯 Key Features
+## What it does
 
-### 1. **Multi-Framework Integration**
+- **Firmware intake** — `POST /v1/firmware` accepts the raw image (16 MB), deduplicates
+  by SHA-256 per organisation, optionally links it to a registered device, and seals the
+  blob with AES-256-GCM when `FIRMWARE_ENC_KEY` is set (otherwise it reports
+  `encryptedAtRest: false` rather than claiming encryption).
+- **Analysis** — acquisition, container/unpack planning, static sink and secret
+  scanning, SBOM/VEX generation, and root-of-trust evaluation when chain evidence is
+  supplied, with consensus scoring across engine families and EPSS/SSVC priority.
+- **Findings that hold up** — verdicts are keyed `(org, firmware, title)`, so re-runs
+  update a finding instead of duplicating it. Machine-produced rows are reconciled per
+  run; analyst-filed rows are never auto-deleted. Each finding opens an evidence page
+  with engine corroboration, the confidence gate, priority arithmetic and its timeline.
+- **Emulator twin** — a session is derived from the image itself (ELF arch/bits/endian,
+  image hash, boot strings). Booting is asynchronous, so creating a session never waits
+  on a slow boot, and a boot that outlives its deadline is reported `failed` with the
+  reason instead of hanging. Snapshots, input replay with state hashing and crash records
+  give each finding a reproduction path. Real execution happens only with
+  `EMULATOR_QEMU=1` and a qemu binary for the image's architecture; otherwise the session
+  records why it did not execute.
+- **Access control** — five roles, TOTP two-factor with single-use recovery codes,
+  rotating refresh tokens with per-device revocation, org-scoped reads and writes, and a
+  logged authorization attestation required before any test action.
 
-#### MITRE ATT&CK v15
-- 14 Tactics covering entire attack lifecycle
-- 202 Enterprise Techniques with detection logic
-- 435+ Sub-Techniques for granular classification
-- Real-time technique mapping for detected threats
+## Repository layout
 
-#### NIST CSF 2.0
-- 6 Core Functions with compliance scoring
-- 16 Categories with detailed controls
-- Implementation Tier assessment (1-4)
-- Real-time compliance dashboard
+| Path | Contents |
+|---|---|
+| `apps/web` | Next.js console — dashboard, firmware intake, emulator panel, findings evidence pages (`:3005`) |
+| `apps/api` | Express API — auth, firmware, pipeline, emulator, findings, graph, radar, patch (`:4000`) |
+| `apps/workers` | Analysis engines — acquisition, static, SBOM, root of trust, consensus, emulator, fuzz, protocol, N-day, patch verification |
+| `packages/db` | PostgreSQL schema and migrations (`schema.sql`, `migrate-002…011`) |
+| `packages/graph-service`, `packages/mcp-servers` | Attack-graph service and MCP tool servers |
 
-#### CIS Controls v8.1
-- 18 Controls with 153 Safeguards
-- Implementation Group selection (IG1/IG2/IG3)
-- 86% coverage of MITRE ATT&CK techniques
-- Maturity level tracking
+## Quick start
 
-#### ISO 27001
-- 14 Control Domains
-- 114 Individual Controls
-- Automated evidence collection
-- Compliance audit trails
+```bash
+npm install
+npm --prefix apps/workers run build
+npm --prefix packages/graph-service run build
+npm --prefix packages/mcp-servers run build
 
-#### OWASP Top 10 2024
-- 10 Critical Web Application Risks
-- Real-world breach examples
-- Mitigation strategies
-- Testing checklists
+npm --prefix apps/api run dev     # API on http://localhost:4000
+npm --prefix apps/web run dev     # console on http://localhost:3005
+```
 
-### 2. **Threat Detection**
+Optional API environment: `DATABASE_URL` (PostgreSQL; without it the API falls back to
+an in-memory store), `JWT_SECRET`, `FIRMWARE_ENC_KEY` (32 bytes, hex or base64), and
+`EMULATOR_QEMU=1` to allow real qemu launches.
 
-**Heuristic Scoring Engine**
-- Pattern-based anomaly detection
-- Host event correlation
-- Signature & IOC matching
-- MITRE technique mapping
-- External threat intelligence context
+## Tests and continuous integration
 
-**Correlation Patterns (5 Built-In)**
-- APT reconnaissance (92% confidence)
-- Data exfiltration prep (95% confidence)
-- Lateral movement (93% confidence)
-- Persistence establishment (97% confidence)
-- Ransomware execution (99% confidence)
+```bash
+npm --prefix apps/api run test        # API, store and real-Postgres suites
+npm --prefix apps/workers run test    # analysis engines
+```
 
-### 3. **24/7 Monitoring**
+The Postgres suite boots its own throwaway `embedded-postgres` cluster, so it needs no
+database setup. `.github/workflows/ci.yml` runs the full matrix — typechecks, every
+workspace's tests and builds, the production-dependency audit and the secret scan — on
+push and pull request.
 
-**Real-Time Ingestion**
-- 10,000+ events/second
-- Windows Event Logs (8 critical IDs)
-- Sysmon telemetry (25 events)
-- Network flows (NetFlow/firewall)
-- DNS monitoring
-- Registry anomalies
-- Email gateway logs
+---
 
-**Detection Engines (5 Concurrent)**
-- SIEM Correlation (2,000+ rules)
-- UEBA (User & Entity Behavior Analytics)
-- NDR (Network Detection & Response)
-- EDR (Endpoint Detection & Response)
-- Threat Intelligence Correlation
+## Legacy: SentinelGrid SOC prototype
 
-### 4. **Automated Response**
-
-**Auto-Drop Enforcement**
-- Critical threats (81-100): Quarantine + isolation
-- High threats (61-80): Connection drop
-- Medium threats (31-60): Rate limiting
-- Low threats (0-30): Monitoring
-
-**Response Actions**
-- Network: ACL injection, BGP blackhole, connection reset
-- Endpoint: Process termination, file quarantine, isolation
-- Application: Session revocation, token invalidation
-- Investigation: Forensic capture, memory dumps
+The documentation below describes the original SentinelGrid SOC prototype, which still
+lives at the repository root (`src/`, `backend/`, `scanner/`, `services/`) and builds with
+the root `npm` scripts. It is kept for reference; SentinelForge is the current project.
 
 ## 🖥️ User Interface
 
