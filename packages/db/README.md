@@ -24,13 +24,20 @@ signup/verification you did is gone. With Postgres, state survives restarts.
    | 2 | `migrate-002.sql` | auth columns (username, lockout, TOTP), refresh-token log, denylist, emulator/pipeline runtime tables |
    | 3 | `migrate-003.sql` | makes `findings.firmware_id` optional (attack-sim findings) |
    | 4 | `migrate-004.sql` | mandatory `org_id` on runtime tables (tenant isolation, fixes IDOR) |
+   | 5 | `migrate-005.sql` | refresh-token revocation reasons (Account Security Center) |
+   | 6 | `migrate-006.sql` | TOTP recovery codes |
+   | 7 | `migrate-007.sql` | team management + audit target |
+   | 8 | `migrate-008.sql` | `firmware_blobs` — the uploaded image bytes |
+   | 9 | `migrate-009.sql` | one finding per (org, firmware, title) + truthful `encrypted_at_rest` backfill |
+   | 10 | `migrate-010.sql` | `findings.source` provenance for per-run reconciliation |
+   | 11 | `migrate-011.sql` | `findings.analysis_run_at` — concurrent runs can't delete each other's findings |
 
    All files are idempotent (`IF NOT EXISTS` / guarded `ALTER`s) — re-running
    them is safe. Notes:
    - `schema.sql` enables the `citext` extension; Supabase supports this from
      the SQL editor as-is.
    - Supabase's SQL editor runs each file as a single transaction; run them as
-     four separate queries, in order.
+     separate queries, in order.
 
 3. **Copy the connection string** — Project settings → Database → Connection
    string → URI. Use the **connection pooler** (port 6543, "Transaction" mode)
@@ -55,6 +62,29 @@ signup/verification you did is gone. With Postgres, state survives restarts.
    should report `"persistence": "postgres"` (it reports `"memory"` when the
    env var is absent). `/health` also exposes `postgres: true/false`.
 
+## Integration test (real Postgres)
+
+The restart and concurrent-reconcile paths are covered by `apps/api/tests/postgres.test.ts`.
+It needs no database set up beforehand — `tests/pgHarness.ts` boots a throwaway
+`embedded-postgres` cluster in the OS temp directory, applies the SQL files above and
+removes it afterwards:
+
+```bash
+npm run test:pg -w @sentinelforge/api    # just the Postgres suite
+npm test -w @sentinelforge/api           # whole API suite, Postgres included
+```
+
+`embedded-postgres` is an `apps/api` devDependency; its install step downloads the
+platform's Postgres binaries. To reuse an existing server instead (a CI service
+container, say), set `SF_TEST_DATABASE_URL` to a database that already exists:
+the suite creates the schema, not the database. It drops and rebuilds the public
+schema, so that database must be disposable and its name must contain `test`:
+
+```bash
+SF_TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/sentinelforge_test \
+  npm run test:pg -w @sentinelforge/api
+```
+
 ## Verified vs not
 
 - `schema.sql` and `migrate-002..004.sql` are hand-verified SQL (a syntax error
@@ -62,6 +92,6 @@ signup/verification you did is gone. With Postgres, state survives restarts.
   **not** been executed against a live Supabase/Postgres instance yet; the
   first real run is expected to be the provisioning step above.
 - The Postgres code path in `apps/api/src/db.ts` / `store.ts` mirrors the
-  in-memory shapes 1:1 and is covered by the test suite's store contracts
-  where applicable, but a live end-to-end signup → restart → login persistence
-  check is still pending on your instance.
+  in-memory shapes 1:1. The opt-in suite above exercises the schema, stale-boot
+  settlement and finding reconciliation against a real server; a live signup →
+  restart → login persistence check on your Supabase instance is still yours to run.

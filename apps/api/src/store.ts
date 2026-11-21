@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { pool, query } from './db.js';
+import { openFirmware, sealFirmware } from './firmwareCrypto.js';
 import type { Role } from './auth.js';
 
 // Persistence with a memory fallback: every function runs against Postgres when
@@ -31,6 +32,7 @@ const mem = {
   attestations: new Map<string, AttestationRow>(),
   sessions: new Map<string, { data: unknown; updated: number }>(),
   runs: new Map<string, { data: unknown; updated: number }>(),
+  firmware: new Map<string, FirmwareRow>(),
 };
 
 export const hashPassword = (pw: string) => bcrypt.hash(pw, 12);
@@ -423,6 +425,14 @@ export type FindingRow = {
   corroborating_engines: string[];
   why_flagged: string | null;
   snapshot_ref: string | null;
+  // Provenance: 'manual' = a human filed it, 'analysis' = a pipeline run
+  // produced it. Only analysis rows are reconciled when a re-run drops a
+  // verdict, so an analyst's own finding is never deleted by the engine.
+  source: 'manual' | 'analysis';
+  // Start time of the run that last produced this verdict. Reconciliation only
+  // prunes rows older than the run doing the pruning, so a concurrent run's
+  // findings survive (see reconcileFindingsForFirmware).
+  analysis_run_at?: string | null;
   created_at: string;
 };
 
@@ -438,6 +448,9 @@ export type NewFinding = {
   engines: string[];
   why?: string;
   snapshotRef?: string;
+  source?: 'manual' | 'analysis';
+  /** the producing run's start time — the reconcile ordering key */
+  analysisRunAt?: string;
 };
 
 const findingMem = new Map<string, FindingRow[]>();
@@ -445,10 +458,10 @@ const findingMem = new Map<string, FindingRow[]>();
 export async function createFinding(f: NewFinding): Promise<FindingRow> {
   if (pool) {
     const r = await pool.query(
-      `INSERT INTO findings (org_id, firmware_id, title, emb3d, cvss_v4, epss, ssvc, confidence, corroborating_engines, why_flagged, snapshot_ref)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-       RETURNING id, org_id, firmware_id, title, emb3d, cvss_v4, epss, ssvc, confidence, corroborating_engines, why_flagged, snapshot_ref, created_at`,
-      [f.orgId, f.firmwareId ?? null, f.title, f.emb3d ?? null, f.cvss ?? null, f.epss ?? null, f.ssvc ?? null, f.confidence, f.engines, f.why ?? null, f.snapshotRef ?? null]
+      `INSERT INTO findings (org_id, firmware_id, title, emb3d, cvss_v4, epss, ssvc, confidence, corroborating_engines, why_flagged, snapshot_ref, source, analysis_run_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+       RETURNING id, org_id, firmware_id, title, emb3d, cvss_v4, epss, ssvc, confidence, corroborating_engines, why_flagged, snapshot_ref, source, analysis_run_at, created_at`,
+      [f.orgId, f.firmwareId ?? null, f.title, f.emb3d ?? null, f.cvss ?? null, f.epss ?? null, f.ssvc ?? null, f.confidence, f.engines, f.why ?? null, f.snapshotRef ?? null, f.source ?? 'manual', f.analysisRunAt ?? null]
     );
     return r.rows[0];
   }
@@ -456,7 +469,8 @@ export async function createFinding(f: NewFinding): Promise<FindingRow> {
     id: randomUUID(), org_id: f.orgId, firmware_id: f.firmwareId ?? null, title: f.title,
     emb3d: f.emb3d ?? null, cvss_v4: f.cvss ?? null, epss: f.epss ?? null, ssvc: f.ssvc ?? null,
     confidence: f.confidence, corroborating_engines: f.engines, why_flagged: f.why ?? null,
-    snapshot_ref: f.snapshotRef ?? null, created_at: new Date().toISOString(),
+    snapshot_ref: f.snapshotRef ?? null, source: f.source ?? 'manual', analysis_run_at: f.analysisRunAt ?? null,
+    created_at: new Date().toISOString(),
   };
   const list = findingMem.get(f.orgId) ?? [];
   list.unshift(row);
@@ -464,11 +478,102 @@ export async function createFinding(f: NewFinding): Promise<FindingRow> {
   return row;
 }
 
+// Round 34 — re-running analysis must not fork the queue. A finding from a run
+// is identified by (org, firmware, title): the same image re-analysed updates
+// the verdict in place and keeps the row id, so evidence links, exports and the
+// dashboard don't accumulate copies. migrate-009 adds the matching unique index
+// so two concurrent runs cannot both insert; the catch re-reads the winner.
+export async function upsertFindingForFirmware(f: NewFinding & { firmwareId: string }): Promise<FindingRow> {
+  if (pool) {
+    const updated = await pool.query(
+      `UPDATE findings
+          SET confidence=$3, corroborating_engines=$4, why_flagged=$5, snapshot_ref=$6, epss=$7, ssvc=$8, analysis_run_at=$10
+        WHERE org_id=$1 AND firmware_id=$2 AND title=$9
+        RETURNING id, org_id, firmware_id, title, emb3d, cvss_v4, epss, ssvc, confidence, corroborating_engines, why_flagged, snapshot_ref, source, analysis_run_at, created_at`,
+      [f.orgId, f.firmwareId, f.confidence, f.engines, f.why ?? null, f.snapshotRef ?? null, f.epss ?? null, f.ssvc ?? null, f.title, f.analysisRunAt ?? null]
+    );
+    if (updated.rowCount) return updated.rows[0] as FindingRow;
+    try {
+      return await createFinding(f);
+    } catch (e) {
+      const again = await pool.query(
+        `SELECT id, org_id, firmware_id, title, emb3d, cvss_v4, epss, ssvc, confidence, corroborating_engines, why_flagged, snapshot_ref, source, analysis_run_at, created_at
+           FROM findings WHERE org_id=$1 AND firmware_id=$2 AND title=$3`,
+        [f.orgId, f.firmwareId, f.title]
+      );
+      if (again.rows[0]) return again.rows[0] as FindingRow;
+      throw e;
+    }
+  }
+  const list = findingMem.get(f.orgId) ?? [];
+  const hit = list.find((r) => r.firmware_id === f.firmwareId && r.title === f.title);
+  if (hit) {
+    hit.confidence = f.confidence;
+    hit.corroborating_engines = f.engines;
+    hit.why_flagged = f.why ?? null;
+    hit.snapshot_ref = f.snapshotRef ?? null;
+    hit.epss = f.epss ?? null;
+    hit.ssvc = f.ssvc ?? null;
+    hit.analysis_run_at = f.analysisRunAt ?? null;
+    return hit;
+  }
+  return createFinding(f);
+}
+
+// Round 35 — a run OWNS its analysis findings. After the current run's verdicts
+// are upserted, anything previously attributed to this firmware by analysis but
+// absent from this run is stale and gets dropped. Manual findings are never
+// touched (source='manual'), so an analyst's own row survives engine churn.
+//
+// Round 37 — concurrency. A keep list only knows the verdicts of the run that
+// built it, so two runs on the same image used to delete each other's findings
+// here. Every analysis upsert now stamps `analysis_run_at` with its run's start
+// time, and this prune removes only rows OLDER than the pruning run: findings a
+// concurrent (newer) run produced always survive, while the latest completed run
+// still drops verdicts nobody produces any more. Rows without a stamp
+// (pre-migration) count as old and equal stamps never delete anything — both err
+// toward keeping a row. Known, benign interleaving: if an older run writes after
+// a newer run has already pruned, it re-creates findings that newer run no longer
+// produces; they stay only until the next run reconciles. Nothing a newer run
+// produced is ever removed by an older one.
+export async function reconcileFindingsForFirmware(
+  orgId: string,
+  firmwareId: string,
+  keepIds: string[],
+  runStartedAt: string
+): Promise<string[]> {
+  if (pool) {
+    const r = await pool.query(
+      `DELETE FROM findings
+        WHERE org_id=$1 AND firmware_id=$2 AND source='analysis'
+          AND NOT (id = ANY($3::uuid[]))
+          AND (analysis_run_at IS NULL OR analysis_run_at < $4::timestamptz)
+        RETURNING id, title`,
+      [orgId, firmwareId, keepIds, runStartedAt]
+    );
+    return (r.rows as { id: string; title: string }[]).map((x) => x.title);
+  }
+  const list = findingMem.get(orgId) ?? [];
+  const keep = new Set(keepIds);
+  const runStart = Date.parse(runStartedAt);
+  const removed: string[] = [];
+  const next = list.filter((f) => {
+    // No stamp (pre-migration) or an unparseable one counts as old.
+    const producedAt = f.analysis_run_at ? Date.parse(f.analysis_run_at) : NaN;
+    const olderThanThisRun = !(producedAt >= runStart);
+    const stale = f.firmware_id === firmwareId && f.source === 'analysis' && !keep.has(f.id) && olderThanThisRun;
+    if (stale) removed.push(f.title);
+    return !stale;
+  });
+  findingMem.set(orgId, next);
+  return removed;
+}
+
 export async function listFindings(orgId: string, opts: { confidence?: string; limit?: number } = {}): Promise<FindingRow[]> {
   const limit = Math.min(Math.max(opts.limit ?? 100, 1), 500);
   if (pool) {
     const r = await pool.query(
-      `SELECT id, org_id, firmware_id, title, emb3d, cvss_v4, epss, ssvc, confidence, corroborating_engines, why_flagged, snapshot_ref, created_at
+      `SELECT id, org_id, firmware_id, title, emb3d, cvss_v4, epss, ssvc, confidence, corroborating_engines, why_flagged, snapshot_ref, source, created_at
        FROM findings WHERE org_id=$1 ${opts.confidence ? 'AND confidence=$2' : ''} ORDER BY created_at DESC LIMIT $${opts.confidence ? 3 : 2}`,
       opts.confidence ? [orgId, opts.confidence, limit] : [orgId, limit]
     );
@@ -476,6 +581,22 @@ export async function listFindings(orgId: string, opts: { confidence?: string; l
   }
   const list = findingMem.get(orgId) ?? [];
   return (opts.confidence ? list.filter((f) => f.confidence === opts.confidence) : list).slice(0, limit);
+}
+
+// Round 33: single-finding read. The evidence-chain page needs one verdict with
+// its full reasoning, and listFindings(limit=100) is the wrong shape for a
+// deep link — org scoping stays in the WHERE clause, never in the caller.
+export async function getFinding(id: string, orgId: string): Promise<FindingRow | null> {
+  if (pool) {
+    const r = await pool.query(
+      `SELECT id, org_id, firmware_id, title, emb3d, cvss_v4, epss, ssvc, confidence, corroborating_engines, why_flagged, snapshot_ref, source, created_at
+       FROM findings WHERE id=$1 AND org_id=$2`,
+      [id, orgId]
+    );
+    return r.rows[0] ?? null;
+  }
+  const list = findingMem.get(orgId) ?? [];
+  return list.find((f) => f.id === id) ?? null;
 }
 
 export async function deleteFinding(id: string, orgId: string): Promise<boolean> {
@@ -488,6 +609,103 @@ export async function deleteFinding(id: string, orgId: string): Promise<boolean>
   findingMem.set(orgId, next);
   return next.length !== list.length;
 }
+// ── Firmware intake (round 33) ──
+// Metadata lives in `firmware` (org-scoped, sha256-unique); the bytes live in
+// `firmware_blobs` so list queries never drag megabytes around. Memory mode
+// mirrors both maps. Dedupe is real: re-uploading the same image returns the
+// same row instead of a second copy.
+export type FirmwareRow = {
+  id: string;
+  org_id: string;
+  device_id: string | null;
+  version: string;
+  sha256: string;
+  bytes: number;
+  encrypted_at_rest: boolean;
+  created_at: string;
+};
+
+const firmwareBlobs = new Map<string, Uint8Array>();
+
+export async function putFirmware(input: {
+  orgId: string;
+  deviceId?: string | null;
+  version: string;
+  sha256: string;
+  bytes: number;
+  data: Uint8Array;
+}): Promise<FirmwareRow> {
+  // Round 34: the row's encrypted_at_rest is now computed from what actually
+  // happened to the bytes, not copied from a schema default.
+  const sealed = sealFirmware(input.data);
+  if (pool) {
+    const r = await pool.query(
+      `INSERT INTO firmware (org_id, device_id, version, sha256, bytes, encrypted_at_rest) VALUES ($1,$2,$3,$4,$5,$6)
+       ON CONFLICT (org_id, sha256) DO UPDATE SET version=EXCLUDED.version, device_id=EXCLUDED.device_id, encrypted_at_rest=EXCLUDED.encrypted_at_rest
+       RETURNING id, org_id, device_id, version, sha256, bytes, encrypted_at_rest, created_at`,
+      [input.orgId, input.deviceId ?? null, input.version, input.sha256, input.bytes, sealed.encrypted]
+    );
+    const row = r.rows[0] as FirmwareRow;
+    await pool.query(
+      `INSERT INTO firmware_blobs (firmware_id, data) VALUES ($1,$2) ON CONFLICT (firmware_id) DO UPDATE SET data=EXCLUDED.data, updated_at=now()`,
+      [row.id, Buffer.from(sealed.data)]
+    );
+    return row;
+  }
+  const existing = [...mem.firmware.values()].find((f) => f.org_id === input.orgId && f.sha256 === input.sha256);
+  const row: FirmwareRow =
+    existing ?? {
+      id: `fw_${randomUUID().slice(0, 8)}`,
+      org_id: input.orgId,
+      device_id: input.deviceId ?? null,
+      version: input.version,
+      sha256: input.sha256,
+      bytes: input.bytes,
+      encrypted_at_rest: sealed.encrypted,
+      created_at: new Date().toISOString(),
+    };
+  row.encrypted_at_rest = sealed.encrypted;
+  mem.firmware.set(row.id, row);
+  firmwareBlobs.set(row.id, sealed.data);
+  return row;
+}
+
+export async function getFirmware(id: string, orgId: string): Promise<{ record: FirmwareRow; data: Uint8Array } | null> {
+  if (pool) {
+    const r = await pool.query(
+      `SELECT f.id, f.org_id, f.device_id, f.version, f.sha256, f.bytes, f.encrypted_at_rest, f.created_at, b.data
+       FROM firmware f LEFT JOIN firmware_blobs b ON b.firmware_id=f.id
+       WHERE f.id=$1 AND f.org_id=$2`,
+      [id, orgId]
+    );
+    const row = r.rows[0];
+    if (!row || !row.data) return null;
+    const { data, ...record } = row as FirmwareRow & { data: Buffer };
+    return { record, data: openFirmware(new Uint8Array(data)) };
+  }
+  const record = mem.firmware.get(id);
+  if (!record || record.org_id !== orgId) return null;
+  const data = firmwareBlobs.get(id);
+  return data ? { record, data: openFirmware(data) } : null;
+}
+
+// Metadata only — the emulator picker and the upload panel need a list without
+// pulling a single megabyte of image through the API.
+export async function listFirmware(orgId: string): Promise<FirmwareRow[]> {
+  if (pool) {
+    const r = await pool.query(
+      `SELECT id, org_id, device_id, version, sha256, bytes, encrypted_at_rest, created_at
+       FROM firmware WHERE org_id=$1 ORDER BY created_at DESC LIMIT 100`,
+      [orgId]
+    );
+    return r.rows as FirmwareRow[];
+  }
+  return [...mem.firmware.values()]
+    .filter((f) => f.org_id === orgId)
+    .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+    .slice(0, 100);
+}
+
 export const getSessionDoc = <T>(orgId: string, id: string) => docGet<T>('emulator_sessions', mem.sessions, orgId, id);
 export const putRun = (orgId: string, id: string, data: unknown) => docPut('pipeline_runs', mem.runs, orgId, id, data);
 export const getRunDoc = <T>(orgId: string, id: string) => docGet<T>('pipeline_runs', mem.runs, orgId, id);

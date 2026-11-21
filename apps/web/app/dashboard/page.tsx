@@ -1,6 +1,7 @@
 import AmbientScene from '../AmbientScene';
 import { PageHeader } from '../motionKit';
 import Dashboard from './Dashboard';
+import FirmwareIntake from '../FirmwareIntake';
 
 export default function DashboardPage() {
   return (
@@ -17,7 +18,10 @@ export default function DashboardPage() {
             </>
           }
         />
-        <div style={{ marginTop: 8 }}>
+        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* round-33: real intake sits above the demo ledger — the first place
+              a target image can enter the product and become findings. */}
+          <FirmwareIntake />
           <Dashboard />
         </div>
       </main>

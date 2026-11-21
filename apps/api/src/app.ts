@@ -15,6 +15,7 @@ import patchRoutes from './routes/patch.js';
 import capabilitiesRoutes from './routes/capabilities.js';
 import systemRoutes from './routes/system.js';
 import findingsRoutes from './routes/findings.js';
+import firmwareRoutes from './routes/firmware.js';
 import qualityRoutes from './routes/quality.js';
 import { requireAuth } from './middleware/rbac.js';
 import { hasForbiddenKeys, hasExcessiveDepth } from './sanitize.js';
@@ -113,6 +114,7 @@ app.use('/v1/pipeline', mutationLimiter);
 app.use('/v1/emulator', mutationLimiter);
 app.use('/v1/patch', mutationLimiter);
 app.use('/v1/findings', mutationLimiter);
+app.use('/v1/firmware', mutationLimiter);
 
 // Minimal cookie parser (avoids extra dep; production can swap to cookie-parser).
 // Splits each pair on the FIRST '=' only — values like base64 padding or JWT
@@ -177,6 +179,7 @@ app.use('/v1/patch', patchRoutes);
 app.use('/v1/capabilities', capabilitiesRoutes);
 app.use('/v1/system', systemRoutes);
 app.use('/v1/findings', findingsRoutes);
+app.use('/v1/firmware', firmwareRoutes);
 app.use('/v1/quality', qualityRoutes);
 
 // Example gated pipeline entry — every future analysis route uses requireAttestation.

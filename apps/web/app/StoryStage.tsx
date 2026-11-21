@@ -7,6 +7,7 @@ import { DecodeText, SplitWords } from './motionText';
 import { useStory } from './storyStore';
 import { sfxImpact } from './audio/sfx';
 import { API_URL } from './lib/auth';
+import { useQuality } from './quality';
 
 // Lusion-style pinned storytelling: one tall scroll section (480vh) whose inner
 // sticky viewport holds the WebGL scene + four sparse copy "acts". Scrolling
@@ -149,6 +150,9 @@ export default function StoryStage() {
   const p = useMotionValue(0);
   const [active, setActive] = useState(0);
   const stats = useStats();
+  // round 32: the HUD reports the live render tier, the way a monitor reports
+  // the signal it is actually receiving.
+  const quality = useQuality();
 
   // Manual scroll measurement. framer-motion's useScroll({ target }) throws
   // the invariant "Target ref is defined but not hydrated" whenever the ref
@@ -270,7 +274,7 @@ export default function StoryStage() {
           SF://FORGE · PREDICTIVE IOT DEFENSE
         </div>
         <div className="sf-hud sf-hud-br" aria-hidden>
-          ACT {String(active + 1).padStart(2, '0')}/04 · SF://STORY
+          ACT {String(active + 1).padStart(2, '0')}/04 · SF://STORY · {quality.label}
         </div>
 
         <motion.div className="sf-story-cue" style={{ opacity: cueOpacity }} aria-hidden>

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, requirePerm } from '../middleware/rbac.js';
 import { audit } from '../db.js';
-import { createFinding, deleteFinding, listFindings, type FindingRow, type NewFinding } from '../store.js';
+import { createFinding, deleteFinding, getFinding, listFindings, type FindingRow, type NewFinding } from '../store.js';
 import { sanitizeMultiline, sanitizeText } from '../sanitize.js';
 import { priorityOf } from '@sentinelforge/workers';
 
@@ -60,6 +60,17 @@ router.post('/', requireAuth, requirePerm('triage:write'), async (req, res) => {
   });
   await audit('finding_created', { userId: u.sub, orgId: u.org, ip: req.ip });
   res.status(201).json(withPriority(row));
+});
+
+// GET /v1/findings/:id — the evidence chain behind one verdict. Read is any
+// signed-in role (same rule as the list), and the org check happens in the
+// store so a foreign id returns 404 rather than leaking existence.
+router.get('/:id', requireAuth, async (req, res) => {
+  const u = (req as unknown as Authed).user;
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const row = await getFinding(id ?? '', u.org);
+  if (!row) return res.status(404).json({ error: 'finding not found' });
+  res.json(withPriority(row));
 });
 
 router.delete('/:id', requireAuth, requirePerm('triage:write'), async (req, res) => {

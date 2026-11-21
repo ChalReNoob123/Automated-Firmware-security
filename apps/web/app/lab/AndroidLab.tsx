@@ -196,14 +196,22 @@ export default function AndroidLab() {
       if (!tok) throw new Error('sign in at /login first');
       const att = localStorage.getItem('sf_att') ?? '';
       if (!att) throw new Error('attest a device at /devices first');
+      // Honest memory: the bridge used to send a flat 512MB for a 12GB profile.
+      const gb = parseFloat(profile.ram) || 0.5;
+      const memoryMb = Math.min(8192, Math.max(64, Math.round(profile.ram.includes('GB') ? gb * 1024 : gb)));
       const r = await apiFetch('/v1/emulator/sessions', {
         method: 'POST',
         headers: { 'x-attestation-id': att },
-        body: JSON.stringify({ arch: profile.arch, memoryMb: 512 }),
+        body: JSON.stringify({ arch: profile.arch, memoryMb }),
       });
       const j = await r.json();
       if (!r.ok) throw new Error((j as { error?: string }).error ?? `HTTP ${r.status}`);
-      setTwin(`twin ${(j as { id: string }).id} · ${profile.arch} · mirrored in /emulator`);
+      const id = (j as { id: string }).id;
+      // Round 33: without this the twin was orphaned — /emulator reloads from
+      // sf_last_session, which only the attack runner used to write, so the old
+      // "mirrored in /emulator" message pointed at a session the page never saw.
+      localStorage.setItem('sf_last_session', id);
+      setTwin(`twin ${id} · ${profile.arch} · ${memoryMb}MB`);
     } catch (e) {
       setErr('Twin bridge: ' + (e as Error).message);
     }
@@ -305,7 +313,14 @@ export default function AndroidLab() {
             </p>
             <div>
               <button className="sf-btn" onClick={linkTwin}>Bridge to backend twin ({profile.arch})</button>
-              {twin && <p style={{ color: '#6ee7b7', fontSize: 13 }}>{twin}</p>}
+              {twin && (
+                <p style={{ color: '#6ee7b7', fontSize: 13 }}>
+                  {twin} ·{' '}
+                  <a href="/emulator" style={{ color: '#a5f3fc' }}>
+                    open /emulator
+                  </a>
+                </p>
+              )}
               {err && <p style={{ color: '#f87171', fontSize: 13 }}>{err}</p>}
             </div>
           </div>

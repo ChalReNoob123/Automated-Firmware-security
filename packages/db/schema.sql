@@ -61,9 +61,18 @@ CREATE TABLE IF NOT EXISTS firmware (
   version TEXT NOT NULL,
   sha256 CHAR(64) NOT NULL,
   bytes BIGINT NOT NULL DEFAULT 0,
-  encrypted_at_rest BOOLEAN NOT NULL DEFAULT TRUE,
+  -- Set from what actually happened to the bytes: true only when the blob was
+  -- sealed with AES-256-GCM (FIRMWARE_ENC_KEY configured), never assumed.
+  encrypted_at_rest BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE(org_id, sha256)
+);
+
+-- The uploaded image itself, split out so list queries never drag megabytes.
+CREATE TABLE IF NOT EXISTS firmware_blobs (
+  firmware_id UUID PRIMARY KEY REFERENCES firmware(id) ON DELETE CASCADE,
+  data BYTEA NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS findings (
@@ -79,6 +88,18 @@ CREATE TABLE IF NOT EXISTS findings (
   corroborating_engines TEXT[] NOT NULL DEFAULT '{}', -- e.g. '{symbolic,fuzz}'
   why_flagged TEXT,           -- explainability trace
   snapshot_ref TEXT,          -- emulator snapshot + input trace for repro
+  -- 'analysis' rows are owned by the engine and reconciled each run;
+  -- 'manual' rows belong to an analyst and are never auto-deleted
+  source TEXT NOT NULL DEFAULT 'manual',
+  -- start time of the analysis run that last produced this row: reconciliation
+  -- only prunes rows older than the run pruning them, so concurrent runs on the
+  -- same image cannot delete each other's findings
+  analysis_run_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS findings_fw_conf ON findings(firmware_id, confidence);
+-- One finding per (org, firmware, title): a re-run updates the verdict in place
+-- instead of appending duplicates, and concurrent runs cannot both insert.
+CREATE UNIQUE INDEX IF NOT EXISTS findings_org_fw_title
+  ON findings (org_id, firmware_id, title)
+  WHERE firmware_id IS NOT NULL;

@@ -36,6 +36,14 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <div className="sf-nebula" aria-hidden>
           <i />
         </div>
+        {/* round 32: optical layer — lens halation at the frame edges plus a
+            faint anamorphic wash across the middle third. Static (no animation,
+            no repaint), screen-blended, pointer-transparent; the 4K media
+            query in cinematic.css raises it only on high-density displays. */}
+        <div className="sf-optics" aria-hidden>
+          <i />
+          <i />
+        </div>
         {/* film grain veil: sits over everything (incl. preloader), under the cursor */}
         <div className="sf-grain" aria-hidden />
         <RouteCurtain />

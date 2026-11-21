@@ -2208,3 +2208,183 @@ html {
   transform: translateX(var(--fp-x, 0%));
   will-change: transform;
 }
+
+/* ========================================================================
+   ROUND 32 — ULTRA-HD OPTICS & MOTION
+   The film-print layer. Everything here is additive to the existing system:
+   it does not restyle components, it puts a lens and a shutter in front of
+   them. Four pieces, in the order light travels: a global optical overlay
+   (halation + anamorphic wash), an anamorphic hairline on the letterbox
+   bars, a burn + scanline on the route curtain, and a halation bloom on the
+   act-cut flash. Plus a 4K media query that raises the overlay only where the
+   display can resolve it, and reduced-motion guards on every new animation.
+   ======================================================================== */
+
+:root {
+  /* one expo-out curve for every "camera" move; interactions keep 0.22/1 */
+  --sf-ease-cine: cubic-bezier(0.16, 1, 0.3, 1);
+  /* shutter curve: accelerate hard, then hold — the wipe's mechanical feel */
+  --sf-ease-shutter: cubic-bezier(0.76, 0, 0.24, 1);
+}
+
+/* ---- 1. optical overlay: lens halation + anamorphic wash ----
+   Sits above content, below the grain (z 210). Screen blend so it only ever
+   adds light, exactly like flare inside a lens. Static: no keyframes, no
+   per-frame repaint — one composited layer for the whole page. */
+.sf-optics {
+  position: fixed;
+  inset: 0;
+  z-index: 209;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  opacity: 0.5;
+  contain: strict;
+}
+.sf-optics i {
+  position: absolute;
+  display: block;
+  pointer-events: none;
+}
+/* edge halation: highlights bleed off the top and bottom of the frame */
+.sf-optics i:nth-child(1) {
+  inset: 0;
+  background:
+    radial-gradient(130% 38% at 50% -6%, rgba(34, 211, 238, 0.1), transparent 62%),
+    radial-gradient(130% 34% at 50% 106%, rgba(168, 85, 247, 0.09), transparent 62%),
+    radial-gradient(90% 22% at 8% 50%, rgba(56, 189, 248, 0.045), transparent 70%),
+    radial-gradient(90% 22% at 92% 50%, rgba(192, 132, 252, 0.045), transparent 70%);
+}
+/* the anamorphic band: a wide, soft horizontal smear through the middle
+   third — the signature of a 2x anamorphic lens, at 4% strength */
+.sf-optics i:nth-child(2) {
+  left: -10%;
+  right: -10%;
+  top: 34%;
+  height: 32%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(125, 211, 252, 0.05) 24%,
+    rgba(224, 250, 255, 0.075) 50%,
+    rgba(168, 85, 247, 0.05) 76%,
+    transparent 100%
+  );
+  filter: blur(34px);
+}
+
+/* high-density displays resolve the overlay properly — raise it there */
+@media (min-resolution: 2dppx) {
+  .sf-optics { opacity: 0.62; }
+  /* at 4K raster the CSS grain tile reads chunky; quiet it instead of
+     letting it fight the per-canvas film grain in PostFX */
+  .sf-grain { opacity: 0.038; }
+}
+
+/* ---- 2. anamorphic hairline on the letterbox bars ---- */
+.sf-cinebar::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(103, 232, 249, 0.42) 35%, rgba(233, 213, 255, 0.5) 50%, rgba(103, 232, 249, 0.42) 65%, transparent);
+  opacity: 0.65;
+  pointer-events: none;
+}
+.sf-cinebar.top::after { bottom: 0; }
+.sf-cinebar.bottom::after { top: 0; }
+
+/* ---- 3. route curtain: film burn + scanlines ----
+   The wipe becomes a shutter: the panels travel as before, and a strobe of
+   light burns through the centre at the cover moment while fine scanlines
+   ride over it. Suppressed during the reveal (".out") so arriving at a page
+   never flashes. */
+.sf-curtain::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  opacity: 0;
+  mix-blend-mode: screen;
+  background:
+    radial-gradient(58% 42% at 50% 50%, rgba(240, 249, 255, 0.55), rgba(34, 211, 238, 0.3) 38%, transparent 72%),
+    linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.18) 50%, transparent);
+}
+.sf-curtain.out::before { display: none; }
+@media (prefers-reduced-motion: no-preference) {
+  .sf-curtain::before { animation: sf-burn 0.72s var(--sf-ease-shutter) both; }
+}
+@keyframes sf-burn {
+  0% { opacity: 0.95; transform: scale(1.08); }
+  55% { opacity: 0.35; }
+  100% { opacity: 0; transform: scale(1); }
+}
+.sf-curtain::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0.16;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(224, 250, 255, 0.5) 0 1px,
+    transparent 1px 3px
+  );
+  mix-blend-mode: overlay;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .sf-curtain::after { animation: sf-curtain-scanlines 0.42s linear infinite; }
+}
+@keyframes sf-curtain-scanlines {
+  from { background-position: 0 0; }
+  to { background-position: 0 3px; }
+}
+
+/* ---- 4. act-cut halation ---- */
+.sf-act-flash::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 8%, rgba(255, 255, 255, 0.22) 50%, transparent 92%);
+  mix-blend-mode: screen;
+  filter: blur(14px);
+}
+
+/* ---- 5. cinematic panels: specular sheen sweep ----
+   A slow diagonal highlight crosses every procedural art panel, so the baked
+   stills behave like footage behind glass rather than flat images. */
+.sf-cinematic::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background: linear-gradient(
+    115deg,
+    transparent 40%,
+    rgba(255, 255, 255, 0.06) 49%,
+    rgba(186, 230, 253, 0.09) 51%,
+    transparent 60%
+  );
+  background-size: 280% 100%;
+  background-position: 130% 0;
+  mix-blend-mode: screen;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .sf-cinematic::after { animation: sf-panel-sheen 11s var(--sf-ease-cine) infinite; }
+}
+@keyframes sf-panel-sheen {
+  0% { background-position: 130% 0; }
+  42%, 100% { background-position: -70% 0; }
+}
+
+/* ---- 6. motion hygiene for the new layer ---- */
+@media (prefers-reduced-motion: reduce) {
+  .sf-optics { opacity: 0.4; }
+  .sf-cinematic::after { animation: none; background-position: 50% 0; }
+  .sf-curtain::before,
+  .sf-curtain::after { animation: none; }
+  .sf-curtain::after { opacity: 0.1; }
+}

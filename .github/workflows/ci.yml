@@ -23,7 +23,8 @@ on:
       - 'package-lock.json'
       - '.github/workflows/ci.yml'
   pull_request:
-    paths: ['apps/**', 'packages/**', 'package.json', 'package-lock.json']
+    # The workflow file itself is included so a change to CI is exercised by CI.
+    paths: ['apps/**', 'packages/**', 'package.json', 'package-lock.json', '.github/workflows/ci.yml']
 
 jobs:
   verify:
@@ -56,6 +57,9 @@ jobs:
       - run: npm --prefix apps/workers run test
       - run: npm --prefix packages/graph-service run test
       - run: npm --prefix packages/mcp-servers run test
+      # Deliberately also in the api-tests job below: this one is the merge gate
+      # that blocks on every step, the other gives the API + embedded-Postgres
+      # path its own named signal. Both must stay green.
       - run: npm --prefix apps/api run test
       - run: npm --prefix apps/api run build
       - run: npm --prefix apps/web run build
@@ -69,3 +73,29 @@ jobs:
         run: |
           ! git grep -nIE "(ghp_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----)" \
             -- . ':!*.lock' ':!SECURITY.md' ':!apps/workers/tests/*' ':!apps/api/tests/*'
+
+  # The API suite includes the Postgres integration tests (stale-boot settlement
+  # after an API restart, concurrent analysis reconciliation). Those need a real
+  # database; apps/api/tests/pgHarness.ts boots a throwaway embedded PostgreSQL in
+  # the runner's temp directory and removes it afterwards, so this job needs no
+  # `services:` container, no database secret, and no setup step.
+  api-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm install --no-audit --no-fund
+      # apps/api imports the built workspace packages at runtime (the tests run the
+      # app in-process), so their dist/ must exist before the suite starts. Same
+      # manual ordering as `verify` — see the note there for why not turbo.
+      - run: npm --prefix apps/workers run build
+      - run: npm --prefix packages/graph-service run build
+      - run: npm --prefix packages/mcp-servers run build
+      # `test` = vitest run over apps/api/tests, Postgres file included. It fails
+      # loudly if the embedded cluster cannot start, rather than skipping.
+      - name: API suite (embedded Postgres integration included)
+        run: npm --prefix apps/api run test

@@ -5,7 +5,8 @@ import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { useStory, seg } from './storyStore';
 import { sfxBlip } from './audio/sfx';
-import PostFX, { usePostOK } from './post/PostFX';
+import PostFX from './post/PostFX';
+import { useQuality } from './quality';
 
 // Lusion-style scroll story scene: one full-viewport WebGL canvas pinned
 // behind the copy, whose ensemble MORPHS as the page scrolls through four
@@ -1068,7 +1069,7 @@ function Ensemble() {
 }
 
 export default function StoryScene() {
-  const fx = usePostOK();
+  const q = useQuality();
   return (
     <div style={{ position: 'absolute', inset: 0 }} data-cursor="drag">
       <Canvas
@@ -1078,7 +1079,9 @@ export default function StoryScene() {
         // gate passes, the ceiling rises to 2.25 — the scene rasterizes at
         // up to 4320px wide on a 1080p display (4K-class sharpness). The
         // same gate keeps weak devices at the round-25 profile.
-        dpr={fx ? [1.75, 2.25] : [1.5, 2]}
+        // round 32: profile-driven raster range (ultra reaches 2.5x, eco 1.5x);
+        // PostFX additionally adapts the target down if frame time slips.
+        dpr={q.dpr}
         camera={{ position: [0, 1.4, 12.5], fov: 55 }}
         gl={{ antialias: true, alpha: false, powerPreference: 'high-performance' }}
         style={{ position: 'absolute', inset: 0 }}
@@ -1095,8 +1098,9 @@ export default function StoryScene() {
         <Drones />
         <Rig />
         <DragOrbit />
-        {/* round 21: grain + bloom + velocity chromatic aberration (gated) */}
-        {fx && <PostFX />}
+        {/* round 21: grain + bloom + velocity chromatic aberration (gated)
+            round 32: anamorphic streaks + unsharp pass, weighted by profile */}
+        {q.post && <PostFX bloom={q.bloom} grain={q.grain} streak={q.streak} sharpen={q.sharpen} />}
       </Canvas>
     </div>
   );

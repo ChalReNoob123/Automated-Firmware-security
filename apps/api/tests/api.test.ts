@@ -116,7 +116,9 @@ describe('analysis APIs', () => {
     await api.post(`/v1/emulator/sessions/${s.body.id}/crash`).set(H()).send({ reason: 't' }).expect(201);
   });
   it('queues pipeline runs — and demo profiles execute with real pooled-engine metrics', async () => {
-    const r = await api.post('/v1/pipeline/runs').set(H()).send({ firmwareId: 'fw', version: '1' }).expect(202);
+    // Round 33: a run targets an uploaded image, not an arbitrary id.
+    const fw = await api.post('/v1/firmware?version=1').set(H()).set('Content-Type', 'application/octet-stream').send(Buffer.alloc(64, 1)).expect(201);
+    const r = await api.post('/v1/pipeline/runs').set(H()).send({ firmwareId: fw.body.id, version: '1' }).expect(202);
     await api.get(`/v1/pipeline/runs/${r.body.runId}`).set('Authorization', `Bearer ${token}`).expect(200);
     await api.get('/v1/pipeline/runs/nope').set('Authorization', `Bearer ${token}`).expect(404);
     // legacy alias runs the same gate chain (regression: missing requireAuth dead-locked it)

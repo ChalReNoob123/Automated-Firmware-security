@@ -2,7 +2,8 @@
 import { useMemo, useRef } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
-import PostFX, { usePostOK } from './post/PostFX';
+import PostFX from './post/PostFX';
+import { useQuality } from './quality';
 
 // Cinematic hero scene: device core + exploded shards + threat-radar rings + sweep + starfield.
 // Deterministic (seeded) layout, capped pixel ratio, pointer parallax. No postprocessing
@@ -183,10 +184,12 @@ function Ensemble() {
 }
 
 export default function HeroScene() {
-  const fx = usePostOK();
+  // round 32: the shared quality engine owns resolution + effect weights, so
+  // the hero and the story canvas grade identically on the same machine.
+  const q = useQuality();
   return (
     <Canvas
-      dpr={[1, 2]}
+      dpr={q.dpr}
       camera={{ position: [0, 1.6, 11.5], fov: 52 }}
       gl={{ antialias: true, alpha: false, powerPreference: 'high-performance' }}
       style={{ position: 'absolute', inset: 0 }}
@@ -196,13 +199,14 @@ export default function HeroScene() {
       <ambientLight intensity={0.55} />
       <pointLight position={[8, 6, 8]} intensity={60} color="#22d3ee" />
       <pointLight position={[-8, -4, 6]} intensity={50} color="#a855f7" />
-        <Starfield />
+      <Starfield count={Math.round(1400 * q.particles)} />
       {/* The hero copy owns the left half — the viewport-aware Ensemble keeps the
           device core right of that zone at any window size. */}
       <Ensemble />
       <Rig />
-      {/* round 21: grain + bloom + velocity chromatic aberration (gated) */}
-      {fx && <PostFX />}
+      {/* round 21: grain + bloom + velocity chromatic aberration (gated)
+          round 32: anamorphic streaks + unsharp pass, weighted by profile */}
+      {q.post && <PostFX bloom={q.bloom} grain={q.grain} streak={q.streak} sharpen={q.sharpen} />}
     </Canvas>
   );
 }

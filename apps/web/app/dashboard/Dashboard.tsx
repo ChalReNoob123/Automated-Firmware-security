@@ -442,12 +442,21 @@ export default function Dashboard() {
                 <Card style={{ marginTop: 0 }}>
                   <h3 style={{ margin: '0 0 12px', fontSize: 14, letterSpacing: 2, color: '#22d3ee' }}>TOP PRIORITY</h3>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {/* round-33: each row opens its evidence chain — the verdict,
+                        the engines behind it, and the replayable repro. */}
                     {top.map((f) => (
-                      <div key={f.id} className="sf-glass" onPointerMove={glassGlow} style={{ borderRadius: 10, padding: '9px 12px', fontSize: 13, display: 'flex', gap: 10, alignItems: 'center' }}>
+                      <a
+                        key={f.id}
+                        href={`/findings/${f.id}`}
+                        className="sf-glass"
+                        onPointerMove={glassGlow}
+                        style={{ borderRadius: 10, padding: '9px 12px', fontSize: 13, display: 'flex', gap: 10, alignItems: 'center', textDecoration: 'none', color: 'inherit' }}
+                      >
                         <b style={{ color: '#fff', minWidth: 34 }}>P{priority(f)}</b>
                         <span style={{ flex: 1 }}>{f.title}</span>
                         <Badge tone={f.confidence === 'Confirmed' ? 'green' : f.confidence === 'Likely' ? 'amber' : 'gray'}>{f.confidence.toUpperCase()}</Badge>
-                      </div>
+                        <span aria-hidden style={{ color: '#22d3ee' }}>›</span>
+                      </a>
                     ))}
                   </div>
                 </Card>

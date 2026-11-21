@@ -471,7 +471,9 @@ export default function ArtPanel({
     const rebake = () => {
       cancelAnimationFrame(queued);
       queued = requestAnimationFrame(() => {
-        const dpr = Math.min(2, window.devicePixelRatio || 1); // 4K-crisp bake
+        // round 32: bake ceiling follows the quality profile (2.5x on ultra) —
+        // a 4K panel now gets a true 4K bake instead of a 2x upscale.
+        const dpr = Math.min(2.5, window.devicePixelRatio || 1);
         const w = Math.max(1, Math.round(box.clientWidth * dpr));
         const h = Math.max(1, Math.round(box.clientHeight * dpr));
         canvas.width = w;
@@ -515,7 +517,7 @@ export default function ArtPanel({
         if (bake.current && document.visibilityState === 'visible') {
           g2.clearRect(0, 0, canvas.width, canvas.height);
           g2.drawImage(bake.current, 0, 0);
-          const dpr = Math.min(2, window.devicePixelRatio || 1);
+          const dpr = Math.min(2.5, window.devicePixelRatio || 1);
 
           if (variant === 'holo') {
             const r = Math.min(canvas.width, canvas.height) * 0.28 * 1.7;

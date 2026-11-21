@@ -15,41 +15,98 @@ type Session = {
   memoryMb: number;
   backend: string;
   status: string;
+  bootDeadline?: string;
+  image?: {
+    firmwareId: string;
+    version: string;
+    sha256: string;
+    bytes: number;
+    elf: { machine: string; bits: number; endian: string; entry: string; exeType: string } | null;
+    banner: string[];
+  };
   bootLog: string[];
   inputTrace: string[];
   snapshots: { id: string; stateHash: string; inputTrace: string[]; createdAt: string; note?: string }[];
   crashes: { id: string; reason: string; snapshotId: string | null; inputTrace: string[]; at: string }[];
 };
 
-const STATUS_COLOR: Record<string, string> = { ready: '#34d399', crashed: '#f43f5e', stopped: '#64748b', booting: '#f59e0b' };
+const STATUS_COLOR: Record<string, string> = { ready: '#34d399', crashed: '#f43f5e', stopped: '#64748b', booting: '#f59e0b', failed: '#ef4444' };
 
 export default function EmulatorPanel() {
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
   const [att, setAtt] = useState('');
   const [session, setSession] = useState<Session | null>(null);
   const [arch, setArch] = useState('arm');
+  const [firmwares, setFirmwares] = useState<{ id: string; version: string; bytes: number; sha256: string }[]>([]);
+  const [firmwareId, setFirmwareId] = useState('');
   const [input, setInput] = useState('');
   const [replayOut, setReplayOut] = useState('');
+  const [origin, setOrigin] = useState(''); // finding id when the replay was deep-linked
   const [err, setErr] = useState('');
   const consoleRef = useRef<HTMLPreElement>(null);
 
   useEffect(() => {
     setAtt(localStorage.getItem('sf_att') ?? '');
-    // Deep-link from attack sim: load its session if we have none yet.
+    // Deep-links: the attack sim and the finding evidence page both hand us a
+    // session id; a finding additionally carries a SNAPSHOT to replay. The
+    // query string is read from window (not useSearchParams) so this page keeps
+    // rendering without a Suspense boundary around it. Round 33: the evidence
+    // page shipped a link that used to land here and do nothing.
     (async () => {
       const tok = await getAccess();
       setSignedIn(!!tok);
+      const qs = new URLSearchParams(window.location.search);
+      const snap = qs.get('snapshot');
+      const fromFinding = qs.get('finding');
+      if (fromFinding) setOrigin(fromFinding);
       const last = localStorage.getItem('sf_last_session');
-      if (last && tok) {
-        try {
-          const r = await apiFetch(`/v1/emulator/sessions/${last}`, { method: 'GET' });
-          if (r.ok) {
-            const j = await r.json();
-            if (j?.id) setSession(j);
-          }
-        } catch {
-          /* session expired with the last boot — boot a fresh twin */
+      if (!tok) return;
+      // Image picker: what the twin can boot. `?firmware=` preselects one, so
+      // the intake panel can hand off to a twin already standing for that image.
+      try {
+        const fr = await apiFetch('/v1/firmware');
+        if (fr.ok) {
+          const fj = (await fr.json()) as { firmware?: { id: string; version: string; bytes: number; sha256: string }[] };
+          const list = fj.firmware ?? [];
+          setFirmwares(list);
+          setFirmwareId(qs.get('firmware') ?? list[0]?.id ?? '');
         }
+      } catch {
+        /* no intake yet — the twin still boots with no image */
+      }
+      if (!last) {
+        if (snap) {
+          setReplayOut(
+            `Snapshot ${snap} belongs to a twin this browser hasn't opened — open the session that captured it, then replay.`
+          );
+        }
+        return;
+      }
+      try {
+        const r = await apiFetch(`/v1/emulator/sessions/${last}`, { method: 'GET' });
+        if (!r.ok) return;
+        const j = await r.json();
+        if (!j?.id) return;
+        setSession(j);
+        if (!snap) return;
+        const owned = ((j.snapshots ?? []) as { id: string }[]).some((s) => s.id === snap);
+        if (!owned) {
+          setReplayOut(`Snapshot ${snap} is not in session ${j.id} — it lives in the twin that captured it.`);
+          return;
+        }
+        const rr = await apiFetch(`/v1/emulator/sessions/${j.id}/replay`, {
+          method: 'POST',
+          headers: { 'x-attestation-id': localStorage.getItem('sf_att') ?? '' },
+          body: JSON.stringify({ snapshotId: snap }),
+        });
+        const out = (await rr.json().catch(() => ({}))) as { match?: boolean; detail?: string; error?: string };
+        if (!rr.ok) {
+          setReplayOut(`Replay refused (HTTP ${rr.status}) — ${out.error ?? 'attestation required'}`);
+        } else {
+          setReplayOut(`${snap}: ${out.match ? 'MATCH ✓' : 'DIVERGED ✗'} — ${out.detail ?? ''}`);
+        }
+      } catch {
+        /* session expired with the last boot — boot a fresh twin */
       }
     })();
   }, []);
@@ -87,7 +144,35 @@ export default function EmulatorPanel() {
 
   const boot = async () => {
     save();
-    setSession(await call('/v1/emulator/sessions', 'POST', { arch, memoryMb: 256 }, true));
+    const s = (await call(
+      '/v1/emulator/sessions',
+      'POST',
+      { arch, memoryMb: 256, ...(firmwareId ? { firmwareId } : {}) },
+      true
+    )) as Session;
+    // Round 33: the session used to live only in component state, so a reload
+    // lost it and the finding/attack deep-links had nothing to reopen.
+    if (s?.id) localStorage.setItem('sf_last_session', s.id);
+    setSession(s);
+    // Round 36: booting is asynchronous server-side. With a real launch the
+    // session arrives as 'booting' and the console lands later — poll it in
+    // rather than leaving the panel showing a stale empty terminal.
+    if (s?.status === 'booting') {
+      // Poll until the boot settles or its server-side deadline passes. A launch
+      // that never reports back (API restart mid-boot) is settled by the API as
+      // 'failed', so this loop always ends on a real status.
+      const until = s.bootDeadline ? Date.parse(s.bootDeadline) + 2000 : Date.now() + 20_000;
+      for (let i = 0; i < 240 && Date.now() < until; i++) {
+        await new Promise((r) => setTimeout(r, 500));
+        try {
+          const fresh = (await call(`/v1/emulator/sessions/${s.id}`, 'GET')) as Session;
+          setSession(fresh);
+          if (fresh.status !== 'booting') break;
+        } catch {
+          break;
+        }
+      }
+    }
   };
   const refresh = async () => {
     if (session) setSession(await call(`/v1/emulator/sessions/${session.id}`, 'GET'));
@@ -127,6 +212,21 @@ export default function EmulatorPanel() {
             <option key={a} value={a}>{a}</option>
           ))}
         </select>
+        <select
+          className="sf-input"
+          value={firmwareId}
+          onChange={(e) => setFirmwareId(e.target.value)}
+          aria-label="firmware image"
+          style={{ maxWidth: 260 }}
+          title="Twin boots the selected uploaded image; the ELF header overrides the arch box"
+        >
+          <option value="">No image (dry-run)</option>
+          {firmwares.map((f) => (
+            <option key={f.id} value={f.id}>
+              {f.version} · {Math.max(1, Math.round(f.bytes / 1024))}KB · {f.sha256.slice(0, 6)}
+            </option>
+          ))}
+        </select>
         <button className="sf-btn sf-btn-accent" onClick={boot} disabled={signedIn !== true} title={signedIn !== true ? 'Sign in first — every twin is attributed to a named operator' : undefined}>
           Boot twin
         </button>
@@ -144,6 +244,13 @@ export default function EmulatorPanel() {
         <>
           <p style={{ color: '#94a3b8', fontSize: 13 }}>
             <code style={{ color: '#a5f3fc' }}>{session.id}</code> · {session.arch} · {session.memoryMb}MB · {session.backend} · status:{' '}
+            {session.image && (
+              <span style={{ color: '#a5f3fc' }}>
+                {' '}
+                · image {session.image.version} · {session.image.sha256.slice(0, 8)}…
+                {session.image.elf ? ` (${session.image.elf.machine} ${session.image.elf.bits}-bit)` : ''}
+              </span>
+            )}
             <b style={{ color: STATUS_COLOR[session.status] ?? '#e2e8f0' }}>{session.status.toUpperCase()}</b>
           </p>
           <div className="uv-term">
@@ -171,7 +278,24 @@ export default function EmulatorPanel() {
                 ))}
                 {session.snapshots.length === 0 && <li style={{ color: '#64748b', fontSize: 13 }}>No snapshots yet — capture a baseline before fuzzing.</li>}
               </ul>
-              {replayOut && <p style={{ fontSize: 13, color: replayOut.includes('MATCH') ? '#6ee7b7' : '#fca5a5' }}>{replayOut}</p>}
+              {replayOut && (
+                <p
+                  style={{
+                    fontSize: 13,
+                    color: replayOut.includes('MATCH') ? '#6ee7b7' : replayOut.includes('DIVERGED') ? '#fca5a5' : '#fcd34d',
+                  }}
+                >
+                  {replayOut}
+                  {origin && (
+                    <>
+                      {' · '}
+                      <a href={`/findings/${origin}`} style={{ color: '#a5f3fc' }}>
+                        back to the finding
+                      </a>
+                    </>
+                  )}
+                </p>
+              )}
             </div>
             <div>
               <h3 style={{ fontSize: 13, letterSpacing: 2, color: '#f43f5e' }}>CRASHES ({session.crashes.length})</h3>

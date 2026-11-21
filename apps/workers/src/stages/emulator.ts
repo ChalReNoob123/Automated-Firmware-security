@@ -1,31 +1,44 @@
-// Emulator worker — QEMU/FirmAE-style harness substrate (spec §6).
-// Owns session lifecycle: boot → console → snapshot → step-by-step replay.
-// Every crash/anomaly records a REPRO BUNDLE { snapshotRef + inputTrace } so any
-// finding is reproducible (non-functional requirement).
-//
-// Execution backends: 'dry-run' (default, deterministic synthetic boot for UI/API
-// development) and 'qemu' (shells out to qemu-system-<arch> when present; the
-// FirmAE full-system harness wiring is the Module 4 follow-up). The session,
-// snapshot-hash and replay-compare math below is backend-agnostic and does not change.
 import { createHash, randomUUID } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
+import { extractStrings, parseElf } from './binary.js';
+import { bootTimeoutMs, canLaunch, launchImage, type Arch } from './qemu.js';
 
-export type Arch = 'arm' | 'aarch64' | 'mips' | 'mipsel' | 'x86' | 'x86_64' | 'riscv64';
-export type Backend = 'auto' | 'dry-run' | 'qemu';
-export type SessionStatus = 'booting' | 'ready' | 'crashed' | 'stopped';
+// THE emulator implementation (round 36).
+//
+// Session semantics used to exist twice: this module owned dry-run sessions,
+// snapshots and replay for the CLI/pipeline, while apps/api/src/routes/emulator.ts
+// carried a near-copy with its own hashing, its own ELF→arch mapping and its own
+// boot log. They drifted (an image-hash mismatch made every image-bound replay
+// report DIVERGED). There is now one implementation of the model, and the API is
+// only HTTP + org-scoped persistence around it.
+//
+// Two-phase boot:
+//   buildTwin()  — synchronous, pure: derives arch/banner/boot context from the
+//                  image, returns a session in `ready` (or `booting`).
+//   launchTwin() — asynchronous: runs qemu (opt-in) and captures the console.
+// The API persists between the phases, so creating a session never blocks on a
+// slow boot.
+export type Backend = 'dry-run' | 'image-bound' | 'qemu';
+export type Execution = 'none' | 'qemu';
+export type SessionStatus = 'booting' | 'ready' | 'crashed' | 'stopped' | 'failed';
 
-export type EmulatorConfig = {
-  arch: Arch;
-  memoryMb: number;
-  kernelArgs?: string;
-  backend?: Backend;
+export type TwinImage = {
+  firmwareId: string;
+  version: string;
+  sha256: string;
+  bytes: number;
+  data: Uint8Array;
+};
+
+export type TwinImageInfo = Omit<TwinImage, 'data'> & {
+  elf: { machine: string; bits: number; endian: string; entry: string; exeType: string } | null;
+  banner: string[];
 };
 
 export type Snapshot = {
   id: string;
   sessionId: string;
-  stateHash: string; // sha256(bootLog + inputTrace at snapshot time)
-  inputTrace: string[]; // exact inputs replayed to reproduce
+  stateHash: string;
+  inputTrace: string[];
   createdAt: string;
   note?: string;
 };
@@ -34,103 +47,190 @@ export type CrashRecord = {
   id: string;
   sessionId: string;
   reason: string;
-  snapshotId: string | null; // auto-snapshot taken at crash time (null if snapshotting failed)
+  snapshotId: string | null;
   inputTrace: string[];
   at: string;
 };
 
-export type BootSession = {
+export type TwinSession = {
   id: string;
-  config: Required<EmulatorConfig>;
+  arch: string;
+  memoryMb: number;
+  kernelArgs: string;
+  backend: Backend;
+  execution: Execution;
   status: SessionStatus;
-  backend: 'dry-run' | 'qemu';
   bootLog: string[];
   inputTrace: string[];
   snapshots: Snapshot[];
   crashes: CrashRecord[];
-  // dry-run process/socket inventory stands in for QEMU `info` monitors
-  procs: { pid: number; name: string }[];
-  sockets: { proto: string; addr: string }[];
+  image?: TwinImageInfo;
+  /** exact argv, when execution actually happened */
+  command?: string;
+  /** why it did not execute, when it didn't */
+  launchError?: string;
+  /** when a booting session stops being believable; cleared once it settles */
+  bootDeadline?: string;
   startedAt: string;
+  updatedAt: string;
 };
 
-const QEMU_BIN: Record<Arch, string> = {
-  arm: 'qemu-system-arm',
-  aarch64: 'qemu-system-aarch64',
-  mips: 'qemu-system-mips',
-  mipsel: 'qemu-system-mipsel',
-  x86: 'qemu-system-i386',
-  x86_64: 'qemu-system-x86_64',
-  riscv64: 'qemu-system-riscv64',
+/** Backwards-compatible alias: the pipeline and CLI already speak BootSession. */
+export type BootSession = TwinSession;
+export type EmulatorConfig = { arch: Arch; memoryMb: number; kernelArgs?: string };
+
+const ARCH_BY_MACHINE: Record<number, string> = { 3: 'x86', 62: 'x86_64', 40: 'arm', 183: 'aarch64', 8: 'mips', 243: 'riscv64' };
+
+const archForElf = (elf: { machineCode: number; endian: string }): string | null => {
+  const base = ARCH_BY_MACHINE[elf.machineCode];
+  if (!base) return null;
+  return base === 'mips' && elf.endian === 'little' ? 'mipsel' : base;
 };
 
-export function qemuAvailable(arch: Arch): boolean {
-  try {
-    execFileSync(process.platform === 'win32' ? 'where' : 'which', [QEMU_BIN[arch]], { stdio: 'ignore' });
-    return true;
-  } catch {
-    return false;
-  }
+// Real strings from the image, preferring version/build-looking lines. Purely
+// observational — nothing is invented.
+function pickBanner(data: Uint8Array): string[] {
+  const lines = extractStrings(data)
+    .split('\n')
+    .map((s) => s.trim())
+    .filter((s) => s.length >= 8 && s.length <= 120 && /[a-z]/i.test(s));
+  const interesting = lines.filter((s) => /version|linux|u-?boot|firmware|build|release|rootfs|init/i.test(s));
+  return [...new Set([...interesting, ...lines])].slice(0, 4);
 }
 
-function hashState(bootLog: string[], inputTrace: string[]): string {
-  return createHash('sha256').update(JSON.stringify({ bootLog, inputTrace })).digest('hex');
-}
-
-function dryRunBoot(c: Required<EmulatorConfig>): { log: string[]; procs: BootSession['procs']; sockets: BootSession['sockets'] } {
+function imageInfo(image: TwinImage, elf: ReturnType<typeof parseElf>): TwinImageInfo {
+  const { data: _data, ...meta } = image;
   return {
-    log: [
-      `[qemu] ${QEMU_BIN[c.arch]} -m ${c.memoryMb} ${c.kernelArgs ? `-append "${c.kernelArgs}"` : ''}`,
-      `[firmAE] inferring network setup for ${c.arch} …`,
-      `Linux version 5.10.0-forge (${c.arch}) #1 SMP PREEMPT`,
-      'Kernel command line: ' + (c.kernelArgs || 'console=ttyS0 root=/dev/sda1'),
-      'Starting init: /sbin/init …',
-      'login: ',
-    ],
-    procs: [
-      { pid: 1, name: 'init' },
-      { pid: 212, name: 'telnetd?' },
-      { pid: 318, name: 'httpd' },
-    ],
-    sockets: [
-      { proto: 'tcp', addr: '0.0.0.0:80' },
-      { proto: 'tcp', addr: '0.0.0.0:23' },
-    ],
+    ...meta,
+    elf: elf.valid ? { machine: elf.machine, bits: elf.bits, endian: elf.endian, entry: elf.entry, exeType: elf.exeType } : null,
+    banner: pickBanner(image.data),
   };
 }
 
-const sessions = new Map<string, BootSession>();
-// In-memory sessions are a prototype store: cap it so a long-lived process
-// can't grow without bound (oldest idle session evicted first).
-const MAX_SESSIONS = 200;
+function imageBootLog(img: TwinImageInfo): string[] {
+  return [
+    `[image] ${img.version} · sha256:${img.sha256.slice(0, 12)}… · ${img.bytes} bytes`,
+    img.elf
+      ? `[elf] ${img.elf.machine} ${img.elf.bits}-bit ${img.elf.endian} ${img.elf.exeType} · entry ${img.elf.entry}`
+      : '[elf] no ELF header — raw image or container',
+    ...img.banner.map((b) => `[strings] ${b}`),
+    '[twin] image attached read-only; not executed yet',
+    'login: ',
+  ];
+}
 
-export function startSession(config: EmulatorConfig): BootSession {
-  const full: Required<EmulatorConfig> = { kernelArgs: '', backend: 'auto', ...config };
-  let backend: 'dry-run' | 'qemu' = 'dry-run';
-  if (full.backend === 'qemu' || (full.backend === 'auto' && qemuAvailable(full.arch))) {
-    if (!qemuAvailable(full.arch)) {
-      if (full.backend === 'qemu')
-        throw new Error(
-          `${QEMU_BIN[full.arch]} not found on PATH — install QEMU (https://www.qemu.org/download/) or use backend 'dry-run'`
-        );
-    } else backend = 'qemu';
-  }
-  const boot = dryRunBoot(full); // qemu backend reuses envelope until FirmAE harness lands
-  const s: BootSession = {
+function hashState(s: TwinSession): string {
+  return createHash('sha256')
+    .update(JSON.stringify({ image: s.image?.sha256 ?? null, bootLog: s.bootLog, inputTrace: s.inputTrace }))
+    .digest('hex');
+}
+
+// A launch can only still be alive inside this window: the console capture
+// gives up after EMULATOR_QEMU_TIMEOUT_MS, plus a margin for the write-back.
+// If a session is still 'booting' past that, its process is gone (an API restart
+// is the usual cause) and the session must say so rather than stay booting.
+export const BOOT_GRACE_MS = 10_000;
+export const bootDeadlineFrom = (now = Date.now()) => new Date(now + bootTimeoutMs() + BOOT_GRACE_MS).toISOString();
+
+/**
+ * Settle a booting session whose deadline has passed: 'failed', with the reason
+ * in launchError and the log. Returns true when it changed, so callers persist.
+ */
+export function failStaleBoot(s: TwinSession, now = Date.now()): boolean {
+  if (s.status !== 'booting') return false;
+  // A booting row without a deadline (written by an older build, or corrupt)
+  // falls back to its last update plus the same window, so no row can sit in
+  // 'booting' forever just because the field is missing.
+  const deadline = s.bootDeadline
+    ? Date.parse(s.bootDeadline)
+    : Date.parse(s.updatedAt) + bootTimeoutMs() + BOOT_GRACE_MS;
+  if (!Number.isFinite(deadline) || deadline > now) return false;
+  s.status = 'failed';
+  s.launchError = 'boot never reported back before its deadline — the API restarted while this session was launching';
+  s.bootLog = [...s.bootLog.filter((l) => !l.startsWith('[twin] boot failed')), `[twin] boot failed: ${s.launchError}`];
+  delete s.bootDeadline;
+  s.updatedAt = new Date().toISOString();
+  return true;
+}
+
+export function buildTwin(input: {
+  arch?: string;
+  memoryMb: number;
+  kernelArgs?: string;
+  image?: TwinImage;
+}): TwinSession {
+  // One parse, used for both the provenance record and the arch decision.
+  const elf = input.image ? parseElf(input.image.data) : null;
+  const img = input.image && elf ? imageInfo(input.image, elf) : undefined;
+  const derived = elf?.valid ? archForElf(elf) : null;
+  const arch = derived ?? input.arch ?? 'arm';
+  const now = new Date().toISOString();
+  const bootLog = img
+    ? imageBootLog(img)
+    : [`Linux version 5.10.0-forge (${arch}) #1 SMP PREEMPT`, 'Starting init: /sbin/init …', 'login: '];
+  return {
     id: `emu_${randomUUID().slice(0, 8)}`,
-    config: full,
+    arch,
+    memoryMb: input.memoryMb,
+    kernelArgs: input.kernelArgs ?? '',
+    backend: img ? 'image-bound' : 'dry-run',
+    execution: 'none',
+    // The caller promotes this to 'booting' only when a launch will actually
+    // start; otherwise the session is usable immediately.
     status: 'ready',
-    backend,
-    bootLog: backend === 'qemu' ? [`[qemu] attached ${QEMU_BIN[full.arch]} (managed)`, ...boot.log] : boot.log,
+    bootLog,
     inputTrace: [],
     snapshots: [],
     crashes: [],
-    procs: boot.procs,
-    sockets: boot.sockets,
-    startedAt: new Date().toISOString(),
+    ...(img ? { image: img } : {}),
+    startedAt: now,
+    updatedAt: now,
   };
+}
+
+/** Would buildTwin()'s result be booted for real on this host? */
+export const willLaunch = (s: TwinSession) => !!s.image && canLaunch(s.arch);
+
+/**
+ * Phase two: run the image and capture its console. Never throws — a launch
+ * failure lands on the session as `launchError` so the caller can persist a
+ * truthful result instead of losing the session to a rejected promise.
+ */
+export async function launchTwin(s: TwinSession, image: TwinImage, opts: { timeoutMs?: number } = {}): Promise<TwinSession> {
+  const r = await launchImage({ arch: s.arch, memoryMb: s.memoryMb, image: image.data, ...(opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}) });
+  if (r.ok) {
+    s.backend = 'qemu';
+    s.execution = 'qemu';
+    s.command = r.command;
+    s.launchError = undefined;
+    s.bootLog = [`[launch] ${r.command}`, ...r.console, ...(r.note ? [`[launch] ${r.note}`] : [])];
+  } else {
+    s.launchError = r.reason;
+    // Replace rather than append on a retry: one truthful line, not a stack.
+    s.bootLog = [...s.bootLog.filter((l) => !l.startsWith('[twin] cannot execute')), `[twin] cannot execute this image: ${r.reason}`];
+  }
+  s.status = 'ready';
+  delete s.bootDeadline;
+  s.updatedAt = new Date().toISOString();
+  return s;
+}
+
+const sessions = new Map<string, TwinSession>();
+
+/**
+ * Synchronous convenience for the CLI/pipeline: build a session, and launch it
+ * only if execution is actually possible. The API uses buildTwin/launchTwin
+ * directly so the boot can be asynchronous.
+ */
+/** Registry lookup for sessions built by startSession (CLI, pipeline, MCP). */
+export function getSession(id: string): TwinSession | undefined {
+  return sessions.get(id);
+}
+
+export function startSession(config: EmulatorConfig): TwinSession {
+  const s = buildTwin({ arch: config.arch, memoryMb: config.memoryMb, ...(config.kernelArgs ? { kernelArgs: config.kernelArgs } : {}) });
   sessions.set(s.id, s);
-  while (sessions.size > MAX_SESSIONS) {
+  while (sessions.size > 200) {
     const oldest = sessions.keys().next().value as string;
     if (oldest !== s.id) sessions.delete(oldest);
     else break;
@@ -138,54 +238,64 @@ export function startSession(config: EmulatorConfig): BootSession {
   return s;
 }
 
-export function getSession(id: string): BootSession | undefined {
-  return sessions.get(id);
-}
-
-export function feedInput(s: BootSession, input: string): BootSession {
+export function feedInput(s: TwinSession, input: string): TwinSession {
   if (s.status === 'stopped') throw new Error('session stopped');
+  if (s.status === 'booting') throw new Error('session still booting');
+  if (s.status === 'failed') throw new Error('session failed to boot — start a new twin');
   s.inputTrace.push(input);
   s.bootLog.push(`> ${input}`);
   if (s.status === 'crashed') s.status = 'ready';
+  s.updatedAt = new Date().toISOString();
   return s;
 }
 
-export function takeSnapshot(s: BootSession, note?: string): Snapshot {
+export function takeSnapshot(s: TwinSession, note?: string): Snapshot {
   if (s.status === 'stopped') throw new Error('session stopped');
+  // A mid-boot snapshot would capture the pre-launch log, and the console that
+  // arrives afterwards would make its replay diverge by construction.
+  if (s.status === 'booting') throw new Error('session still booting');
+  if (s.status === 'failed') throw new Error('session failed to boot — start a new twin');
   const snap: Snapshot = {
     id: `snap_${randomUUID().slice(0, 8)}`,
     sessionId: s.id,
-    stateHash: hashState(s.bootLog, s.inputTrace),
+    stateHash: hashState(s),
     inputTrace: [...s.inputTrace],
     createdAt: new Date().toISOString(),
     ...(note ? { note } : {}),
   };
   s.snapshots.push(snap);
+  s.updatedAt = new Date().toISOString();
   return snap;
 }
 
-// Step-by-step replay: re-hash the session inputs truncated to the snapshot's trace
-// length and compare — a match proves the snapshot deterministically reproduces.
-export function replay(s: BootSession, snapshotId: string): { match: boolean; detail: string; steps: number } {
+export function replay(s: TwinSession, snapshotId: string): { match: boolean; detail: string; steps: number } {
   const snap = s.snapshots.find((x) => x.id === snapshotId);
   if (!snap) throw new Error('snapshot not found');
   const prefix = s.inputTrace.slice(0, snap.inputTrace.length);
   const sameInputs = JSON.stringify(prefix) === JSON.stringify(snap.inputTrace);
-  // feedInput appends exactly one `> input` line per input, so the snapshot-time boot
+  // feedInput appends exactly one `> input` line per input, so the snapshot-time
   // log is the current log minus one trailing line per post-snapshot input.
   const postSnapInputs = s.inputTrace.length - snap.inputTrace.length;
   const recomputed = createHash('sha256')
-    .update(JSON.stringify({ bootLog: s.bootLog.slice(0, s.bootLog.length - postSnapInputs), inputTrace: snap.inputTrace }))
+    .update(
+      JSON.stringify({
+        image: s.image?.sha256 ?? null,
+        bootLog: s.bootLog.slice(0, s.bootLog.length - postSnapInputs),
+        inputTrace: snap.inputTrace,
+      })
+    )
     .digest('hex');
   const match = sameInputs && recomputed === snap.stateHash;
   return {
     match,
-    detail: match ? `reproduced ${snap.inputTrace.length} input steps → state ${snap.stateHash.slice(0, 12)}…` : 'diverged — inputs or state changed since snapshot',
+    detail: match
+      ? `reproduced ${snap.inputTrace.length} input steps → state ${snap.stateHash.slice(0, 12)}…`
+      : 'diverged — inputs or state changed since snapshot',
     steps: snap.inputTrace.length,
   };
 }
 
-export function recordCrash(s: BootSession, reason: string): CrashRecord {
+export function recordCrash(s: TwinSession, reason: string): CrashRecord {
   let snap: Snapshot | null = null;
   try {
     snap = takeSnapshot(s, `auto-snapshot at crash: ${reason}`);
@@ -193,6 +303,7 @@ export function recordCrash(s: BootSession, reason: string): CrashRecord {
     snap = null;
   }
   s.status = 'crashed';
+  s.updatedAt = new Date().toISOString();
   const crash: CrashRecord = {
     id: `crash_${randomUUID().slice(0, 8)}`,
     sessionId: s.id,
@@ -205,7 +316,8 @@ export function recordCrash(s: BootSession, reason: string): CrashRecord {
   return crash;
 }
 
-export function stopSession(s: BootSession): BootSession {
+export function stopSession(s: TwinSession): TwinSession {
   s.status = 'stopped';
+  s.updatedAt = new Date().toISOString();
   return s;
 }

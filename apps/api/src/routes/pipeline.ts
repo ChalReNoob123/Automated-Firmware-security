@@ -3,8 +3,8 @@ import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import { requireAuth } from '../middleware/rbac.js';
 import { requireAttestation } from './devices.js';
-import { getRunDoc, putRun } from '../store.js';
-import { runPipeline, type RunMetrics } from '@sentinelforge/workers';
+import { getFirmware, getRunDoc, putRun, reconcileFindingsForFirmware, upsertFindingForFirmware } from '../store.js';
+import { priorityOf, runPipeline, type RunMetrics } from '@sentinelforge/workers';
 
 const router = Router();
 
@@ -16,12 +16,24 @@ type QueuedRun = {
   createdAt: string;
   finishedAt?: string;
   // Executions are labeled: 'demo' = the deterministic synthetic image the
-  // workers suite pins (real engine work, NOT a real customer firmware).
-  // Real firmware arrives via device acquisition (Module 1) in prod wiring.
+  // workers suite pins (real engine work, NOT a real customer firmware);
+  // 'upload' = bytes a caller actually uploaded through POST /v1/firmware.
+  source?: 'demo' | 'upload';
   profile?: 'demo';
+  firmwareSha256?: string;
   stageStatus?: Record<string, string>;
   metrics?: RunMetrics;
   findingsCount?: number;
+  // persisted rows produced by this run, so the UI can open their evidence
+  findings?: { id: string; title: string; confidence: string; priority: number }[];
+  /** analysis verdicts from an earlier run that this run no longer produces */
+  removed?: string[];
+  artifacts?: {
+    elf?: { valid: boolean; machine?: string; bits?: number; endian?: string };
+    gzipMembers?: number;
+    components?: number;
+    sha256?: string;
+  };
   error?: string;
 };
 type Authed = { user: { org: string } };
@@ -99,23 +111,140 @@ async function executeQueuedDemo(org: string, run: QueuedRun) {
   }
 }
 
+// Real image execution (round 33): acquisition → unpack → strings-based static
+// → SBOM over the uploaded bytes, then every consensus finding is PERSISTED
+// into the findings queue so its evidence page can open it. Discovery/fuzz stay
+// off for uploads on purpose: they need a call graph or the demo harness, and
+// spraying a demo harness at a real image would manufacture the exact
+// false positives this product claims to eliminate. Stages that cannot run are
+// reported as not-run rather than faked.
+async function executeQueuedUpload(org: string, run: QueuedRun, data: Uint8Array) {
+  if (inFlight.has(run.runId)) return;
+  inFlight.add(run.runId);
+  try {
+    await putRun(org, run.runId, { ...run, status: 'running' });
+    const state = await runPipeline(data, { id: run.firmwareId, version: run.version });
+    const created: NonNullable<QueuedRun['findings']> = [];
+    for (const c of state.consensus) {
+      // Round 34: idempotent per (firmware, title) — a re-run updates the
+      // verdict instead of appending a duplicate copy to the queue.
+      const row = await upsertFindingForFirmware({
+        orgId: org,
+        firmwareId: run.firmwareId,
+        title: c.title,
+        confidence: c.confidence,
+        engines: c.engines as string[],
+        why: c.why.join('; '),
+        source: 'analysis',
+        analysisRunAt: run.createdAt,
+        ...(c.snapshotRef ? { snapshotRef: c.snapshotRef } : {}),
+        ...(c.epss != null ? { epss: c.epss } : {}),
+        ...(c.ssvc ? { ssvc: c.ssvc } : {}),
+      });
+      created.push({
+        id: row.id,
+        title: row.title,
+        confidence: row.confidence,
+        priority: priorityOf({
+          engines: row.corroborating_engines,
+          epss: row.epss ?? undefined,
+          ssvc: (['Track', 'Track*', 'Attend', 'Act'] as const).includes(row.ssvc as never)
+            ? (row.ssvc as 'Track' | 'Track*' | 'Attend' | 'Act')
+            : undefined,
+        }),
+      });
+    }
+    // Drop analysis verdicts this run no longer produces. Manual findings are
+    // untouched, and the removed titles are reported rather than vanishing.
+    // Only rows from runs that started before this one are eligible, so a run
+    // analysing the same image concurrently keeps its own findings.
+    const removed = await reconcileFindingsForFirmware(org, run.firmwareId, created.map((c) => c.id), run.createdAt);
+    const elf = state.artifacts.binary?.elf;
+    const done: QueuedRun = {
+      ...run,
+      status: 'done',
+      finishedAt: new Date().toISOString(),
+      stageStatus: state.stages,
+      metrics: state.metrics,
+      findingsCount: created.length,
+      findings: created,
+      ...(removed.length ? { removed } : {}),
+      firmwareSha256: state.firmware.sha256,
+      artifacts: {
+        elf: elf && elf.valid ? { valid: true, machine: elf.machine, bits: elf.bits, endian: elf.endian } : { valid: false },
+        gzipMembers: state.artifacts.binary?.gzipMembers?.length ?? 0,
+        components: state.artifacts.sbom?.components.length ?? 0,
+        sha256: state.firmware.sha256,
+      },
+    };
+    await putRun(org, run.runId, done);
+    rememberMetric(org, run.runId, state.metrics);
+  } catch (e) {
+    await putRun(org, run.runId, { ...run, status: 'failed', finishedAt: new Date().toISOString(), source: 'upload', error: String(e).slice(0, 200) }).catch(() => {});
+  } finally {
+    inFlight.delete(run.runId);
+  }
+}
+
 // POST /v1/pipeline/runs — enqueue a firmware analysis run (persisted run record).
 // Gated by BOTH auth and the attestation row (no test without logged authorization).
 // profile:'demo' additionally launches the pooled engine on the labeled
 // synthetic image so throughput is real, measured, and pollable.
 router.post('/runs', requireAuth, requireAttestation, async (req, res) => {
   const p = z
-    .object({ firmwareId: z.string().min(1).max(128), version: z.string().min(1).max(64), profile: z.enum(['demo']).optional() })
+    .object({
+      firmwareId: z.string().min(1).max(64).optional(),
+      version: z.string().min(1).max(64).optional(),
+      profile: z.enum(['demo']).optional(),
+    })
     .safeParse(req.body);
-  if (!p.success) return res.status(400).json({ error: p.error.issues[0]?.message ?? 'firmwareId + version required' });
+  if (!p.success) return res.status(400).json({ error: p.error.issues[0]?.message ?? 'firmwareId or profile:demo required' });
+  const org = orgOf(req);
   const runId = randomUUID();
-  const run: QueuedRun = { runId, firmwareId: p.data.firmwareId, version: p.data.version, status: 'queued', createdAt: new Date().toISOString() };
-  await putRun(orgOf(req), runId, run);
-  if (p.data.profile === 'demo') void executeQueuedDemo(orgOf(req), run);
+
+  if (p.data.profile === 'demo') {
+    const run: QueuedRun = {
+      runId,
+      firmwareId: p.data.firmwareId ?? 'demo-hub',
+      version: p.data.version ?? 'r15',
+      status: 'queued',
+      createdAt: new Date().toISOString(),
+      source: 'demo',
+      profile: 'demo',
+    };
+    await putRun(org, runId, run);
+    void executeQueuedDemo(org, run);
+    return res.status(202).json({
+      runId,
+      status: 'queued',
+      source: 'demo',
+      note: 'pooled engine executing the demo profile; poll GET /runs/:id for live stage status + throughput metrics',
+    });
+  }
+
+  if (!p.data.firmwareId) {
+    return res.status(400).json({ error: 'firmwareId required — upload the image at POST /v1/firmware first' });
+  }
+  const fw = await getFirmware(p.data.firmwareId, org);
+  if (!fw) return res.status(404).json({ error: 'firmware not found in your org — upload it at POST /v1/firmware' });
+  const run: QueuedRun = {
+    runId,
+    firmwareId: fw.record.id,
+    version: p.data.version ?? fw.record.version,
+    status: 'queued',
+    createdAt: new Date().toISOString(),
+    source: 'upload',
+    firmwareSha256: fw.record.sha256,
+  };
+  await putRun(org, runId, run);
+  void executeQueuedUpload(org, run, fw.data);
   res.status(202).json({
     runId,
     status: 'queued',
-    note: p.data.profile === 'demo' ? 'pooled engine executing the demo profile; poll GET /runs/:id for live stage status + throughput metrics' : 'workers pick this up (Module 2); resumable via runId',
+    source: 'upload',
+    firmwareId: run.firmwareId,
+    sha256: fw.record.sha256,
+    note: 'acquisition → unpack → strings-based static → SBOM over the uploaded image; poll GET /runs/:id',
   });
 });
 

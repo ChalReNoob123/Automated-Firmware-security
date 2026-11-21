@@ -119,8 +119,11 @@ describe('threat: cross-tenant data access (IDOR)', () => {
     const b = await signup(`runb${Date.now()}`);
     const devA = (await api.post('/v1/devices').set('Authorization', `Bearer ${a.token}`).send({ name: 'd', transport: 'usb' }).expect(201)).body;
     const attA = (await api.post('/v1/attestations').set('Authorization', `Bearer ${a.token}`).send({ deviceId: devA.id, scope: 's', legalBasis: 'own ref' }).expect(201)).body;
+    const fw = (
+      await api.post('/v1/firmware?version=1').set('Authorization', `Bearer ${a.token}`).set('x-attestation-id', attA.id).set('Content-Type', 'application/octet-stream').send(Buffer.alloc(64, 1)).expect(201)
+    ).body;
     const run = (
-      await api.post('/v1/pipeline/runs').set('Authorization', `Bearer ${a.token}`).set('x-attestation-id', attA.id).send({ firmwareId: 'fw', version: '1' }).expect(202)
+      await api.post('/v1/pipeline/runs').set('Authorization', `Bearer ${a.token}`).set('x-attestation-id', attA.id).send({ firmwareId: fw.id, version: '1' }).expect(202)
     ).body;
     await api.get(`/v1/pipeline/runs/${run.runId}`).set('Authorization', `Bearer ${b.token}`).expect(404);
   });

@@ -14,7 +14,7 @@ import { parseCallGraph, traceTaint, type TaintPath } from './stages/taint.js';
 import { type FuzzResult } from './stages/fuzz.js';
 import { correlate, type ScoredFinding } from './stages/consensus.js';
 import { verifyPatch, type PatchReport } from './stages/patchVerify.js';
-import { parseElf, carveGzip, type ElfInfo, type GzipMember } from './stages/binary.js';
+import { parseElf, carveGzip, extractStrings, type ElfInfo, type GzipMember } from './stages/binary.js';
 import { type ProtoFinding } from './stages/protocol.js';
 import { offload, getPoolInfo } from './pool.js';
 
@@ -186,7 +186,10 @@ export async function runPipeline(
       const tier1: Promise<void>[] = [];
       tier1.push(
         runStage('static', async () => {
-          const text = opts.textForStatic ?? '';
+          // Round 33: an uploaded image has no text sidecar, so the static stage
+          // carves printable strings out of the real bytes. Previously the
+          // fallback was '' — a real firmware image produced zero findings.
+          const text = opts.textForStatic ?? extractStrings(raw);
           metrics.staticTextBytes = text.length;
           if (text) {
             metrics.jobsDispatched++;
@@ -239,8 +242,10 @@ export async function runPipeline(
       });
     }
 
-    // live twin (Module 4) — boot the emulator when a config is supplied so the
-    // discovery engine (Module 5) inherits a running session with snapshot support
+    // live twin (Module 4) — open a session when a config is supplied so the
+    // discovery engine (Module 5) has snapshot/replay support. This is a dry-run
+    // session unless the caller launched the image itself; nothing here claims a
+    // kernel booted.
     if (opts.emulatorConfig) {
       state.emulator = startSession(opts.emulatorConfig);
       publish({ type: 'stage.started', firmwareId: firmware.id, runId, stage: 'discovery', data: { emulator: state.emulator.id } });
@@ -298,6 +303,22 @@ export async function runPipeline(
           protocolFindings: state.protocolFindings.length,
           consensus: state.consensus.length,
         };
+      });
+    }
+
+    // Round 33 — static-only runs need a verdict too. correlate() used to live
+    // exclusively inside the discovery branch, so a real uploaded image was
+    // unpacked and scanned, produced sinks and secrets, and then handed off
+    // ZERO consensus rows: nothing persisted, nothing on the queue. Consensus
+    // over whatever evidence exists is the correct behaviour; discovery merely
+    // adds more evidence to the same function.
+    if (!opts.discovery && (state.findings.sinks.length > 0 || state.findings.secrets.length > 0)) {
+      state.consensus = correlate({
+        taintPaths: [],
+        fuzzCrashes: [],
+        sinks: state.findings.sinks,
+        secrets: state.findings.secrets,
+        snapshotRef: null,
       });
     }
 

@@ -6,7 +6,7 @@
 //   as the always-available fallback. Surfaced via GET /v1/capabilities.
 import { execFileSync } from 'node:child_process';
 import { gunzipSync } from 'node:zlib';
-import { qemuAvailable } from './emulator.js';
+import { qemuAvailable } from './qemu.js';
 
 export type ElfInfo = {
   valid: true;
@@ -25,6 +25,42 @@ const MACHINES: Record<number, string> = {
   41: 'Alpha', 50: 'IA-64', 62: 'x86-64', 183: 'AArch64', 188: 'AMDGPU', 243: 'RISC-V', 253: 'C-SKY',
 };
 const TYPES: Record<number, string> = { 0: 'NONE', 1: 'REL', 2: 'EXEC', 3: 'DYN', 4: 'CORE' };
+
+// Round 33 — printable-string extraction. Until now the static stage only saw
+// text a caller handed it (`textForStatic`), which is why an uploaded firmware
+// image could never produce findings: the pipeline held the bytes but never
+// looked inside them. This is the always-available substitute for binwalk's
+// string carving — runs of printable ASCII (0x20–0x7e, no newlines) of at least
+// `minLen`, joined with newlines and capped so a 16 MB blob of binary noise
+// cannot blow up the scanner. It is a real read of the image, not a mock: the
+// secrets/sink rules then run over what is actually in the file.
+export function extractStrings(buf: Uint8Array, opts: { minLen?: number; maxBytes?: number } = {}): string {
+  const minLen = opts.minLen ?? 4;
+  const maxBytes = opts.maxBytes ?? 4 * 1024 * 1024;
+  const out: string[] = [];
+  let start = -1;
+  let total = 0;
+  const flush = (end: number) => {
+    if (start < 0) return;
+    const len = end - start;
+    if (len >= minLen && total < maxBytes) {
+      const s = Buffer.from(buf.buffer, buf.byteOffset + start, len).toString('latin1');
+      out.push(s);
+      total += s.length + 1;
+    }
+    start = -1;
+  };
+  for (let i = 0; i < buf.length; i++) {
+    const b = buf[i];
+    if ((b >= 0x20 && b <= 0x7e) || b === 0x09) {
+      if (start < 0) start = i;
+    } else {
+      flush(i);
+    }
+  }
+  flush(buf.length);
+  return out.join('\n');
+}
 
 export function parseElf(buf: Uint8Array): ElfInfo | { valid: false; reason: string } {
   if (buf.length < 52) return { valid: false, reason: 'too small for ELF header' };
