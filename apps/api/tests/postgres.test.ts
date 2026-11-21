@@ -185,7 +185,9 @@ describe('postgres integration', () => {
     expect(newerWrite.applied).toBe(true);
     expect(olderWrite.applied || newerWrite.removed.includes('Old')).toBe(true);
   });
-  it('a superseded run through POST /v1/pipeline/runs writes nothing and keeps the newer findings', async () => {
+  // Shared setup for route-level pipeline tests: a fresh user (the attestation
+  // row has a user FK), a device, an attestation and an uploaded image.
+  async function routeActor() {
     const stamp = `${Date.now()}-${Math.round(Math.random() * 1e6)}`;
     const user = await store.createUser({
       orgId: ORG,
@@ -201,25 +203,51 @@ describe('postgres integration', () => {
     });
     const auth = (extra: Record<string, string> = {}) => ({ Authorization: `Bearer ${bearer}`, ...extra });
 
-    // Uploaded through the real route, so the bytes the run analyses are the bytes
-    // the API stored.
     const device = await request(app).post('/v1/devices').set(auth()).send({ name: 'route bench', transport: 'usb' }).expect(201);
     const attestation = await request(app)
       .post('/v1/attestations')
       .set(auth())
       .send({ deviceId: device.body.id, scope: 'firmware-extract,emulate', legalBasis: 'route test' })
       .expect(201);
-    const image = Buffer.alloc(256);
+
+    // An ELF header plus the strings the static stage looks for, so a run has
+    // verdicts to write and the assertions are not vacuous.
+    const image = Buffer.alloc(512);
     image.writeUInt32LE(0x464c457f, 0);
     image[4] = 2;
     image[5] = 1;
-    image.write('recv(buf);\nstrcpy(d, s);\npassword = "hunter2hunter2";\n', 64);
+    image.write(
+      'recv(buf);\nstrcpy(d, s);\nsystem(cmd);\nmemcpy(d, s, n);\npassword = "hunter2hunter2";\n'.repeat(8),
+      64
+    );
+    // Unique bytes per actor: POST /v1/firmware dedupes on sha256, and tests must
+    // never share a firmware row (applied_run_seq is per row).
+    image.write(`build ${stamp}`, 256);
+
     const firmware = await request(app)
       .post('/v1/firmware?version=route-1')
       .set(auth({ 'x-attestation-id': attestation.body.id, 'Content-Type': 'application/octet-stream' }))
       .send(image)
       .expect(201);
-    const fw = firmware.body.id as string;
+
+    return { bearer, auth, attestationId: attestation.body.id as string, firmwareId: firmware.body.id as string };
+  }
+
+  // A run executes in the background, so poll the endpoint the UI polls.
+  async function waitForRun(runId: string, bearer: string): Promise<Record<string, unknown>> {
+    for (let i = 0; i < 200; i++) {
+      const poll = await request(app).get(`/v1/pipeline/runs/${runId}`).set({ Authorization: `Bearer ${bearer}` });
+      if (poll.status === 200 && (poll.body.status === 'done' || poll.body.status === 'failed')) {
+        return poll.body as Record<string, unknown>;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    throw new Error(`run ${runId} never settled`);
+  }
+
+  it('a superseded run through POST /v1/pipeline/runs writes nothing and keeps the newer findings', async () => {
+    const actor = await routeActor();
+    const fw = actor.firmwareId;
 
     // A newer run has already applied its verdicts for this image.
     const newerSeq = await store.nextAnalysisRunSeq();
@@ -233,26 +261,15 @@ describe('postgres integration', () => {
 
     const queued = await request(app)
       .post('/v1/pipeline/runs')
-      .set(auth({ 'x-attestation-id': attestation.body.id }))
+      .set(actor.auth({ 'x-attestation-id': actor.attestationId }))
       .send({ firmwareId: fw })
       .expect(202);
+    const run = await waitForRun(queued.body.runId as string, actor.bearer);
 
-    // The run executes in the background, so poll the same endpoint the UI does.
-    const runId = queued.body.runId as string;
-    let run: Record<string, unknown> | undefined;
-    for (let i = 0; i < 200; i++) {
-      const poll = await request(app).get(`/v1/pipeline/runs/${runId}`).set(auth()).expect(200);
-      if (poll.body.status === 'done' || poll.body.status === 'failed') {
-        run = poll.body as Record<string, unknown>;
-        break;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    }
-    expect(run, 'the run never settled').toBeDefined();
-    expect(run?.status).toBe('done');
-    expect(run?.superseded).toBe(true);
-    expect(run?.findingsCount).toBe(0);
-    expect(run?.findings).toEqual([]);
+    expect(run.status).toBe('done');
+    expect(run.superseded).toBe(true);
+    expect(run.findingsCount).toBe(0);
+    expect(run.findings).toEqual([]);
 
     // Nothing was written: the applied sequence and the queue are untouched.
     const appliedAfter = (await outside.query(`SELECT applied_run_seq FROM firmware WHERE id=$1`, [fw])).rows[0].applied_run_seq;
@@ -261,5 +278,42 @@ describe('postgres integration', () => {
     expect(left.map((f) => f.title)).toEqual(['Newer verdict']);
     expect(left[0]?.confidence).toBe('Confirmed');
   });
-});
 
+  it('two real runs on one image leave the newer run’s findings', async () => {
+    const actor = await routeActor();
+    const start = async () => {
+      const r = await request(app)
+        .post('/v1/pipeline/runs')
+        .set(actor.auth({ 'x-attestation-id': actor.attestationId }))
+        .send({ firmwareId: actor.firmwareId })
+        .expect(202);
+      return r.body.runId as string;
+    };
+
+    // Both runs are accepted before either has finished: they overlap on one image.
+    const ids = [await start(), await start()];
+    const [first, second] = await Promise.all(ids.map((id) => waitForRun(id, actor.bearer)));
+    expect(first.status).toBe('done');
+    expect(second.status).toBe('done');
+
+    const older = Number(first.seq) < Number(second.seq) ? first : second;
+    const newer = older === first ? second : first;
+    expect(Number(newer.seq)).toBeGreaterThan(Number(older.seq));
+    // The newer run is never the superseded one — its sequence is the highest.
+    expect(newer.superseded).not.toBe(true);
+    expect(Number(newer.findingsCount)).toBeGreaterThan(0);
+
+    // Every surviving analysis row carries the newer run's sequence: if the older
+    // run committed first, the newer one overwrote and pruned; if the newer one
+    // committed first, the older one was refused and wrote nothing.
+    const rows = (
+      await outside.query(
+        `SELECT title, analysis_run_seq FROM findings WHERE org_id=$1 AND firmware_id=$2 AND source='analysis' ORDER BY title`,
+        [ORG, actor.firmwareId]
+      )
+    ).rows as { title: string; analysis_run_seq: string }[];
+    expect(rows.length).toBe(Number(newer.findingsCount));
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) expect(String(row.analysis_run_seq)).toBe(String(newer.seq));
+  });
+});
