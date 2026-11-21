@@ -18,8 +18,8 @@ reproducible emulator snapshot where one exists, and an honest confidence level
 (`Confirmed`, `Likely`, `Unconfirmed`) instead of a single opaque score.
 
 Whatever cannot be established is reported as not-run rather than invented: discovery,
-fuzzing and protocol testing run only when a call graph or harness is supplied, and real
-emulation is opt-in.
+fuzzing and protocol testing run only when the caller supplies a call graph, a fuzz
+harness or a protocol target, and real emulation is opt-in.
 
 ## What it does
 
@@ -38,7 +38,8 @@ emulation is opt-in.
   image hash, boot strings). Booting is asynchronous, so creating a session never waits
   on a slow boot, and a boot that outlives its deadline is reported `failed` with the
   reason instead of hanging. Snapshots, input replay with state hashing and crash records
-  give each finding a reproduction path. Real execution happens only with
+  give a finding a reproduction path when its evidence carries one. Real execution happens
+  only with
   `EMULATOR_QEMU=1` and a qemu binary for the image's architecture; otherwise the session
   records why it did not execute.
 - **Access control** — five roles, TOTP two-factor with single-use recovery codes,
@@ -59,6 +60,7 @@ emulation is opt-in.
 
 ```bash
 npm install
+npm --prefix apps/web install        # apps/web keeps its own nested tree (scripts/check-deps.js)
 npm --prefix apps/workers run build
 npm --prefix packages/graph-service run build
 npm --prefix packages/mcp-servers run build
@@ -78,10 +80,12 @@ npm --prefix apps/api run test        # API, store and real-Postgres suites
 npm --prefix apps/workers run test    # analysis engines
 ```
 
-The Postgres suite boots its own throwaway `embedded-postgres` cluster, so it needs no
-database setup. `.github/workflows/ci.yml` runs the full matrix — typechecks, every
-workspace's tests and builds, the production-dependency audit and the secret scan — on
-push and pull request.
+Both suites import the built workspace packages, so run the builds from Quick start
+first. The Postgres suite boots its own throwaway `embedded-postgres` cluster, so it needs
+no database setup. `.github/workflows/ci.yml` runs the full matrix — five typechecks, the
+worker, graph, MCP and API suites, the API and web builds, the production-dependency audit
+and the secret scan — on pushes and pull requests that touch `apps/`, `packages/`, the
+root manifests or the workflow itself.
 
 ---
 
