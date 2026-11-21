@@ -60,7 +60,6 @@ harness or a protocol target, and real emulation is opt-in.
 
 ```bash
 npm install
-npm --prefix apps/web install        # apps/web keeps its own nested tree (scripts/check-deps.js)
 npm --prefix apps/workers run build
 npm --prefix packages/graph-service run build
 npm --prefix packages/mcp-servers run build
@@ -68,6 +67,10 @@ npm --prefix packages/mcp-servers run build
 npm --prefix apps/api run dev     # API on http://localhost:4000
 npm --prefix apps/web run dev     # console on http://localhost:3005
 ```
+
+The root install covers every workspace, so `apps/web` resolves React from the
+hoisted tree; `apps/web/scripts/check-deps.js` fails the build if a nested copy
+appears.
 
 Optional API environment: `DATABASE_URL` (PostgreSQL; without it the API falls back to
 an in-memory store), `JWT_SECRET`, `FIRMWARE_ENC_KEY` (32 bytes, hex or base64), and

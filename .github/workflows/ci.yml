@@ -4,10 +4,11 @@
 # Install notes (learned the hard way):
 # - Plain `npm install` at the root covers all workspaces; bare
 #   `npm install --workspaces` behaves inconsistently across npm majors.
-# - apps/web keeps a NESTED node_modules (single-React invariant: the repo root
-#   is React 19, the app is React 18 — hoisting styled-jsx breaks SSR).
-#   The nested `npm --prefix apps/web install` below is load-bearing, and
-#   scripts/check-deps.js fails fast if the invariant ever breaks again.
+# - Do NOT `npm --prefix apps/web install`. npm treats that as a standalone
+#   project and drops react/react-dom/next into apps/web/node_modules — exactly
+#   the duplicate tree apps/web/scripts/check-deps.js rejects, because the app
+#   then resolves its own React instead of the hoisted one. One React version
+#   (19.2.3) runs across the repo, so the root install is the whole story.
 name: sentinelforge-ci
 on:
   push:
@@ -36,7 +37,6 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm install --no-audit --no-fund
-      - run: npm --prefix apps/web install --no-audit --no-fund
       - run: node apps/web/scripts/check-deps.js
       # Build the library packages BEFORE any typecheck: dist/ is git-ignored,
       # and these npm --prefix steps bypass turbo (whose `dependsOn: ["^build"]`
