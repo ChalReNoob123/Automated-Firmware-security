@@ -185,5 +185,81 @@ describe('postgres integration', () => {
     expect(newerWrite.applied).toBe(true);
     expect(olderWrite.applied || newerWrite.removed.includes('Old')).toBe(true);
   });
+  it('a superseded run through POST /v1/pipeline/runs writes nothing and keeps the newer findings', async () => {
+    const stamp = `${Date.now()}-${Math.round(Math.random() * 1e6)}`;
+    const user = await store.createUser({
+      orgId: ORG,
+      email: `route-${stamp}@t.test`,
+      username: `route-${stamp}`,
+      passwordHash: 'not-a-real-hash',
+      role: 'Analyst',
+    });
+    const bearer = jwt.sign({ sub: user.id, org: ORG, role: 'Analyst', jti: `route-${stamp}` }, JWT_SECRET, {
+      expiresIn: '15m',
+      issuer: 'sentinelforge',
+      audience: 'sentinelforge-api',
+    });
+    const auth = (extra: Record<string, string> = {}) => ({ Authorization: `Bearer ${bearer}`, ...extra });
+
+    // Uploaded through the real route, so the bytes the run analyses are the bytes
+    // the API stored.
+    const device = await request(app).post('/v1/devices').set(auth()).send({ name: 'route bench', transport: 'usb' }).expect(201);
+    const attestation = await request(app)
+      .post('/v1/attestations')
+      .set(auth())
+      .send({ deviceId: device.body.id, scope: 'firmware-extract,emulate', legalBasis: 'route test' })
+      .expect(201);
+    const image = Buffer.alloc(256);
+    image.writeUInt32LE(0x464c457f, 0);
+    image[4] = 2;
+    image[5] = 1;
+    image.write('recv(buf);\nstrcpy(d, s);\npassword = "hunter2hunter2";\n', 64);
+    const firmware = await request(app)
+      .post('/v1/firmware?version=route-1')
+      .set(auth({ 'x-attestation-id': attestation.body.id, 'Content-Type': 'application/octet-stream' }))
+      .send(image)
+      .expect(201);
+    const fw = firmware.body.id as string;
+
+    // A newer run has already applied its verdicts for this image.
+    const newerSeq = await store.nextAnalysisRunSeq();
+    await store.persistAnalysisRun(ORG, fw, { seq: newerSeq, startedAt: new Date().toISOString() }, [
+      { title: 'Newer verdict', confidence: 'Confirmed', engines: ['taint', 'fuzz'] },
+    ]);
+    // Push the applied sequence past anything the API can allocate next, so the run
+    // the route accepts is guaranteed to be the superseded one.
+    await outside.query(`UPDATE firmware SET applied_run_seq = (SELECT nextval('analysis_run_seq')) + 1000 WHERE id=$1`, [fw]);
+    const appliedBefore = (await outside.query(`SELECT applied_run_seq FROM firmware WHERE id=$1`, [fw])).rows[0].applied_run_seq;
+
+    const queued = await request(app)
+      .post('/v1/pipeline/runs')
+      .set(auth({ 'x-attestation-id': attestation.body.id }))
+      .send({ firmwareId: fw })
+      .expect(202);
+
+    // The run executes in the background, so poll the same endpoint the UI does.
+    const runId = queued.body.runId as string;
+    let run: Record<string, unknown> | undefined;
+    for (let i = 0; i < 200; i++) {
+      const poll = await request(app).get(`/v1/pipeline/runs/${runId}`).set(auth()).expect(200);
+      if (poll.body.status === 'done' || poll.body.status === 'failed') {
+        run = poll.body as Record<string, unknown>;
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    expect(run, 'the run never settled').toBeDefined();
+    expect(run?.status).toBe('done');
+    expect(run?.superseded).toBe(true);
+    expect(run?.findingsCount).toBe(0);
+    expect(run?.findings).toEqual([]);
+
+    // Nothing was written: the applied sequence and the queue are untouched.
+    const appliedAfter = (await outside.query(`SELECT applied_run_seq FROM firmware WHERE id=$1`, [fw])).rows[0].applied_run_seq;
+    expect(String(appliedAfter)).toBe(String(appliedBefore));
+    const left = (await store.listFindings(ORG, { limit: 100 })).filter((f) => f.firmware_id === fw);
+    expect(left.map((f) => f.title)).toEqual(['Newer verdict']);
+    expect(left[0]?.confidence).toBe('Confirmed');
+  });
 });
 
