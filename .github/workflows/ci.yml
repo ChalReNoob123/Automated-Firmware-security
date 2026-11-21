@@ -54,6 +54,7 @@ jobs:
       - run: npm --prefix packages/graph-service run typecheck
       - run: npm --prefix packages/mcp-servers run typecheck
       - run: npm --prefix apps/web run typecheck
+      - run: npm --prefix apps/web run test
       - run: npm --prefix apps/workers run test
       - run: npm --prefix packages/graph-service run test
       - run: npm --prefix packages/mcp-servers run test
