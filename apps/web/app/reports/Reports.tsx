@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { Badge, Card, Empty, glassGlow } from '../components/ui';
 import { apiFetch, getAccess } from '../lib/auth';
 import { priority } from '../lib/scoring';
+import { fmtUtcDateTime } from '../lib/time';
 
 // Reports: pull the findings queue and export it — Markdown narrative, raw JSON,
 // or CycloneDX VEX for downstream tooling. Downloads + printable view included.
@@ -35,7 +36,7 @@ function download(name: string, text: string, type: string) {
 function toMarkdown(findings: Finding[]): string {
   const lines = [
     '# SentinelForge Findings Report',
-    `_Generated ${new Date().toISOString()} — ${findings.length} finding(s)_`,
+    `_Generated ${fmtUtcDateTime(Date.now())} — ${findings.length} finding(s)_`,
     '',
     '| Priority | Confidence | Title | Engines | EPSS | Snapshot |',
     '|---|---|---|---|---|---|',
@@ -92,6 +93,7 @@ export default function Reports() {
     })();
   }, []);
 
+  // Filename stamp stays ISO: it is a sortable machine value, not a label.
   const stamp = new Date().toISOString().slice(0, 10);
 
   return (

@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Card, Badge, Empty, Code, glassGlow } from './components/ui';
 import { apiFetch, getAccess } from './lib/auth';
+import { fmtUtcDate } from './lib/time';
 
 // USB onboarding (spec §3): auto-detect - descriptor readout - register +
 // logged attestation against the API. Identity via memory token; the
@@ -454,7 +455,7 @@ export default function UsbConnector({ onAttested }: { onAttested?: (attId: stri
                 <b style={{ color: '#fff' }}>{d.name}</b>
                 <Badge tone="gray">{d.transport}</Badge>
                 {d.fingerprint && <span style={{ color: '#64748b', fontSize: 12 }}><Code>{String(d.fingerprint).slice(0, 48)}</Code></span>}
-                <span style={{ color: '#475569', fontSize: 12 }}>{d.created_at ? d.created_at.slice(0, 10) : ''}</span>
+                <span style={{ color: '#475569', fontSize: 12 }}>{d.created_at ? fmtUtcDate(d.created_at) : ''}</span>
               </div>
             ))}
           </div>

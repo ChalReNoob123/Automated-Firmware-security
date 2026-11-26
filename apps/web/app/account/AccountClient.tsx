@@ -6,6 +6,7 @@ import { Card, glassGlow } from '../components/ui';
 import { Reveal } from '../motionKit';
 import { apiFetch, getMe, setAccess, setSessionId, API_URL } from '../lib/auth';
 import { pwChecks, pwStrong, PW_RULES } from '../lib/pwRules';
+import { fmtUtcDate } from '../lib/time';
 import { sfxBlip, sfxDeny, sfxGrant, sfxImpact, sfxShift } from '../audio/sfx';
 
 // Account Security Center (round 20, extended rounds 26 + 29, sensory pass 30).
@@ -793,7 +794,7 @@ export default function AccountClient() {
                             THIS ACCOUNT
                           </span>
                         )}
-                        {m.lastLogin && <span style={{ fontSize: 11, color: '#64748b', marginLeft: 'auto' }}>last {new Date(m.lastLogin).toISOString().slice(0, 10)}</span>}
+                        {m.lastLogin && <span style={{ fontSize: 11, color: '#64748b', marginLeft: 'auto' }}>last {fmtUtcDate(m.lastLogin)}</span>}
                         {/*
                           round 29: row actions — deliberately absent for the caller's
                           own row and the Owner row (the API refuses both anyway:
@@ -919,7 +920,7 @@ export default function AccountClient() {
                     style={{ borderRadius: 12, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}
                   >
                     <code style={{ color: '#a5f3fc', fontSize: 12, letterSpacing: 1 }}>{s.id.slice(0, 8)}</code>
-                    <span style={{ fontSize: 12, color: '#94a3b8' }}>since {new Date(s.createdAt).toISOString().slice(0, 10)}</span>
+                    <span style={{ fontSize: 12, color: '#94a3b8' }}>since {fmtUtcDate(s.createdAt)}</span>
                     <span style={{ fontSize: 12, color: '#64748b' }}>expires in {s.expiresDays}d</span>
                     {s.current && (
                       <span style={{ fontSize: 10.5, letterSpacing: 1.2, color: '#22d3ee', border: '1px solid rgba(34,211,238,0.4)', borderRadius: 999, padding: '2px 9px', background: 'rgba(34,211,238,0.08)' }}>

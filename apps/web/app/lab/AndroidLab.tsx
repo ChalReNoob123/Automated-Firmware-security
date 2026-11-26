@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Card, Badge, Empty, glassGlow } from '../components/ui';
 import { apiFetch, getAccess } from '../lib/auth';
+import { fmtUtcTime } from '../lib/time';
 
 // Android-Studio-style device lab: virtual profiles, animated boot, interactive
 // home screen, streaming logcat, working ADB shell, local snapshots, and a
@@ -398,7 +399,7 @@ export default function AndroidLab() {
             {snaps.map((s) => (
               <div key={s.id} className="sf-glass" onPointerMove={glassGlow} style={{ borderRadius: 10, padding: '10px 14px', fontSize: 13, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
                 <code style={{ color: '#a5f3fc' }}>{s.id}</code>
-                <span style={{ color: '#64748b' }}>{new Date(s.at).toLocaleTimeString()}</span>
+                <span style={{ color: '#64748b' }}>{fmtUtcTime(s.at)}</span>
                 <code>state:{s.hash}</code>
                 <button className="sf-btn" style={{ marginLeft: 'auto', padding: '5px 12px' }} onClick={() => restore(s)}>Restore</button>
               </div>
