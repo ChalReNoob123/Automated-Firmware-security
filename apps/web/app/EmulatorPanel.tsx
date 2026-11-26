@@ -100,7 +100,7 @@ export default function EmulatorPanel() {
           return;
         }
         if (!r.ok) {
-          setErr(`Couldn't reopen twin ${last} (HTTP ${r.status}) — refresh, or boot a new twin.`);
+          setErr(`Couldn't reopen twin ${last} (HTTP ${r.status}).`);
           return;
         }
         const j = await r.json();
@@ -265,11 +265,13 @@ export default function EmulatorPanel() {
       {!session && signedIn === null && <Empty title="Waking the console…" hint="Checking for a live session." />}
       {!session && signedIn === true && (
         <Empty
-          title={gone ? 'That twin is gone' : 'No twin open'}
+          title={gone ? 'That twin is gone' : err ? "Couldn't reopen the twin" : 'No twin open'}
           hint={
             gone
               ? `Twin ${gone} no longer exists — the API keeps sessions in memory, so restarting it ends them. Boot a fresh twin to continue.`
-              : 'Boot a twin to get a live console, snapshots and crash repros.'
+              : err
+                ? "The twin is still remembered, so a reload retries it once the API is healthy — or boot a fresh twin."
+                : 'Boot a twin to get a live console, snapshots and crash repros.'
           }
         />
       )}
