@@ -42,6 +42,7 @@ export default function EmulatorPanel() {
   const [input, setInput] = useState('');
   const [replayOut, setReplayOut] = useState('');
   const [origin, setOrigin] = useState(''); // finding id when the replay was deep-linked
+  const [gone, setGone] = useState(''); // the remembered twin id the API no longer has
   const [err, setErr] = useState('');
   const consoleRef = useRef<HTMLPreElement>(null);
 
@@ -82,11 +83,31 @@ export default function EmulatorPanel() {
         }
         return;
       }
+      // A twin lives in the API's memory only, so restarting the API (or any
+      // session expiry) turns the id we remembered into a 404. Forgetting it and
+      // saying so beats the old behaviour: the panel rendered neither a session
+      // nor an empty state, and every reload re-fetched the dead id.
+      const forget = () => {
+        localStorage.removeItem('sf_last_session');
+        setGone(last);
+      };
       try {
         const r = await apiFetch(`/v1/emulator/sessions/${last}`, { method: 'GET' });
-        if (!r.ok) return;
+        // Only a real 404 proves the twin is gone. A 401/5xx or an unreachable
+        // API leaves the pointer alone so a later reload can still reopen it.
+        if (r.status === 404) {
+          forget();
+          return;
+        }
+        if (!r.ok) {
+          setErr(`Couldn't reopen twin ${last} (HTTP ${r.status}) — refresh, or boot a new twin.`);
+          return;
+        }
         const j = await r.json();
-        if (!j?.id) return;
+        if (!j?.id) {
+          forget();
+          return;
+        }
         setSession(j);
         if (!snap) return;
         const owned = ((j.snapshots ?? []) as { id: string }[]).some((s) => s.id === snap);
@@ -106,7 +127,8 @@ export default function EmulatorPanel() {
           setReplayOut(`${snap}: ${out.match ? 'MATCH ✓' : 'DIVERGED ✗'} — ${out.detail ?? ''}`);
         }
       } catch {
-        /* session expired with the last boot — boot a fresh twin */
+        /* API unreachable — keep the pointer and try again on the next load */
+        setErr(`Couldn't reach the API to reopen twin ${last}.`);
       }
     })();
   }, []);
@@ -153,6 +175,7 @@ export default function EmulatorPanel() {
     // Round 33: the session used to live only in component state, so a reload
     // lost it and the finding/attack deep-links had nothing to reopen.
     if (s?.id) localStorage.setItem('sf_last_session', s.id);
+    setGone('');
     setSession(s);
     // Round 36: booting is asynchronous server-side. With a real launch the
     // session arrives as 'booting' and the console lands later — poll it in
@@ -240,6 +263,16 @@ export default function EmulatorPanel() {
         />
       )}
       {!session && signedIn === null && <Empty title="Waking the console…" hint="Checking for a live session." />}
+      {!session && signedIn === true && (
+        <Empty
+          title={gone ? 'That twin is gone' : 'No twin open'}
+          hint={
+            gone
+              ? `Twin ${gone} no longer exists — the API keeps sessions in memory, so restarting it ends them. Boot a fresh twin to continue.`
+              : 'Boot a twin to get a live console, snapshots and crash repros.'
+          }
+        />
+      )}
       {session && (
         <>
           <p style={{ color: '#94a3b8', fontSize: 13 }}>
