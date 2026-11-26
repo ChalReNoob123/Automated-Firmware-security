@@ -4,6 +4,7 @@ import { motion, useReducedMotion } from 'framer-motion';
 import { Badge, Card, Code, Empty, glassGlow } from '../../components/ui';
 import { apiFetch, getAccess } from '../../lib/auth';
 import { confidenceOf, confidenceRule, familiesOf, familyLabel, priorityBand, priorityBreakdown, type Confidence } from '../../lib/engines';
+import { fmtUtcDateTime } from '../../lib/time';
 
 // Round 33 — the evidence chain behind one verdict.
 //
@@ -39,10 +40,6 @@ const CONF_TONE: Record<Confidence, 'green' | 'amber' | 'gray'> = {
   Unconfirmed: 'gray',
 };
 
-const fmt = (iso: string) => {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
-};
 
 function SectionTitle({ tone, children }: { tone: string; children: React.ReactNode }) {
   return <h3 style={{ margin: '0 0 10px', fontSize: 13, letterSpacing: 2, color: tone }}>{children}</h3>;
@@ -173,7 +170,7 @@ export default function FindingDetail({ id }: { id: string }) {
                 </span>
               )}
               <span>
-                RAISED <b style={{ color: '#e2e8f0' }}>{fmt(f.created_at)}</b>
+                RAISED <b style={{ color: '#e2e8f0' }}>{fmtUtcDateTime(f.created_at)}</b>
               </span>
             </div>
           </div>

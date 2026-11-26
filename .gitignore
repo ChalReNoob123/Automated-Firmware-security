@@ -1,6 +1,7 @@
 node_modules
 .env
 .env.local
+.seed-dev.json
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
