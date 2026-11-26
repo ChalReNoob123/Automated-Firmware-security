@@ -5,10 +5,11 @@ import request from 'supertest';
 import speakeasy from 'speakeasy';
 import jwt from 'jsonwebtoken';
 import { app } from '../src/app.js';
+import { DEV_JWT_SECRET, TEST_PASSWORD, WRONG_PASSWORD } from './testCredentials.js';
 
 // The app loads .env (dotenv) at import time - read the LIVE secret so the suite is
 // independent of the working directory and never asserts the wrong reason.
-const SECRET = process.env.JWT_SECRET ?? 'dev-secret-change-me';
+const SECRET = process.env.JWT_SECRET ?? DEV_JWT_SECRET;
 
 const api = request(app);
 let token = '';
@@ -17,8 +18,8 @@ let deviceId = '';
 
 async function authed() {
   const email = `u${Date.now()}@t.test`;
-  await api.post('/v1/auth/signup').send({ orgName: 'org', username: `u${Date.now()}`, email, password: 'Str0ng!Pass1' }).expect(201);
-  const login = await api.post('/v1/auth/login').send({ identifier: email, password: 'Str0ng!Pass1' }).expect(200);
+  await api.post('/v1/auth/signup').send({ orgName: 'org', username: `u${Date.now()}`, email, password: TEST_PASSWORD }).expect(201);
+  const login = await api.post('/v1/auth/login').send({ identifier: email, password: TEST_PASSWORD }).expect(200);
   const code = speakeasy.totp({ secret: login.body.manualKey, encoding: 'base32' });
   const v = await api.post('/v1/auth/verify-2fa').send({ tempToken: login.body.tempToken, code }).expect(200);
   return v.body.accessToken as string;
@@ -46,14 +47,14 @@ describe('auth', () => {
   it('locks out after 5 bad passwords then serves the full TOTP flow', async () => {
     const email = `lock${Date.now()}@t.test`;
     const uname = `lock${Date.now()}`;
-    await api.post('/v1/auth/signup').send({ orgName: 'org', username: uname, email, password: 'Str0ng!Pass1' }).expect(201);
-    for (let i = 0; i < 5; i++) await api.post('/v1/auth/login').send({ identifier: uname, password: 'Wrong!Pass1' }).expect(401);
-    await api.post('/v1/auth/login').send({ identifier: uname, password: 'Str0ng!Pass1' }).expect(403);
+    await api.post('/v1/auth/signup').send({ orgName: 'org', username: uname, email, password: TEST_PASSWORD }).expect(201);
+    for (let i = 0; i < 5; i++) await api.post('/v1/auth/login').send({ identifier: uname, password: WRONG_PASSWORD }).expect(401);
+    await api.post('/v1/auth/login').send({ identifier: uname, password: TEST_PASSWORD }).expect(403);
   }, 20000);
   it('rejects wrong TOTP and accepts the real one', async () => {
     const email = `t${Date.now()}@t.test`;
-    await api.post('/v1/auth/signup').send({ orgName: 'org', username: `t${Date.now()}`, email, password: 'Str0ng!Pass1' }).expect(201);
-    const login = await api.post('/v1/auth/login').send({ identifier: email, password: 'Str0ng!Pass1' }).expect(200);
+    await api.post('/v1/auth/signup').send({ orgName: 'org', username: `t${Date.now()}`, email, password: TEST_PASSWORD }).expect(201);
+    const login = await api.post('/v1/auth/login').send({ identifier: email, password: TEST_PASSWORD }).expect(200);
     expect(login.body.step).toBe('enroll');
     await api.post('/v1/auth/verify-2fa').send({ tempToken: login.body.tempToken, code: '000000' }).expect(401);
     const code = speakeasy.totp({ secret: login.body.manualKey, encoding: 'base32' });
@@ -64,8 +65,8 @@ describe('auth', () => {
   it('rotates refresh cookies and revokes on logout', async () => {
     const agent = request.agent(app);
     const email = `r${Date.now()}@t.test`;
-    await agent.post('/v1/auth/signup').send({ orgName: 'org', username: `r${Date.now()}`, email, password: 'Str0ng!Pass1' }).expect(201);
-    const login = await agent.post('/v1/auth/login').send({ identifier: email, password: 'Str0ng!Pass1' }).expect(200);
+    await agent.post('/v1/auth/signup').send({ orgName: 'org', username: `r${Date.now()}`, email, password: TEST_PASSWORD }).expect(201);
+    const login = await agent.post('/v1/auth/login').send({ identifier: email, password: TEST_PASSWORD }).expect(200);
     const code = speakeasy.totp({ secret: login.body.manualKey, encoding: 'base32' });
     const v = await agent.post('/v1/auth/verify-2fa').send({ tempToken: login.body.tempToken, code }).expect(200);
     // stale/missing cookie is rejected

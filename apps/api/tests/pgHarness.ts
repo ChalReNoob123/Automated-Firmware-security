@@ -5,6 +5,7 @@
 // local server); otherwise this boots a throwaway embedded PostgreSQL in the OS
 // temp directory and removes it on stop(). Either way the suite needs no
 // database anyone has already set up.
+import { randomBytes } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -51,10 +52,14 @@ export async function ensureTestDatabase(): Promise<TestDatabase> {
   const { default: EmbeddedPostgres } = await import('embedded-postgres');
   const databaseDir = await mkdtemp(join(tmpdir(), 'sentinelforge-pg-'));
   const port = await freePort();
+  // The cluster is throwaway and listens on 127.0.0.1 only, so the password just
+  // has to exist. Generated per run: a `password: 'postgres'` literal is exactly
+  // the shape secret scanners report, and a false leak costs a triage round.
+  const dbPassword = randomBytes(18).toString('base64url');
   const server = new EmbeddedPostgres({
     databaseDir,
     user: 'postgres',
-    password: 'postgres',
+    password: dbPassword,
     port,
     persistent: true, // removed by stop() below, so nothing is left behind
     autoRehydrateSymlinks: true,
@@ -79,7 +84,7 @@ export async function ensureTestDatabase(): Promise<TestDatabase> {
   }
 
   return {
-    url: `postgresql://postgres:postgres@127.0.0.1:${port}/sentinelforge_test`,
+    url: `postgresql://postgres:${dbPassword}@127.0.0.1:${port}/sentinelforge_test`,
     stop: discard,
   };
 }

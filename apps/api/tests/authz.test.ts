@@ -9,9 +9,10 @@ import { describe, expect, it } from 'vitest';
 import request from 'supertest';
 import speakeasy from 'speakeasy';
 import { app } from '../src/app.js';
+import { TEST_PASSWORD, WRONG_PASSWORD } from './testCredentials.js';
 
 const api = request(app);
-const PW = 'Str0ng!Pass1';
+const PW = TEST_PASSWORD;
 const S = Date.now(); // unique suffix for this file's run
 
 async function signup(username: string): Promise<string> {
@@ -152,7 +153,7 @@ describe('audit readout is org-filtered', () => {
     const inv = await invite(a, `ainv${S}`, 'Auditor');
     const audT = await inviteeLogin(`ainv${S}`, inv.body.tempPassword);
     // B generates a DISTINCTIVE audit event (org-scoped to B)
-    await api.post('/v1/auth/recovery-codes').set('Authorization', `Bearer ${b}`).send({ password: 'Wrong!Pass1' }).expect(401);
+    await api.post('/v1/auth/recovery-codes').set('Authorization', `Bearer ${b}`).send({ password: WRONG_PASSWORD }).expect(401);
 
     const evA = (await api.get('/v1/auth/audit').set('Authorization', `Bearer ${audT}`).expect(200)).body.events as Array<Record<string, unknown>>;
     const kinds = evA.map((e) => String(e.event));

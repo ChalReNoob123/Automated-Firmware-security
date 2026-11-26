@@ -19,10 +19,11 @@ import { readdir, readFile } from 'node:fs/promises';
 import { Client } from 'pg';
 import type { Express } from 'express';
 import { ensureTestDatabase, type TestDatabase } from './pgHarness.js';
+import { DEV_JWT_SECRET } from './testCredentials.js';
 
 const dbDir = new URL('../../../packages/db/', import.meta.url);
 const ORG = '11111111-1111-4111-8111-111111111111';
-const JWT_SECRET = process.env.JWT_SECRET ?? 'dev-secret-change-me';
+const JWT_SECRET = process.env.JWT_SECRET ?? DEV_JWT_SECRET;
 
 // An independent connection standing in for the API process that died: its rows
 // survive, its promises do not.

@@ -8,9 +8,10 @@ import request from 'supertest';
 import speakeasy from 'speakeasy';
 import jwt from 'jsonwebtoken';
 import { app } from '../src/app.js';
+import { DEV_JWT_SECRET, TEST_PASSWORD } from './testCredentials.js';
 
 const api = request(app);
-const SECRET = process.env.JWT_SECRET ?? 'dev-secret-change-me';
+const SECRET = process.env.JWT_SECRET ?? DEV_JWT_SECRET;
 
 // ============================================================================
 // Helpers
@@ -19,11 +20,11 @@ async function signup(username: string) {
   const email = `${username}@t.test`;
   await api
     .post('/v1/auth/signup')
-    .send({ orgName: `org-${username}`, username, email, password: 'Str0ng!Pass1' })
+    .send({ orgName: `org-${username}`, username, email, password: TEST_PASSWORD })
     .expect(201);
   const login = await api
     .post('/v1/auth/login')
-    .send({ identifier: email, password: 'Str0ng!Pass1' })
+    .send({ identifier: email, password: TEST_PASSWORD })
     .expect(200);
   const code = speakeasy.totp({ secret: login.body.manualKey, encoding: 'base32' });
   const v = await api
@@ -78,9 +79,9 @@ describe('threat: authentication bypass', () => {
 
   it('locks an account after repeated failures', async () => {
     const u = `lock${Date.now()}`;
-    await api.post('/v1/auth/signup').send({ orgName: 'org-lock', username: u, email: `${u}@t.test`, password: 'Str0ng!Pass1' }).expect(201);
+    await api.post('/v1/auth/signup').send({ orgName: 'org-lock', username: u, email: `${u}@t.test`, password: TEST_PASSWORD }).expect(201);
     for (let i = 0; i < 5; i++) await api.post('/v1/auth/login').send({ identifier: u, password: 'nope' }).expect(401);
-    await api.post('/v1/auth/login').send({ identifier: u, password: 'Str0ng!Pass1' }).expect(403);
+    await api.post('/v1/auth/login').send({ identifier: u, password: TEST_PASSWORD }).expect(403);
   });
 });
 

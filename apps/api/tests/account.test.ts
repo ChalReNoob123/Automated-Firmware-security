@@ -9,13 +9,14 @@ import { describe, expect, it } from 'vitest';
 import request from 'supertest';
 import speakeasy from 'speakeasy';
 import { app } from '../src/app.js';
+import { ROTATED_PASSWORD, TEST_PASSWORD, WRONG_PASSWORD } from './testCredentials.js';
 
 const api = request(app);
 type Agent = ReturnType<typeof request.agent>;
 
 type Device = { agent: Agent; bearer: string; sessionId: string };
 
-const PASSWORD = 'Str0ng!Pass1';
+const PASSWORD = TEST_PASSWORD;
 
 async function signup(prefix: string): Promise<string> {
   const email = `${prefix}${Date.now()}@t.test`;
@@ -51,7 +52,7 @@ describe('account security center — auth gates', () => {
     await api.get('/v1/auth/sessions').expect(401);
     await api.post('/v1/auth/sessions/revoke').send({ jti: 'x'.repeat(16) }).expect(401);
     await api.post('/v1/auth/sessions/revoke-all').expect(401);
-    await api.post('/v1/auth/password').send({ currentPassword: 'a', newPassword: 'Str0ng!Pass1' }).expect(401);
+    await api.post('/v1/auth/password').send({ currentPassword: 'a', newPassword: TEST_PASSWORD }).expect(401);
     await api.post('/v1/auth/totp/re-enroll').send({ password: 'a' }).expect(401);
   });
 });
@@ -114,18 +115,18 @@ describe('account security center — password rotation', () => {
     const b = await otherDevice(email, PASSWORD, a.secret);
 
     // wrong current password → 401 (per-user reauth cap counts it)
-    await a.agent.post('/v1/auth/password').set('Authorization', `Bearer ${a.bearer}`).send({ currentPassword: 'Wrong!Pass1', newPassword: 'N3w!Passphrase' }).expect(401);
+    await a.agent.post('/v1/auth/password').set('Authorization', `Bearer ${a.bearer}`).send({ currentPassword: WRONG_PASSWORD, newPassword: ROTATED_PASSWORD }).expect(401);
     // policy + sameness checks use the signup rules
     await a.agent.post('/v1/auth/password').set('Authorization', `Bearer ${a.bearer}`).send({ currentPassword: PASSWORD, newPassword: 'weak' }).expect(400);
     await a.agent.post('/v1/auth/password').set('Authorization', `Bearer ${a.bearer}`).send({ currentPassword: PASSWORD, newPassword: PASSWORD }).expect(400);
-    const ok = await a.agent.post('/v1/auth/password').set('Authorization', `Bearer ${a.bearer}`).send({ currentPassword: PASSWORD, newPassword: 'N3w!Passphrase' }).expect(200);
+    const ok = await a.agent.post('/v1/auth/password').set('Authorization', `Bearer ${a.bearer}`).send({ currentPassword: PASSWORD, newPassword: ROTATED_PASSWORD }).expect(200);
     expect(ok.body.revokedOtherSessions).toBe(1);
 
     // old password is dead (uniform failure message)
     const bad = await api.post('/v1/auth/login').send({ identifier: email, password: PASSWORD }).expect(401);
     expect(bad.body.error).toBe('Invalid credentials');
     // new password logs in, straight to 2FA (still enrolled)
-    const relogin = await api.post('/v1/auth/login').send({ identifier: email, password: 'N3w!Passphrase' }).expect(200);
+    const relogin = await api.post('/v1/auth/login').send({ identifier: email, password: ROTATED_PASSWORD }).expect(200);
     expect(relogin.body.step).toBe('2fa');
     // device B died with the rotation
     await b.agent.post('/v1/auth/refresh').expect(401);
@@ -139,7 +140,7 @@ describe('account security center — authenticator re-enrollment', () => {
     const email = await signup('reenr');
     const a = await firstDevice(email, PASSWORD);
 
-    await a.agent.post('/v1/auth/totp/re-enroll').set('Authorization', `Bearer ${a.bearer}`).send({ password: 'Wrong!Pass1' }).expect(401);
+    await a.agent.post('/v1/auth/totp/re-enroll').set('Authorization', `Bearer ${a.bearer}`).send({ password: WRONG_PASSWORD }).expect(401);
     const re = await a.agent.post('/v1/auth/totp/re-enroll').set('Authorization', `Bearer ${a.bearer}`).send({ password: PASSWORD }).expect(200);
     expect(re.body.manualKey).toBeTruthy();
     expect(re.body.tempToken).toBeTruthy();
@@ -210,7 +211,7 @@ describe('account security center — recovery codes (round 22)', () => {
     const a = await firstDevice(email, PASSWORD);
 
     await api.post('/v1/auth/recovery-codes').send({ password: 'nope' }).expect(401);
-    const bad = await a.agent.post('/v1/auth/recovery-codes').set('Authorization', `Bearer ${a.bearer}`).send({ password: 'Wrong!Pass1' }).expect(401);
+    const bad = await a.agent.post('/v1/auth/recovery-codes').set('Authorization', `Bearer ${a.bearer}`).send({ password: WRONG_PASSWORD }).expect(401);
     expect(bad.body.error).toBe('Current password is incorrect');
     const ok = await a.agent.post('/v1/auth/recovery-codes').set('Authorization', `Bearer ${a.bearer}`).send({ password: PASSWORD }).expect(200);
     expect(ok.body.codes).toHaveLength(10);
